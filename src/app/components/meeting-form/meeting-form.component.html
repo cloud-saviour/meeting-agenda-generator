@@ -1,0 +1,101 @@
+<!-- Meeting Details -->
+<div class="sec">
+  <div class="sec-t">Meeting Details</div>
+  <div class="g3">
+    <div class="f">
+      <label>Meeting Number</label>
+      <input type="number" [value]="m.no" (input)="update('no', $any($event.target).value)">
+    </div>
+    <div class="f">
+      <label>Meeting Date</label>
+      <input type="date" [value]="m.date" (input)="update('date', $any($event.target).value)">
+    </div>
+    <div class="f">
+      <label>Arrival Time</label>
+      <input type="time" [value]="m.arr" (input)="update('arr', $any($event.target).value)">
+    </div>
+    <div class="f">
+      <label>Start Time</label>
+      <input type="time" [value]="m.st" (input)="update('st', $any($event.target).value)">
+    </div>
+    <div class="f">
+      <label>Meeting Theme</label>
+      <input type="text" [value]="m.theme" placeholder="e.g. April Fool's Day" (input)="update('theme', $any($event.target).value)">
+    </div>
+    <div class="f">
+      <label>Word of the Day</label>
+      <input type="text" [value]="m.word" placeholder="e.g. Expedient" (input)="update('word', $any($event.target).value)">
+    </div>
+  </div>
+</div>
+
+<!-- Meeting Notes -->
+<div class="sec">
+  <div class="sec-t">Meeting Notes</div>
+  <div class="g3">
+    <div class="f">
+      <label>Hot Seat</label>
+      <input type="text" [value]="m.hotSeat" placeholder="Name" (input)="update('hotSeat', $any($event.target).value)">
+    </div>
+    <div class="f">
+      <label>Reserve Speaker</label>
+      <input type="text" [value]="m.reserve" placeholder="Name" (input)="update('reserve', $any($event.target).value)">
+    </div>
+    <div class="f">
+      <label>Apologies</label>
+      <input type="text" [value]="m.apologies" placeholder="Name(s)" (input)="update('apologies', $any($event.target).value)">
+    </div>
+  </div>
+</div>
+
+<!-- Logos -->
+<div class="sec">
+  <div class="sec-t">Logos</div>
+  <div class="f">
+    <label>Left Logo</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <img [src]="state.logoLeft()" style="height:36px;object-fit:contain;border:1px solid #ccc;padding:2px">
+      <label class="btn" style="cursor:pointer;margin:0;font-size:7pt">Change
+        <input type="file" accept="image/*" style="display:none" (change)="onLogoChange('left', $event)">
+      </label>
+      <button class="btn" style="font-size:7pt" (click)="resetLogo('left')">Reset</button>
+    </div>
+  </div>
+  <div class="f">
+    <label>Right Logo</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <img [src]="state.logoRight()" style="height:36px;object-fit:contain;border:1px solid #ccc;padding:2px">
+      <label class="btn" style="cursor:pointer;margin:0;font-size:7pt">Change
+        <input type="file" accept="image/*" style="display:none" (change)="onLogoChange('right', $event)">
+      </label>
+      <button class="btn" style="font-size:7pt" (click)="resetLogo('right')">Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Club Info -->
+<div class="sec">
+  <div class="sec-t">Club Info</div>
+  <div class="g2">
+    <div class="f">
+      <label>Club Name</label>
+      <input type="text" [value]="m.club" (input)="update('club', $any($event.target).value)">
+    </div>
+    <div class="f">
+      <label>Club Sub-Name / Group</label>
+      <input type="text" [value]="m.sub" (input)="update('sub', $any($event.target).value)">
+    </div>
+  </div>
+  <div class="f">
+    <label>Club Address</label>
+    <input type="text" [value]="m.addr" (input)="update('addr', $any($event.target).value)">
+  </div>
+  <div class="f">
+    <label>Mission Statement</label>
+    <textarea [value]="m.mission" (input)="update('mission', $any($event.target).value)"></textarea>
+  </div>
+  <div class="f">
+    <label>Mission Contact VPE name</label>
+    <input type="text" [value]="m.vpe" (input)="update('vpe', $any($event.target).value)">
+  </div>
+</div>

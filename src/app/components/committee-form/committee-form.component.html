@@ -1,0 +1,33 @@
+<div class="sec">
+  <div class="sec-t">Executive Committee</div>
+
+  <div class="f">
+    <label>Committee Period</label>
+    <input type="text" [value]="m.period" (input)="updateMeeting('period', $any($event.target).value)">
+  </div>
+
+  <div class="f" style="margin-bottom:4px">
+    <small style="color:#888">Name &nbsp;&nbsp; Email &nbsp;&nbsp; Phone</small>
+  </div>
+
+  @for (c of cmt; track c.role; let i = $index) {
+    <div class="card">
+      <div class="cl">{{ c.role }}</div>
+      <div class="g4" style="grid-template-columns: 2fr 2fr 1.2fr">
+        <input type="text" [value]="c.name" placeholder="Name" (input)="updateMember(i, 'name', $any($event.target).value)">
+        <input type="email" [value]="c.email" placeholder="Email" (input)="updateMember(i, 'email', $any($event.target).value)">
+        <input type="tel" [value]="c.phone" placeholder="Phone" (input)="updateMember(i, 'phone', $any($event.target).value)">
+      </div>
+    </div>
+  }
+
+  <div class="f">
+    <label>Website URL</label>
+    <input type="text" [value]="m.web" (input)="updateMeeting('web', $any($event.target).value)">
+  </div>
+
+  <div class="f">
+    <label>Facebook Group Name</label>
+    <input type="text" [value]="m.fb" (input)="updateMeeting('fb', $any($event.target).value)">
+  </div>
+</div>

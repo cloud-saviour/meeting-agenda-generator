@@ -1,0 +1,173 @@
+<div class="page" id="pg">
+  <!-- HEADER -->
+  <div class="doc-header">
+    <img class="doc-logo-left" [src]="logoLeft" alt="Agora">
+    <div class="doc-hdr-center">
+      <span class="club-name">{{ d.club }}</span>
+      <span class="club-addr">{{ d.sub }}</span>
+      <span class="club-addr">{{ d.addr }}</span>
+      <div class="header-underline"></div>
+      <span class="meeting-agenda-lbl">Meeting Agenda</span>
+    </div>
+    <img class="doc-logo-right" [src]="logoRight" alt="Crown">
+  </div>
+
+  <!-- DOUBLE RED DIVIDER -->
+  <div class="doc-divider"></div>
+
+  <!-- INFO BOXES -->
+  <table class="info-outer">
+    <colgroup>
+      <col style="width:24%"><col style="width:31%"><col style="width:23%"><col>
+    </colgroup>
+    <tbody><tr>
+      <td><table class="info-box"><tr><td>
+        <span class="ib-head">Empowering People</span>
+        <span class="ib-val">Meeting {{ d.no }}</span>
+      </td></tr></table></td>
+      <td><table class="info-box"><tr><td>
+        <span class="ib-head">Theme of the Meeting:</span>
+        <span class="ib-val">&ldquo;{{ d.theme || '—' }}&rdquo;</span>
+      </td></tr></table></td>
+      <td><table class="info-box"><tr><td>
+        <span class="ib-head">Word of the Day:</span>
+        <span class="ib-val">&ldquo;{{ d.word || '—' }}&rdquo;</span>
+      </td></tr></table></td>
+      <td><table class="info-box"><tr><td>
+        <span class="ib-date">{{ dateStr }}</span>
+        <span class="ib-time">{{ arrFmt }} for {{ stFmt }}</span>
+      </td></tr></table></td>
+    </tr></tbody>
+  </table>
+
+  <!-- GAP -->
+  <div class="info-gap"></div>
+
+  <!-- MISSION -->
+  <div class="mission">
+    <span class="m-head">Our Mission</span>
+    <span class="m-body">{{ d.mission }}</span>
+    <span class="m-contact">Please contact {{ d.vpe || '[VPE Name]' }} if you are unable to fulfil your commitment.</span>
+  </div>
+
+  <!-- CENTRED CONTENT -->
+  <div class="agenda-container">
+    <div class="body-area">
+      @for (seg of agendaSegments; track $index) {
+        @if (seg.type === 'table') {
+          <table class="ag">
+            <colgroup><col style="width:36px"><col style="width:43%"><col></colgroup>
+            <tbody>
+              @for (row of seg.rows; track $index) {
+                @if (!row.isDual) {
+                  <tr>
+                    <td class="t">{{ row.time }}</td>
+                    <td class="i">{{ row.title }}</td>
+                    <td class="p">
+                      @if (row.roleLabel) { <b>{{ row.roleLabel }}:</b> }
+                      {{ row.person }}
+                    </td>
+                  </tr>
+                } @else {
+                  <tr class="dual">
+                    <td class="t">{{ row.time }}<br>{{ row.timeB }}</td>
+                    <td class="da">{{ row.title }}<br>{{ row.titleB }}</td>
+                    <td class="db">
+                      @if (row.roleLabel) { <b>{{ row.roleLabel }}:</b> }
+                      {{ row.person }}<br>
+                      @if (row.roleLabelB) { <b>{{ row.roleLabelB }}:</b> }
+                      {{ row.personB }}
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        }
+        @if (seg.type === 'speakers' && spks.length) {
+          <table class="stbl">
+            <thead><tr><th>Speaker</th><th>Level</th><th>Time</th><th>Title</th><th>Evaluator</th></tr></thead>
+            <tbody>
+              @for (s of spks; track s.id) {
+                <tr>
+                  <td>{{ s.name || '—' }}</td>
+                  <td>{{ s.level || '—' }}</td>
+                  <td>{{ s.timeLo }}-{{ s.timeHi }} mins</td>
+                  <td>{{ s.title || '—' }}</td>
+                  <td>{{ s.evaluator || '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+        @if (seg.type === 'evaluators' && spks.length) {
+          <table class="stbl">
+            <thead><tr><th>Evaluator</th><th>Time</th><th>Title</th><th>Speaker</th></tr></thead>
+            <tbody>
+              @for (s of spks; track s.id) {
+                <tr>
+                  <td>{{ s.evaluator || '—' }}</td>
+                  <td>2–4 mins</td>
+                  <td>{{ s.title || '—' }}</td>
+                  <td>{{ s.name || '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+        @if (seg.type === 'notes') {
+          <div class="agenda-notes" [innerHTML]="notesHtml(seg.text)"></div>
+        }
+      }
+    </div>
+
+    <!-- MEETING NOTES -->
+    @if (hasNotes) {
+      <div class="meeting-notes">
+        @if (d.hotSeat) { <p><strong><em>Hot seat:</em></strong> <em>{{ d.hotSeat }}</em></p> }
+        @if (d.reserve) { <p><strong><em>Reserve Speaker:</em></strong> <em>{{ d.reserve }}</em></p> }
+        @if (d.apologies) { <p><strong><em>Apologies:</em></strong> <em>{{ d.apologies }}</em></p> }
+      </div>
+    }
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-title">Executive Committee:&nbsp; {{ d.period || '&nbsp;' }}</div>
+      <table class="ftbl">
+        <tbody>
+          @for (pair of cmtPairs; track $index) {
+            <tr>
+              @if (pair[0]) {
+                <td class="role">{{ pair[0]!.role }}: {{ pair[0]!.name || '—' }}</td>
+                <td class="email">{{ pair[0]!.email }}</td>
+                <td class="phone">{{ pair[0]!.phone }}</td>
+              } @else {
+                <td></td><td></td><td></td>
+              }
+              @if (pair[1]) {
+                <td class="role">{{ pair[1]!.role }}: {{ pair[1]!.name || '—' }}</td>
+                <td class="email">{{ pair[1]!.email }}</td>
+                <td class="phone">{{ pair[1]!.phone }}</td>
+              } @else {
+                <td></td><td></td><td></td>
+              }
+            </tr>
+          }
+          <tr>
+            @if (cmtTreasurer) {
+              <td class="role">{{ cmtTreasurer.role }}: {{ cmtTreasurer.name || '—' }}</td>
+              <td class="email">{{ cmtTreasurer.email }}</td>
+              <td class="phone">{{ cmtTreasurer.phone }}</td>
+            } @else {
+              <td></td><td></td><td></td>
+            }
+            <td class="visit">For more information visit:</td>
+            <td class="url">{{ d.web }}</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="footer-fb">Join our Facebook group: {{ d.fb }} for regular updates!</div>
+    </div>
+  </div>
+</div>
