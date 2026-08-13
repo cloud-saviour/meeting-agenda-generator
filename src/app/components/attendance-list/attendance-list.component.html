@@ -1,0 +1,14 @@
+<div class="su-section">
+  <h3>Attendance ({{ attendees.length }})</h3>
+  @if (attendees.length) {
+    <div class="su-attendee-list">
+      @for (a of attendees; track a.uid) {
+        <span class="su-attendee-chip">
+          <b>{{ a.name }}</b><span class="su-attendee-time">{{ a.joinedAt }}</span>
+        </span>
+      }
+    </div>
+  } @else {
+    <div class="su-empty">No one has checked in yet — be the first!</div>
+  }
+</div>

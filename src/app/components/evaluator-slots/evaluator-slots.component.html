@@ -1,0 +1,31 @@
+<div class="su-section">
+  <h3>Evaluations</h3>
+
+  @if (error) {
+    <div class="su-empty" style="color:#b91c1c;font-style:normal;margin-bottom:8px;">{{ error }}</div>
+  }
+
+  @if (speakers.length) {
+    @for (s of speakers; track s.id) {
+      <div class="su-eval-row">
+        <span class="su-eval-label">
+          <b>{{ s.title || 'Untitled speech' }}</b> — {{ s.name }}
+        </span>
+        @if (s.evaluator?.uid) {
+          @if (isMine(s.evaluator?.uid)) {
+            <span class="su-pill mine">You</span>
+            <button class="su-release-btn" (click)="release(s.id)">Release</button>
+          } @else {
+            <span class="su-pill taken">{{ s.evaluator?.name }}</span>
+          }
+        } @else if (isSpeakerSelf(s.uid)) {
+          <span class="su-pill open" style="opacity:.5">N/A</span>
+        } @else {
+          <button class="su-claim-btn" (click)="claim(s.id)">Evaluate</button>
+        }
+      </div>
+    }
+  } @else {
+    <div class="su-empty">No speeches to evaluate yet — check back once speakers sign up.</div>
+  }
+</div>

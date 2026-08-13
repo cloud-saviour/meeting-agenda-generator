@@ -22,6 +22,7 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
 .btn:hover { background: rgba(255,255,255,.25); }
 .btn.red { background: var(--red); border-color: var(--red); }
 .btn.red:hover { background: #b33210; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 
 .layout {
   display: grid; grid-template-columns: 390px 1fr;
@@ -266,3 +267,82 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
   .info-box { border: 1.5px solid #000 !important; }
   @page { size: A4 portrait; margin: 0; }
 }
+
+/* ── SIGNUP PAGE ─────────────────────────────────────── */
+.su-wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
+
+.su-hero {
+  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 18px 22px; margin-bottom: 18px;
+  border-left: 4px solid var(--red);
+}
+.su-hero h2 { font-size: 1.05rem; color: var(--dark); margin-bottom: 4px; }
+.su-hero .su-meta { font-size: .78rem; color: #57606a; display: flex; gap: 14px; flex-wrap: wrap; }
+.su-hero .su-meta span b { color: var(--dark); }
+
+.su-checkin {
+  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 16px 22px; margin-bottom: 18px; display: flex; gap: 10px; align-items: flex-end;
+}
+.su-checkin .f { flex: 1; margin-bottom: 0; }
+.su-checkin.checked-in { border-left: 4px solid #10b981; }
+.su-status-ok { font-size: .8rem; color: #10b981; font-weight: 700; }
+
+.su-section {
+  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 16px 22px; margin-bottom: 18px;
+}
+.su-section h3 {
+  font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--dark); border-bottom: 2px solid var(--red); padding-bottom: 6px; margin-bottom: 12px;
+}
+
+.su-role-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 4px; border-bottom: 1px solid #eee;
+}
+.su-role-row:last-child { border-bottom: none; }
+.su-role-name { flex: 1; font-size: .85rem; font-weight: 600; color: var(--dark); }
+.su-role-owner { font-size: .78rem; color: #57606a; }
+.su-pill {
+  font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 3px; flex-shrink: 0;
+}
+.su-pill.open  { background: #e8f4ee; color: #10743f; }
+.su-pill.taken { background: #ffdce0; color: #b91c1c; }
+.su-pill.mine  { background: #fff3d6; color: #a86a00; }
+.su-claim-btn {
+  background: var(--red); color: #fff; border: none; border-radius: 4px;
+  padding: 4px 12px; font-size: .74rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
+}
+.su-claim-btn:hover { background: #b33210; }
+.su-release-btn {
+  background: #f4f4f4; color: #666; border: 1px solid #ccc; border-radius: 4px;
+  padding: 4px 12px; font-size: .74rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
+}
+.su-release-btn:hover { background: #e8e8e8; }
+
+.su-attendee-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.su-attendee-chip {
+  background: #f8f9fa; border: 1px solid #d0d7de; border-radius: 14px;
+  padding: 4px 12px; font-size: .78rem; color: var(--dark);
+}
+.su-attendee-chip b { font-weight: 700; }
+.su-attendee-time { color: #999; font-size: .7rem; margin-left: 4px; }
+.su-empty { font-size: .8rem; color: #999; font-style: italic; padding: 6px 0; }
+
+.su-speaker-card {
+  background: #f8f9fa; border: 1px solid #d0d7de; border-radius: 6px;
+  padding: 12px 14px; margin-bottom: 10px;
+}
+.su-speaker-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.su-speaker-name { font-size: .88rem; font-weight: 700; color: var(--dark); }
+.su-speaker-meta { font-size: .76rem; color: #57606a; margin-bottom: 8px; }
+.su-eval-row { display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px dashed #ddd; }
+.su-eval-label { font-size: .76rem; color: #57606a; flex: 1; }
+
+.su-signup-form { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.su-signup-form .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.su-full-btn { background: #f4f4f4; color: #999; }
+
+.su-cap-note { font-size: .76rem; color: #999; margin-top: 6px; }

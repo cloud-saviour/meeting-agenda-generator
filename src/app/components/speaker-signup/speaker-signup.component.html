@@ -1,0 +1,50 @@
+<div class="su-section">
+  <h3>Prepared Speakers ({{ speakers.length }} / {{ state.meeting().maxSpeakers }})</h3>
+
+  @if (speakers.length) {
+    @for (s of speakers; track s.id) {
+      <div class="su-speaker-card">
+        <div class="su-speaker-head">
+          <span class="su-speaker-name">{{ s.name }}@if (isMine(s.uid)) { <span class="su-pill mine">You</span> }</span>
+          @if (isMine(s.uid)) {
+            <button class="su-release-btn" (click)="remove(s.id)">Remove</button>
+          }
+        </div>
+        <div class="su-speaker-meta">
+          "{{ s.title }}"@if (s.level) { &nbsp;&middot;&nbsp;{{ s.level }} } &nbsp;&middot;&nbsp; {{ s.timePref }} mins
+        </div>
+      </div>
+    }
+  } @else {
+    <div class="su-empty">No speakers signed up yet.</div>
+  }
+
+  @if (error) {
+    <div class="su-empty" style="color:#b91c1c;font-style:normal;margin:8px 0 0;">{{ error }}</div>
+  }
+
+  @if (!alreadySignedUp && !isFull) {
+    <div class="su-signup-form">
+      <div class="f" style="margin:0;">
+        <label>Speech Title</label>
+        <input type="text" [(ngModel)]="title" name="title" placeholder="e.g. The Power of Pause">
+      </div>
+      <div class="g2">
+        <div class="f" style="margin:0;">
+          <label>Pathways Project / Level</label>
+          <input type="text" [(ngModel)]="level" name="level" placeholder="e.g. CC5">
+        </div>
+        <div class="f" style="margin:0;">
+          <label>Time Preference</label>
+          <select [(ngModel)]="timePref" name="timePref">
+            <option value="5-7">5–7 mins</option>
+            <option value="7-10">7–10 mins</option>
+          </select>
+        </div>
+      </div>
+      <button class="badd" (click)="submit()">+ Sign Up to Speak</button>
+    </div>
+  } @else if (isFull && !alreadySignedUp) {
+    <div class="su-cap-note">All speaker slots for this meeting are taken.</div>
+  }
+</div>
