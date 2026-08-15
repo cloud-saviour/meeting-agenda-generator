@@ -1,16 +1,16 @@
 import { Injectable, computed, signal } from '@angular/core';
 import {
   Attendee,
+  CheckinMeeting,
+  CheckinSnapshot,
+  CheckinSpeaker,
   DEFAULT_ROLE_KEYS,
   RoleClaim,
-  SignupMeeting,
-  SignupSnapshot,
-  SignupSpeaker,
-} from '../models/signup.models';
+} from '../models/checkin.models';
 
-const STORAGE_KEY = 'agora-signup-data';
-const UID_KEY = 'agora-signup-uid';
-const NAME_KEY = 'agora-signup-name';
+const STORAGE_KEY = 'agora-checkin-data';
+const UID_KEY = 'agora-checkin-uid';
+const NAME_KEY = 'agora-checkin-name';
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -24,7 +24,7 @@ function emptyRoles(): Record<string, RoleClaim> {
   return roles;
 }
 
-function defaultSnapshot(): SignupSnapshot {
+function defaultSnapshot(): CheckinSnapshot {
   return {
     meeting: {
       id: 'default',
@@ -41,13 +41,13 @@ function defaultSnapshot(): SignupSnapshot {
 }
 
 @Injectable({ providedIn: 'root' })
-export class SignupStateService {
+export class CheckinStateService {
   // ── Local identity (per-browser, persists across visits) ────────────────
   readonly currentUid: string;
   readonly currentName = signal<string>('');
 
   // ── Shared meeting state (Phase 1: localStorage; Phase 2: Firebase) ─────
-  private readonly snapshot = signal<SignupSnapshot>(this.loadSnapshot());
+  private readonly snapshot = signal<CheckinSnapshot>(this.loadSnapshot());
 
   readonly meeting = computed(() => this.snapshot().meeting);
   readonly attendees = computed(() => this.snapshot().attendees);
@@ -135,7 +135,7 @@ export class SignupStateService {
     if (s0.speakers.length >= s0.meeting.maxSpeakers) return false;
     if (s0.speakers.some((sp) => sp.uid === this.currentUid)) return false;
 
-    const speaker: SignupSpeaker = {
+    const speaker: CheckinSpeaker = {
       id: makeId(),
       name: this.currentName(),
       uid: this.currentUid,
@@ -189,7 +189,7 @@ export class SignupStateService {
   }
 
   // ── Meeting config (admin) ──────────────────────────────────────────────
-  updateMeeting(patch: Partial<SignupMeeting>): void {
+  updateMeeting(patch: Partial<CheckinMeeting>): void {
     this.update((s) => ({ ...s, meeting: { ...s.meeting, ...patch } }));
   }
 
@@ -199,7 +199,7 @@ export class SignupStateService {
   }
 
   // ── Persistence (Phase 1: localStorage) ─────────────────────────────────
-  private update(fn: (s: SignupSnapshot) => SignupSnapshot): void {
+  private update(fn: (s: CheckinSnapshot) => CheckinSnapshot): void {
     this.snapshot.update(fn);
     this.persist();
   }
@@ -208,11 +208,11 @@ export class SignupStateService {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(this.snapshot()));
   }
 
-  private loadSnapshot(): SignupSnapshot {
+  private loadSnapshot(): CheckinSnapshot {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaultSnapshot();
-      const parsed = JSON.parse(raw) as SignupSnapshot;
+      const parsed = JSON.parse(raw) as CheckinSnapshot;
       // Backfill any role keys added since the data was last saved
       const roles = { ...emptyRoles(), ...parsed.roles };
       return { ...defaultSnapshot(), ...parsed, roles };

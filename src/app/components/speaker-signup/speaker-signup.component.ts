@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { SignupStateService } from '../../services/signup-state.service';
+import { CheckinStateService } from '../../services/checkin-state.service';
 
 @Component({
   selector: 'app-speaker-signup',
@@ -9,7 +9,7 @@ import { SignupStateService } from '../../services/signup-state.service';
   templateUrl: './speaker-signup.component.html',
 })
 export class SpeakerSignupComponent {
-  readonly state = inject(SignupStateService);
+  readonly state = inject(CheckinStateService);
 
   title = '';
   level = '';

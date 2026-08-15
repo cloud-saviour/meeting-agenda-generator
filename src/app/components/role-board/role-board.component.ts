@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
-import { SignupStateService } from '../../services/signup-state.service';
-import { DEFAULT_ROLE_KEYS, ROLE_LABELS } from '../../models/signup.models';
+import { CheckinStateService } from '../../services/checkin-state.service';
+import { DEFAULT_ROLE_KEYS, ROLE_LABELS } from '../../models/checkin.models';
 
 @Component({
   selector: 'app-role-board',
@@ -8,7 +8,7 @@ import { DEFAULT_ROLE_KEYS, ROLE_LABELS } from '../../models/signup.models';
   templateUrl: './role-board.component.html',
 })
 export class RoleBoardComponent {
-  readonly state = inject(SignupStateService);
+  readonly state = inject(CheckinStateService);
   readonly roleKeys = DEFAULT_ROLE_KEYS;
   readonly roleLabels = ROLE_LABELS;
 

@@ -1,14 +1,14 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { SignupStateService } from '../../services/signup-state.service';
+import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceListComponent } from '../../components/attendance-list/attendance-list.component';
 import { RoleBoardComponent } from '../../components/role-board/role-board.component';
 import { SpeakerSignupComponent } from '../../components/speaker-signup/speaker-signup.component';
 import { EvaluatorSlotsComponent } from '../../components/evaluator-slots/evaluator-slots.component';
 
 @Component({
-  selector: 'app-signup',
+  selector: 'app-checkin',
   standalone: true,
   imports: [
     FormsModule,
@@ -18,10 +18,10 @@ import { EvaluatorSlotsComponent } from '../../components/evaluator-slots/evalua
     SpeakerSignupComponent,
     EvaluatorSlotsComponent,
   ],
-  templateUrl: './signup.component.html',
+  templateUrl: './checkin.component.html',
 })
-export class SignupComponent {
-  readonly state = inject(SignupStateService);
+export class CheckinComponent {
+  readonly state = inject(CheckinStateService);
   nameInput = '';
 
   constructor() {

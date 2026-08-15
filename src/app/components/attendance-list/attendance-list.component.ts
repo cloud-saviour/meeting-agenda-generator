@@ -1,5 +1,5 @@
 import { Component, inject } from '@angular/core';
-import { SignupStateService } from '../../services/signup-state.service';
+import { CheckinStateService } from '../../services/checkin-state.service';
 
 @Component({
   selector: 'app-attendance-list',
@@ -7,7 +7,7 @@ import { SignupStateService } from '../../services/signup-state.service';
   templateUrl: './attendance-list.component.html',
 })
 export class AttendanceListComponent {
-  readonly state = inject(SignupStateService);
+  readonly state = inject(CheckinStateService);
 
   get attendees() {
     return this.state.attendees();

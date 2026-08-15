@@ -1,5 +1,5 @@
 import { Component, inject } from '@angular/core';
-import { SignupStateService } from '../../services/signup-state.service';
+import { CheckinStateService } from '../../services/checkin-state.service';
 
 @Component({
   selector: 'app-evaluator-slots',
@@ -7,7 +7,7 @@ import { SignupStateService } from '../../services/signup-state.service';
   templateUrl: './evaluator-slots.component.html',
 })
 export class EvaluatorSlotsComponent {
-  readonly state = inject(SignupStateService);
+  readonly state = inject(CheckinStateService);
   error: string | null = null;
 
   get speakers() {

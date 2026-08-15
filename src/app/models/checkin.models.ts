@@ -9,7 +9,7 @@ export interface RoleClaim {
   uid: string;
 }
 
-export interface SignupSpeaker {
+export interface CheckinSpeaker {
   id: string;
   name: string;
   uid: string;
@@ -19,7 +19,7 @@ export interface SignupSpeaker {
   evaluator: RoleClaim | null;
 }
 
-export interface SignupMeeting {
+export interface CheckinMeeting {
   id: string;
   date: string;
   theme: string;
@@ -28,11 +28,11 @@ export interface SignupMeeting {
   maxSpeakers: number;
 }
 
-export interface SignupSnapshot {
-  meeting: SignupMeeting;
+export interface CheckinSnapshot {
+  meeting: CheckinMeeting;
   attendees: Attendee[];
   roles: Record<string, RoleClaim>;
-  speakers: SignupSpeaker[];
+  speakers: CheckinSpeaker[];
 }
 
 export const DEFAULT_ROLE_KEYS = [
