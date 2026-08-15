@@ -1,0 +1,39 @@
+<div class="app-bar">
+  <img src="logo.png" alt="Agora">
+  <h1>Meeting Check-in</h1>
+  <div class="sp"></div>
+  <a class="btn" routerLink="/">&#8592; Back to Agenda</a>
+</div>
+
+<div class="su-wrap" style="margin-top:64px;">
+
+  <div class="su-hero">
+    <h2>{{ state.meeting().theme || 'Upcoming Meeting' }}</h2>
+    <div class="su-meta">
+      <span>Date: <b>{{ dateStr || 'TBC' }}</b></span>
+      <span>Starts: <b>{{ state.meeting().start }}</b></span>
+      @if (state.meeting().word) {
+        <span>Word of the Day: <b>{{ state.meeting().word }}</b></span>
+      }
+    </div>
+  </div>
+
+  <div class="su-checkin" [class.checked-in]="state.isCheckedIn()">
+    <div class="f">
+      <label>Your Name</label>
+      <input type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()">
+    </div>
+    <button class="badd" (click)="checkIn()">
+      {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
+    </button>
+    @if (state.isCheckedIn()) {
+      <span class="su-status-ok">&#10003; Checked in</span>
+    }
+  </div>
+
+  <app-attendance-list></app-attendance-list>
+  <app-role-board></app-role-board>
+  <app-speaker-signup></app-speaker-signup>
+  <app-evaluator-slots></app-evaluator-slots>
+
+</div>

@@ -1,0 +1,683 @@
+
+<title>Agora Speakers — Meeting Signup: Design & Build Plan</title>
+
+<style>
+  /* ── Tokens ── */
+  :root {
+    --bg:        #F9F7F4;
+    --bg-alt:    #F0EDE8;
+    --bg-card:   #FFFFFF;
+    --rule:      #DDD8D0;
+    --text:      #1A1715;
+    --text-2:    #5A5550;
+    --text-3:    #8A837C;
+    --red:       #CE3C17;
+    --red-pale:  #FDF0EC;
+    --gold:      #B8960C;
+    --gold-pale: #FBF6E2;
+    --green:     #2D6A4F;
+    --green-pale:#E8F4EE;
+    --blue:      #1A4A8A;
+    --mono-bg:   #F2F0EC;
+    --shadow:    0 1px 4px rgba(26,23,21,.07), 0 3px 12px rgba(26,23,21,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #141210;
+      --bg-alt:    #1C1916;
+      --bg-card:   #211E1B;
+      --rule:      #332F2A;
+      --text:      #EDE8E2;
+      --text-2:    #9A9189;
+      --text-3:    #6A6259;
+      --red:       #E05030;
+      --red-pale:  #2A1810;
+      --gold:      #CCA820;
+      --gold-pale: #25200A;
+      --green:     #4A9A72;
+      --green-pale:#0E2018;
+      --blue:      #5A8ED0;
+      --mono-bg:   #1A1715;
+      --shadow:    0 1px 4px rgba(0,0,0,.3), 0 3px 12px rgba(0,0,0,.2);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:        #141210;
+    --bg-alt:    #1C1916;
+    --bg-card:   #211E1B;
+    --rule:      #332F2A;
+    --text:      #EDE8E2;
+    --text-2:    #9A9189;
+    --text-3:    #6A6259;
+    --red:       #E05030;
+    --red-pale:  #2A1810;
+    --gold:      #CCA820;
+    --gold-pale: #25200A;
+    --green:     #4A9A72;
+    --green-pale:#0E2018;
+    --blue:      #5A8ED0;
+    --mono-bg:   #1A1715;
+    --shadow:    0 1px 4px rgba(0,0,0,.3), 0 3px 12px rgba(0,0,0,.2);
+  }
+
+  /* ── Reset & base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.6;
+    padding: 0 1rem 6rem;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 820px; margin: 0 auto; }
+
+  /* ── Doc header ── */
+  .doc-header {
+    border-bottom: 3px solid var(--red);
+    padding: 3rem 0 1.5rem;
+    margin-bottom: 3rem;
+  }
+  .eyebrow {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: .72rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: .6rem;
+  }
+  .doc-title {
+    font-family: Georgia, serif;
+    font-size: clamp(1.9rem, 5vw, 2.8rem);
+    font-weight: bold;
+    color: var(--text);
+    line-height: 1.15;
+    text-wrap: balance;
+    margin-bottom: .5rem;
+  }
+  .doc-sub {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 1.05rem;
+    color: var(--text-2);
+    max-width: 55ch;
+  }
+
+  /* ── Sections ── */
+  section { margin-bottom: 3.5rem; }
+  .section-label {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: .68rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: .75rem;
+    padding-bottom: .4rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h2 {
+    font-family: Georgia, serif;
+    font-size: 1.45rem;
+    font-weight: bold;
+    color: var(--text);
+    margin-bottom: .5rem;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: .95rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text);
+    margin-bottom: .4rem;
+  }
+  p {
+    font-size: .97rem;
+    color: var(--text-2);
+    margin-bottom: .75rem;
+    max-width: 68ch;
+  }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1.25rem 1.4rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 1rem;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .85rem;
+    margin-top: .75rem;
+  }
+  .card-sm {
+    background: var(--bg-alt);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: .85rem 1rem;
+  }
+  .card-sm h3 { font-size: .82rem; }
+
+  /* ── Flow steps ── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: .75rem;
+    position: relative;
+  }
+  .flow::before {
+    content: '';
+    position: absolute;
+    left: 17px;
+    top: 12px;
+    bottom: 12px;
+    width: 1px;
+    background: var(--rule);
+  }
+  .step {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: .6rem 0;
+    position: relative;
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--red);
+    color: #fff;
+    font-family: 'Courier New', monospace;
+    font-size: .8rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+  }
+  .step-body { padding-top: .35rem; }
+  .step-body strong {
+    display: block;
+    font-family: system-ui, sans-serif;
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: .15rem;
+  }
+  .step-body span {
+    font-family: system-ui, sans-serif;
+    font-size: .85rem;
+    color: var(--text-2);
+  }
+
+  /* ── Role mockup ── */
+  .role-list { margin-top: .75rem; display: flex; flex-direction: column; gap: .45rem; }
+  .role-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .55rem .85rem;
+    border-radius: 4px;
+    border: 1px solid var(--rule);
+    background: var(--bg-card);
+  }
+  .role-pill {
+    font-family: 'Courier New', monospace;
+    font-size: .72rem;
+    letter-spacing: .06em;
+    padding: .15rem .55rem;
+    border-radius: 3px;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  .pill-open  { background: var(--green-pale);  color: var(--green); }
+  .pill-taken { background: var(--red-pale);    color: var(--red); }
+  .pill-you   { background: var(--gold-pale);   color: var(--gold); }
+  .role-name {
+    font-family: system-ui, sans-serif;
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+  }
+  .role-owner {
+    font-family: 'Courier New', monospace;
+    font-size: .78rem;
+    color: var(--text-3);
+  }
+
+  /* ── Data model ── */
+  .mono-block {
+    background: var(--mono-bg);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 1rem 1.2rem;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: .8rem;
+    line-height: 1.65;
+    overflow-x: auto;
+    color: var(--text);
+    margin-top: .75rem;
+    white-space: pre;
+  }
+  .k { color: var(--blue); }
+  .s { color: var(--green); }
+  .c { color: var(--text-3); }
+
+  /* ── Options table ── */
+  .option-table { width: 100%; border-collapse: collapse; margin-top: .75rem; font-family: system-ui, sans-serif; font-size: .87rem; }
+  .option-table th {
+    text-align: left;
+    font-size: .72rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    font-weight: 600;
+    padding: .4rem .75rem;
+    border-bottom: 2px solid var(--rule);
+  }
+  .option-table td {
+    padding: .65rem .75rem;
+    border-bottom: 1px solid var(--rule);
+    color: var(--text-2);
+    vertical-align: top;
+  }
+  .option-table tr:last-child td { border-bottom: none; }
+  .option-table td:first-child { font-weight: 600; color: var(--text); white-space: nowrap; }
+  .rec { color: var(--green); font-weight: 700; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
+  .opt-wrap { overflow-x: auto; }
+
+  /* ── Phase timeline ── */
+  .phases { display: flex; flex-direction: column; gap: 0; margin-top: .75rem; }
+  .phase {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 1.2rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .phase:last-child { border-bottom: none; }
+  .phase-tag {
+    font-family: 'Courier New', monospace;
+    font-size: .75rem;
+    font-weight: bold;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    padding-top: .1rem;
+  }
+  .phase-body h3 { font-size: .88rem; color: var(--text); margin-bottom: .35rem; }
+  .phase-items {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+  }
+  .phase-items li {
+    font-family: system-ui, sans-serif;
+    font-size: .84rem;
+    color: var(--text-2);
+    padding-left: 1.1rem;
+    position: relative;
+  }
+  .phase-items li::before {
+    content: '—';
+    position: absolute;
+    left: 0;
+    color: var(--text-3);
+  }
+
+  /* ── Callout ── */
+  .callout {
+    border-left: 3px solid var(--gold);
+    background: var(--gold-pale);
+    padding: .75rem 1rem;
+    border-radius: 0 4px 4px 0;
+    margin-top: .75rem;
+  }
+  .callout p {
+    font-family: system-ui, sans-serif;
+    font-size: .88rem;
+    color: var(--text);
+    margin: 0;
+    max-width: none;
+  }
+  .callout strong { color: var(--gold); }
+
+  /* ── Integration box ── */
+  .integration {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 1rem;
+    align-items: center;
+    margin-top: .75rem;
+  }
+  .int-box {
+    background: var(--bg-alt);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: .85rem 1rem;
+    font-family: system-ui, sans-serif;
+    font-size: .84rem;
+    color: var(--text-2);
+  }
+  .int-box strong { display: block; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin-bottom: .25rem; }
+  .int-arrow { font-family: 'Courier New', monospace; font-size: 1.3rem; color: var(--text-3); text-align: center; }
+
+  /* ── Utilities ── */
+  .tag {
+    display: inline-block;
+    font-family: 'Courier New', monospace;
+    font-size: .7rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: .1rem .45rem;
+    border-radius: 3px;
+    font-weight: bold;
+  }
+  .tag-red  { background: var(--red-pale);   color: var(--red); }
+  .tag-gold { background: var(--gold-pale);  color: var(--gold); }
+  .tag-grn  { background: var(--green-pale); color: var(--green); }
+
+  @media (max-width: 540px) {
+    .integration { grid-template-columns: 1fr; }
+    .int-arrow { transform: rotate(90deg); }
+    .phase { grid-template-columns: 1fr; gap: .3rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="page">
+
+  <!-- ── Doc header ── -->
+  <header class="doc-header">
+    <div class="eyebrow">Agora Speakers · Product Plan · 2026</div>
+    <h1 class="doc-title">Meeting Signup Page</h1>
+    <p class="doc-sub">A shared, real-time sheet where members claim roles, register as speakers, and confirm attendance — before walking in the door.</p>
+  </header>
+
+  <!-- ── 1. Purpose ── -->
+  <section>
+    <div class="section-label">01 · Purpose</div>
+    <p>The agenda generator produces the plan. This page is the live layer on top of it — a digital sign-in sheet that feeds confirmed data back into the meeting. Members open a link, enter their name, and claim what they're doing that evening. The VPE sees, in real time, who is coming and what still needs filling.</p>
+  </section>
+
+  <!-- ── 2. User flow ── -->
+  <section>
+    <div class="section-label">02 · User flow</div>
+    <div class="flow">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>Open the link</strong>
+          <span>VPE shares a meeting-specific URL (e.g. <code>/signup?meeting=163</code>). The meeting header — date, theme, word of the day — is shown read-only at the top.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>Enter your name</strong>
+          <span>A single text field. Once confirmed, the name is stored in the browser (localStorage) so it persists on revisit. This registers attendance.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <strong>Claim a role (optional)</strong>
+          <span>A list of all agenda roles. Available roles show a Claim button. Taken roles show the name of the person who claimed them — the button is gone.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <strong>Sign up to speak (optional)</strong>
+          <span>Members fill in: speech title, Pathways project / level, preferred time slot (5–7 or 7–10 min). A slot cap (set by VPE) prevents overbooking.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <strong>Volunteer to evaluate (optional)</strong>
+          <span>Each confirmed speaker slot shows an "Evaluate this speech" button. A member can claim one evaluation. Once claimed, it locks and shows the evaluator's name.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <strong>VPE exports to agenda</strong>
+          <span>An admin view (password-protected or separate URL) shows the full confirmed state and offers a one-click "Push to agenda" that pre-fills the generator's form fields.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 3. Page sections ── -->
+  <section>
+    <div class="section-label">03 · Page sections</div>
+    <div class="card-grid">
+      <div class="card-sm">
+        <h3>Meeting header</h3>
+        <p style="font-size:.82rem;margin-top:.3rem">Read-only. Club name, date, theme, word of the day, start time. Pulled from the meeting record.</p>
+      </div>
+      <div class="card-sm">
+        <h3>Attendance</h3>
+        <p style="font-size:.82rem;margin-top:.3rem">Name entry + submit. Shows a live count and a list of who's coming, sorted by signup time.</p>
+      </div>
+      <div class="card-sm">
+        <h3>Role board</h3>
+        <p style="font-size:.82rem;margin-top:.3rem">All roles from the agenda template. Claim / release. Taken roles are locked with the claimer's name visible.</p>
+      </div>
+      <div class="card-sm">
+        <h3>Speakers</h3>
+        <p style="font-size:.82rem;margin-top:.3rem">Add a speech slot. Fields: title, project, time preference. Shows who's registered with their evaluator if assigned.</p>
+      </div>
+      <div class="card-sm">
+        <h3>Evaluations</h3>
+        <p style="font-size:.82rem;margin-top:.3rem">Each speaker row has an open evaluator slot. Members claim it. One evaluation per member maximum.</p>
+      </div>
+      <div class="card-sm">
+        <h3>Admin panel</h3>
+        <p style="font-size:.82rem;margin-top:.3rem">Reset a role, cap speaker slots, push confirmed data to the agenda generator. Accessible via passphrase.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 4. Role locking ── -->
+  <section>
+    <div class="section-label">04 · Role locking — how it works</div>
+    <p>The first-come rule is enforced server-side, not client-side. The client sends a claim request; the server checks atomically whether the slot is free and either grants it or rejects it. The UI never assumes success until the server confirms.</p>
+
+    <div class="role-list" style="margin:1rem 0">
+      <div class="role-row">
+        <span class="role-pill pill-open">Open</span>
+        <span class="role-name">Toastmaster of the Day</span>
+        <span class="role-owner">—</span>
+      </div>
+      <div class="role-row">
+        <span class="role-pill pill-taken">Taken</span>
+        <span class="role-name">General Evaluator</span>
+        <span class="role-owner">Thabo M.</span>
+      </div>
+      <div class="role-row">
+        <span class="role-pill pill-you">Yours</span>
+        <span class="role-name">Grammarian</span>
+        <span class="role-owner">You</span>
+      </div>
+      <div class="role-row">
+        <span class="role-pill pill-taken">Taken</span>
+        <span class="role-name">Timer</span>
+        <span class="role-owner">Naledi K.</span>
+      </div>
+      <div class="role-row">
+        <span class="role-pill pill-open">Open</span>
+        <span class="role-name">Ah-Counter</span>
+        <span class="role-owner">—</span>
+      </div>
+    </div>
+
+    <p><strong>Release</strong>: A member can release their own role at any time. They cannot release someone else's. The VPE admin panel can override any slot.</p>
+    <p><strong>Concurrency</strong>: If two people click "Claim" simultaneously, only one wins. The other sees "Just taken by [Name]" and the slot updates live without a page refresh.</p>
+  </section>
+
+  <!-- ── 5. Data model ── -->
+  <section>
+    <div class="section-label">05 · Data model</div>
+    <div class="mono-block"><span class="c">// One document per meeting</span>
+{
+  <span class="k">"meeting"</span>: {
+    <span class="k">"id"</span>:     <span class="s">"163"</span>,
+    <span class="k">"date"</span>:   <span class="s">"2026-08-19"</span>,
+    <span class="k">"theme"</span>:  <span class="s">"Leadership"</span>,
+    <span class="k">"word"</span>:   <span class="s">"Tenacity"</span>,
+    <span class="k">"start"</span>:  <span class="s">"18:15"</span>,
+    <span class="k">"maxSpeakers"</span>: 3
+  },
+  <span class="k">"attendees"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"uid-abc"</span>, <span class="k">"name"</span>: <span class="s">"Thabo M."</span>, <span class="k">"joinedAt"</span>: <span class="s">"18:02"</span> }
+  ],
+  <span class="k">"roles"</span>: {
+    <span class="k">"toastmaster"</span>:      { <span class="k">"name"</span>: <span class="s">""</span>,        <span class="k">"uid"</span>: <span class="s">""</span> },
+    <span class="k">"generalEvaluator"</span>: { <span class="k">"name"</span>: <span class="s">"Thabo M."</span>, <span class="k">"uid"</span>: <span class="s">"uid-abc"</span> },
+    <span class="k">"grammarian"</span>:       { <span class="k">"name"</span>: <span class="s">""</span>,        <span class="k">"uid"</span>: <span class="s">""</span> },
+    <span class="k">"timer"</span>:            { <span class="k">"name"</span>: <span class="s">"Naledi K."</span>, <span class="k">"uid"</span>: <span class="s">"uid-xyz"</span> },
+    <span class="k">"ahCounter"</span>:        { <span class="k">"name"</span>: <span class="s">""</span>,        <span class="k">"uid"</span>: <span class="s">""</span> }
+  },
+  <span class="k">"speakers"</span>: [
+    {
+      <span class="k">"id"</span>:        <span class="s">"spk-1"</span>,
+      <span class="k">"name"</span>:      <span class="s">"Amara D."</span>,
+      <span class="k">"uid"</span>:       <span class="s">"uid-def"</span>,
+      <span class="k">"title"</span>:     <span class="s">"The Power of Pause"</span>,
+      <span class="k">"level"</span>:     <span class="s">"CC5"</span>,
+      <span class="k">"timePref"</span>:  <span class="s">"7-10"</span>,
+      <span class="k">"evaluator"</span>: { <span class="k">"name"</span>: <span class="s">"Sipho L."</span>, <span class="k">"uid"</span>: <span class="s">"uid-ghi"</span> }
+    }
+  ]
+}</div>
+  </section>
+
+  <!-- ── 6. Real-time sync ── -->
+  <section>
+    <div class="section-label">06 · Real-time sync — options</div>
+    <div class="opt-wrap">
+      <table class="option-table">
+        <thead>
+          <tr><th>Option</th><th>How it works</th><th>Setup effort</th><th>Cost</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Firebase Realtime DB <span class="rec">Recommended</span></td>
+            <td>Google's hosted WebSocket DB. Add the SDK to the page, write rules. No server code. Updates propagate in ~100 ms.</td>
+            <td>Low — create a project, paste config keys</td>
+            <td>Free tier: 1 GB storage, 10 GB/month transfer</td>
+          </tr>
+          <tr>
+            <td>Supabase</td>
+            <td>PostgreSQL + real-time subscriptions. More structured, easier to query, slightly more setup.</td>
+            <td>Low–Medium</td>
+            <td>Free tier: 500 MB DB, 2 GB bandwidth</td>
+          </tr>
+          <tr>
+            <td>Python + polling</td>
+            <td>Extend the existing HTTP server to serve/save a JSON file. Page polls every 5 s. Simple but not instant.</td>
+            <td>Low — ~50 lines of Python</td>
+            <td>Free (runs locally)</td>
+          </tr>
+          <tr>
+            <td>Python + WebSockets</td>
+            <td>Add a WebSocket endpoint alongside the HTTP server (e.g. with <code>websockets</code> or FastAPI). True real-time, self-hosted.</td>
+            <td>Medium</td>
+            <td>Free (runs locally or on a small VPS)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <p><strong>Recommendation:</strong> Firebase Realtime Database. No backend to maintain, atomic writes prevent race conditions on role claims, free tier comfortably covers a club of this size, and the SDK is a single script tag. The locking rule is two lines of Firebase security rules.</p>
+    </div>
+  </section>
+
+  <!-- ── 7. Integration ── -->
+  <section>
+    <div class="section-label">07 · Integration with the agenda generator</div>
+    <div class="integration">
+      <div class="int-box">
+        <strong>Agenda Generator</strong>
+        Publishes the meeting record (date, theme, roles list, speaker slots) to Firebase when the VPE clicks "Share signup link."
+      </div>
+      <div class="int-arrow">⟷</div>
+      <div class="int-box">
+        <strong>Signup Page</strong>
+        Reads the same record. Members fill roles and speakers. Confirmed state lives in Firebase.
+      </div>
+    </div>
+    <p style="margin-top:.85rem">When the VPE is ready to generate the final agenda, one click in the generator reads the confirmed signup data from Firebase and pre-fills all form fields — roles, speakers, evaluators — automatically.</p>
+  </section>
+
+  <!-- ── 8. Phases ── -->
+  <section>
+    <div class="section-label">08 · Build phases</div>
+    <div class="phases">
+      <div class="phase">
+        <div class="phase-tag"><span class="tag tag-red">Phase 1</span><br><br>Foundation</div>
+        <div class="phase-body">
+          <h3>Static signup page — no real-time</h3>
+          <ul class="phase-items">
+            <li>HTML page with name entry, role list, speaker form</li>
+            <li>State stored in localStorage (single-device only — proof of concept)</li>
+            <li>Visual design and mobile layout finalized</li>
+            <li>Role locking logic written and tested (will plug into real backend in Phase 2)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-tag"><span class="tag tag-gold">Phase 2</span><br><br>Live sync</div>
+        <div class="phase-body">
+          <h3>Firebase integration — real-time, multi-user</h3>
+          <ul class="phase-items">
+            <li>Firebase project created, security rules written</li>
+            <li>Real-time listeners replace localStorage reads</li>
+            <li>Atomic claim/release writes with server-side validation</li>
+            <li>Agenda generator gains "Share signup link" and "Import confirmed" buttons</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-tag"><span class="tag tag-grn">Phase 3</span><br><br>Polish</div>
+        <div class="phase-body">
+          <h3>Admin tools + edge cases</h3>
+          <ul class="phase-items">
+            <li>VPE admin panel: reset roles, set speaker cap, export</li>
+            <li>Duplicate name detection (warn, not block)</li>
+            <li>Meeting closure: VPE locks the signup sheet at start time</li>
+            <li>Push notification or email summary to VPE when key roles fill</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 9. Open questions ── -->
+  <section>
+    <div class="section-label">09 · Open questions</div>
+    <div class="card">
+      <p style="max-width:none;margin-bottom:.5rem">A few decisions to make before building:</p>
+      <ul style="font-family:system-ui,sans-serif;font-size:.88rem;color:var(--text-2);display:flex;flex-direction:column;gap:.4rem;padding-left:1.2rem">
+        <li><strong style="color:var(--text)">Roles list</strong> — should it be fixed (the standard Agora roles), or pulled dynamically from the agenda template so the VPE can add/remove roles per meeting?</li>
+        <li><strong style="color:var(--text)">Name verification</strong> — names are free text; no login. Is a simple "confirm your name" pattern enough, or should the system cross-reference a member list?</li>
+        <li><strong style="color:var(--text)">One role per person</strong> — can a member claim more than one role (e.g. Grammarian + speaker), or should the system enforce one claim per person?</li>
+        <li><strong style="color:var(--text)">Hosting</strong> — the current Python server runs locally. For members to access the signup page remotely (before the meeting), the server or the Firebase-backed page needs to be publicly reachable. Is that in scope?</li>
+      </ul>
+    </div>
+  </section>
+
+</div>

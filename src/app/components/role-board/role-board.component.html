@@ -1,0 +1,26 @@
+<div class="su-section">
+  <h3>Meeting Roles</h3>
+  @if (claimError) {
+    <div class="su-empty" style="color:#b91c1c;font-style:normal;margin-bottom:8px;">{{ claimError }}</div>
+  }
+  @for (key of roleKeys; track key) {
+    <div class="su-role-row">
+      @if (isMine(key)) {
+        <span class="su-pill mine">Yours</span>
+      } @else if (isTaken(key)) {
+        <span class="su-pill taken">Taken</span>
+      } @else {
+        <span class="su-pill open">Open</span>
+      }
+      <span class="su-role-name">{{ roleLabels[key] }}</span>
+      @if (roles[key]?.uid) {
+        <span class="su-role-owner">{{ roles[key].name }}</span>
+      }
+      @if (isMine(key)) {
+        <button class="su-release-btn" (click)="release(key)">Release</button>
+      } @else if (!isTaken(key)) {
+        <button class="su-claim-btn" (click)="claim(key)">Claim</button>
+      }
+    </div>
+  }
+</div>

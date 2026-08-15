@@ -1,0 +1,35 @@
+ <!-- APP BAR -->
+<div class="app-bar">
+  <img src="logo.png" alt="Agora">
+  <h1>Agora Agenda Creator</h1>
+  <div class="sp"></div>
+  <button class="btn" (click)="saveJSON()">&#128190; Export JSON</button>
+  <button class="btn" (click)="loadJSON()">&#128193; Import JSON</button>
+  <button class="btn" [disabled]="docxBusy" (click)="generateDocx()">
+    {{ docxBusy ? 'Building…' : '⬇ DOCX' }}
+  </button>
+  <button class="btn red" (click)="printAgenda()">&#128438; Print / PDF</button>
+  <a class="btn" routerLink="/checkin">&#128101; Meeting Check-in</a>
+</div>
+
+<div class="layout">
+
+  <!-- FORM PANEL -->
+  <div class="fp">
+    <div class="fb">
+      <app-meeting-form></app-meeting-form>
+      <app-agenda-items></app-agenda-items>
+      <app-speakers-form></app-speakers-form>
+      <app-committee-form></app-committee-form>
+      <div style="height:6px;"></div>
+    </div>
+  </div>
+
+  <!-- PREVIEW PANEL -->
+  <div class="pp">
+    <app-agenda-preview></app-agenda-preview>
+  </div>
+
+</div>
+
+<input type="file" id="jf" accept=".json" style="display:none" (change)="onImportJSON($event)">
