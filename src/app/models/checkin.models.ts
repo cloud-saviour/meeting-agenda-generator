@@ -34,21 +34,3 @@ export interface CheckinSnapshot {
   roles: Record<string, RoleClaim>;
   speakers: CheckinSpeaker[];
 }
-
-export const DEFAULT_ROLE_KEYS = [
-  'toastmaster',
-  'generalEvaluator',
-  'grammarian',
-  'timer',
-  'ahCounter',
-  'evaluationChairman',
-] as const;
-
-export const ROLE_LABELS: Record<string, string> = {
-  toastmaster: 'Toastmaster of the Day',
-  generalEvaluator: 'General Evaluator',
-  grammarian: 'Grammarian',
-  timer: 'Timer',
-  ahCounter: 'Ah-Counter',
-  evaluationChairman: 'Evaluation Chairman',
-};

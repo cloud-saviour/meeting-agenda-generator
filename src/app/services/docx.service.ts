@@ -6,6 +6,8 @@ import {
 } from 'docx';
 import { saveAs } from 'file-saver';
 import { AgendaItem, AgendaSnapshot, CommitteeMember, Speaker } from '../models/agenda.models';
+import { computeAgendaTimeline } from '../utils/agenda-timeline';
+import { APP_LOCALE } from '../utils/locale';
 
 // ── Layout constants (all sums = CONTENT_W = 10546) ──────────────────────────
 const CONTENT_W       = 10546;
@@ -150,7 +152,7 @@ function buildInfoBoxes(d: AgendaSnapshot) {
   const arrFmt = (d.arr || '18:00').replace(':', 'h');
   const stFmt  = (d.st  || '18:15').replace(':', 'h');
   const dateStr = d.date
-    ? new Date(d.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    ? new Date(d.date + 'T00:00:00').toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'long', year: 'numeric' })
     : '';
 
   function infoBox(lines: { text: string; bold?: boolean; color?: string; size?: number }[], outerW: number) {
@@ -208,12 +210,7 @@ function buildMission(d: AgendaSnapshot) {
 
 function buildAgendaBody(items: AgendaItem[], spks: Speaker[], d: AgendaSnapshot) {
   assertWidths('AGENDA', [TIME_W, ACTIVITY_W, PERSON_W], CONTENT_W);
-  const toMin = (s: string) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
-  const fmMin = (n: number) => { const h = Math.floor(n / 60) % 24, m = n % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
-  const aT    = (s: string) => { const [h, m] = s.split(':'); return `${h}h${m}`; };
-  let t = toMin(d.st || '18:15');
-  const tick = (n: number) => { const r = aT(fmMin(t)); t += n; return r; };
-  const peek = () => aT(fmMin(t));
+  const timeline = computeAgendaTimeline(items, spks, d.st || '18:15');
 
   function personRuns(item: { roleLabel?: string | null; person?: string }) {
     const role = item.roleLabel || '', name = item.person || '';
@@ -240,23 +237,20 @@ function buildAgendaBody(items: AgendaItem[], spks: Speaker[], d: AgendaSnapshot
     }
   };
 
-  for (const item of items) {
+  items.forEach((item, i) => {
+    const entry = timeline[i];
     switch (item.type) {
       case 'row':
       case 'recess': {
-        const time = tick(item.duration || 0);
-        rowBuf.push(agRow(time, item.title || '', personRuns(item as { roleLabel?: string | null; person?: string })));
+        rowBuf.push(agRow(entry.time!, item.title || '', personRuns(item as { roleLabel?: string | null; person?: string })));
         break;
       }
       case 'dual': {
         const a = item.items?.[0] || {};
         const b = item.items?.[1] || {};
-        const tA = tick(item.durationA || 10);
-        const tB = peek();
-        spks.forEach(s => { t += (s.timeHi || 7) + 2; }); t += 1;
         rowBuf.push(dxRow([
-          dxCell([dxPara([new TextRun({ text: tA, font: 'Arial', size: 15, italics: true })], { spacing: dxNoSpace() }),
-                  dxPara([new TextRun({ text: tB, font: 'Arial', size: 15, italics: true })], { spacing: dxNoSpace() })], { width: TIME_W,     vAlign: VerticalAlign.TOP }),
+          dxCell([dxPara([new TextRun({ text: entry.timeA!, font: 'Arial', size: 15, italics: true })], { spacing: dxNoSpace() }),
+                  dxPara([new TextRun({ text: entry.timeB!, font: 'Arial', size: 15, italics: true })], { spacing: dxNoSpace() })], { width: TIME_W,     vAlign: VerticalAlign.TOP }),
           dxCell([dxPara([new TextRun({ text: a.title || '', font: 'Arial', size: 15, italics: true })], { spacing: dxNoSpace() }),
                   dxPara([new TextRun({ text: b.title || '', font: 'Arial', size: 15, italics: true })], { spacing: dxNoSpace() })], { width: ACTIVITY_W, vAlign: VerticalAlign.TOP }),
           dxCell([dxPara(personRuns(a), { spacing: dxNoSpace() }),
@@ -270,39 +264,41 @@ function buildAgendaBody(items: AgendaItem[], spks: Speaker[], d: AgendaSnapshot
         break;
       }
       case 'evaluators': {
-        spks.forEach(() => { t += 4; });
         flush();
         if (spks.length) sections.push(buildEvaluatorsTable(spks));
         break;
       }
     }
-  }
+  });
   flush();
   return sections;
 }
 
-function buildSpeakersTable(spks: Speaker[]) {
-  assertWidths('SPK_WIDTHS', SPK_WIDTHS, CONTENT_W);
+function buildDataTable<T>(
+  headers: string[],
+  widths: number[],
+  rows: T[],
+  cellValues: (row: T) => string[]
+) {
+  assertWidths('DATA_TABLE', widths, CONTENT_W);
   const hdr = (t: string) => new TextRun({ text: t, font: 'Arial', size: 13, bold: true, italics: true });
   const bdy = (t: string) => new TextRun({ text: t, font: 'Arial', size: 14, italics: true });
   const hC  = (t: string, w: number) => dxCell([dxPara([hdr(t)], { spacing: dxNoSpace() })], { width: w, borders: BLK_BORDERS, shading: { fill: 'E0E0E0', type: ShadingType.CLEAR }, margins: { top: 30, bottom: 30, left: 50, right: 50 } });
   const bC  = (t: string, w: number) => dxCell([dxPara([bdy(t)], { spacing: dxNoSpace() })], { width: w, borders: BLK_BORDERS, margins: { top: 30, bottom: 30, left: 50, right: 50 } });
   return dxTable([
-    dxRow([hC('Speaker', SPK_WIDTHS[0]), hC('Level', SPK_WIDTHS[1]), hC('Time', SPK_WIDTHS[2]), hC('Title', SPK_WIDTHS[3]), hC('Evaluator', SPK_WIDTHS[4])], { cantSplit: true, tableHeader: true }),
-    ...spks.map(s => dxRow([bC(s.name || '—', SPK_WIDTHS[0]), bC(s.level || '—', SPK_WIDTHS[1]), bC(`${s.timeLo}-${s.timeHi} mins`, SPK_WIDTHS[2]), bC(s.title || '—', SPK_WIDTHS[3]), bC(s.evaluator || '—', SPK_WIDTHS[4])], { cantSplit: true })),
-  ], { columnWidths: SPK_WIDTHS });
+    dxRow(headers.map((h, i) => hC(h, widths[i])), { cantSplit: true, tableHeader: true }),
+    ...rows.map((row) => dxRow(cellValues(row).map((v, i) => bC(v, widths[i])), { cantSplit: true })),
+  ], { columnWidths: widths });
+}
+
+function buildSpeakersTable(spks: Speaker[]) {
+  return buildDataTable(['Speaker', 'Level', 'Time', 'Title', 'Evaluator'], SPK_WIDTHS, spks,
+    (s) => [s.name || '—', s.level || '—', `${s.timeLo}-${s.timeHi} mins`, s.title || '—', s.evaluator || '—']);
 }
 
 function buildEvaluatorsTable(spks: Speaker[]) {
-  assertWidths('EVAL_WIDTHS', EVAL_WIDTHS, CONTENT_W);
-  const hdr = (t: string) => new TextRun({ text: t, font: 'Arial', size: 13, bold: true, italics: true });
-  const bdy = (t: string) => new TextRun({ text: t, font: 'Arial', size: 14, italics: true });
-  const hC  = (t: string, w: number) => dxCell([dxPara([hdr(t)], { spacing: dxNoSpace() })], { width: w, borders: BLK_BORDERS, shading: { fill: 'E0E0E0', type: ShadingType.CLEAR }, margins: { top: 30, bottom: 30, left: 50, right: 50 } });
-  const bC  = (t: string, w: number) => dxCell([dxPara([bdy(t)], { spacing: dxNoSpace() })], { width: w, borders: BLK_BORDERS, margins: { top: 30, bottom: 30, left: 50, right: 50 } });
-  return dxTable([
-    dxRow([hC('Evaluator', EVAL_WIDTHS[0]), hC('Time', EVAL_WIDTHS[1]), hC('Title', EVAL_WIDTHS[2]), hC('Speaker', EVAL_WIDTHS[3])], { cantSplit: true, tableHeader: true }),
-    ...spks.map(s => dxRow([bC(s.evaluator || '—', EVAL_WIDTHS[0]), bC('2–4 mins', EVAL_WIDTHS[1]), bC(s.title || '—', EVAL_WIDTHS[2]), bC(s.name || '—', EVAL_WIDTHS[3])], { cantSplit: true })),
-  ], { columnWidths: EVAL_WIDTHS });
+  return buildDataTable(['Evaluator', 'Time', 'Title', 'Speaker'], EVAL_WIDTHS, spks,
+    (s) => [s.evaluator || '—', '2–4 mins', s.title || '—', s.name || '—']);
 }
 
 function buildMeetingNotes(d: AgendaSnapshot) {
@@ -396,15 +392,6 @@ export class DocxService {
       fetchBuffer(logoRight),
       getImageDims(logoLeft),
       getImageDims(logoRight),
-    ]);
-
-    console.table([
-      { section: 'HEADER',   sum: HEADER_LEFT_W + HEADER_CENTER_W + HEADER_RIGHT_W },
-      { section: 'INFO',     sum: INFO_WIDTHS.reduce((a, b) => a + b, 0) },
-      { section: 'AGENDA',   sum: TIME_W + ACTIVITY_W + PERSON_W },
-      { section: 'SPEAKERS', sum: SPK_WIDTHS.reduce((a, b) => a + b, 0) },
-      { section: 'EVAL',     sum: EVAL_WIDTHS.reduce((a, b) => a + b, 0) },
-      { section: 'FOOTER',   sum: FOOTER_WIDTHS.reduce((a, b) => a + b, 0) },
     ]);
 
     const children = [

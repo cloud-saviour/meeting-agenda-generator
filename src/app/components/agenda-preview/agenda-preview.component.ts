@@ -1,6 +1,8 @@
 import { Component, inject, ViewEncapsulation } from '@angular/core';
 import { AgendaStateService } from '../../services/agenda-state.service';
-import { AgendaDualItem, AgendaNotesItem, AgendaRecessItem, AgendaRowItem, CommitteeMember } from '../../models/agenda.models';
+import { AgendaDualItem, CommitteeMember } from '../../models/agenda.models';
+import { computeAgendaTimeline } from '../../utils/agenda-timeline';
+import { APP_LOCALE } from '../../utils/locale';
 
 interface RenderedRow {
   time: string;
@@ -56,7 +58,7 @@ export class AgendaPreviewComponent {
   }
   get dateStr(): string {
     if (!this.d.date) return '';
-    return new Date(this.d.date + 'T00:00:00').toLocaleDateString('en-ZA', {
+    return new Date(this.d.date + 'T00:00:00').toLocaleDateString(APP_LOCALE, {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
@@ -80,78 +82,55 @@ export class AgendaPreviewComponent {
   }
 
   private get renderedAgenda(): { row?: RenderedRow; kind: 'row' | 'speakers' | 'evaluators' | 'notes'; text?: string }[] {
-    const toMin = (s: string) => {
-      const [h, m] = s.split(':').map(Number);
-      return h * 60 + m;
-    };
-    const fmMin = (n: number) => {
-      const h = Math.floor(n / 60) % 24,
-        m = n % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    };
-    const aT = (s: string) => {
-      const [h, m] = s.split(':');
-      return `${h}h${m}`;
-    };
-    let t = toMin(this.d.st || '18:15');
-    const tick = (n: number) => {
-      const r = aT(fmMin(t));
-      t += n;
-      return r;
-    };
-    const peek = () => aT(fmMin(t));
-
+    const timeline = computeAgendaTimeline(this.agItems, this.spks, this.d.st || '18:15');
     const result: { row?: RenderedRow; kind: 'row' | 'speakers' | 'evaluators' | 'notes'; text?: string }[] = [];
 
-    for (const item of this.agItems) {
-      if (item.type === 'row' || item.type === 'recess') {
-        const it = item as AgendaRowItem | AgendaRecessItem;
-        result.push({
-          kind: 'row',
-          row: {
-            time: tick(it.duration || 0),
-            title: it.title,
-            roleLabel: 'roleLabel' in it ? it.roleLabel : null,
-            person: 'person' in it ? it.person : '',
-            isDual: false,
-          },
-        });
-      } else if (item.type === 'dual') {
-        const it = item as AgendaDualItem;
-        const a = it.items[0],
-          b = it.items[1];
-        const tA = tick(it.durationA || 10);
-        const tB = peek();
-        this.spks.forEach((s) => {
-          t += (s.timeHi || 7) + 2;
-        });
-        t += 1;
-        result.push({
-          kind: 'row',
-          row: {
-            time: tA,
-            timeB: tB,
-            title: a.title,
-            titleB: b.title,
-            roleLabel: a.roleLabel,
-            roleLabelB: b.roleLabel,
-            person: a.person,
-            personB: b.person,
-            isDual: true,
-          },
-        });
-      } else if (item.type === 'speakers') {
-        result.push({ kind: 'speakers' });
-      } else if (item.type === 'evaluators') {
-        this.spks.forEach(() => {
-          t += 4;
-        });
-        result.push({ kind: 'evaluators' });
-      } else if (item.type === 'notes') {
-        const it = item as AgendaNotesItem;
-        if (it.text) result.push({ kind: 'notes', text: it.text });
+    this.agItems.forEach((item, i) => {
+      const entry = timeline[i];
+      switch (item.type) {
+        case 'row':
+        case 'recess':
+          result.push({
+            kind: 'row',
+            row: {
+              time: entry.time!,
+              title: item.title,
+              roleLabel: 'roleLabel' in item ? item.roleLabel : null,
+              person: 'person' in item ? item.person : '',
+              isDual: false,
+            },
+          });
+          break;
+        case 'dual': {
+          const it: AgendaDualItem = item;
+          const a = it.items[0], b = it.items[1];
+          result.push({
+            kind: 'row',
+            row: {
+              time: entry.timeA!,
+              timeB: entry.timeB!,
+              title: a.title,
+              titleB: b.title,
+              roleLabel: a.roleLabel,
+              roleLabelB: b.roleLabel,
+              person: a.person,
+              personB: b.person,
+              isDual: true,
+            },
+          });
+          break;
+        }
+        case 'speakers':
+          result.push({ kind: 'speakers' });
+          break;
+        case 'evaluators':
+          result.push({ kind: 'evaluators' });
+          break;
+        case 'notes':
+          if (item.text) result.push({ kind: 'notes', text: item.text });
+          break;
       }
-    }
+    });
     return result;
   }
 

@@ -1,12 +1,15 @@
 import { Injectable, signal, computed } from '@angular/core';
-import { saveAs } from 'file-saver';
 import {
   AgendaItem,
-  AgendaSnapshot,
   CommitteeMember,
   MeetingData,
   Speaker,
 } from '../models/agenda.models';
+import { defaultAgenda } from './default-agenda';
+import { APP_LOCALE } from '../utils/locale';
+
+const DEFAULT_LOGO_LEFT = 'logo.png';
+const DEFAULT_LOGO_RIGHT = 'crown.png';
 
 @Injectable({ providedIn: 'root' })
 export class AgendaStateService {
@@ -50,17 +53,17 @@ export class AgendaStateService {
     ].map((role) => ({ role, name: '', email: '', phone: '' }))
   );
 
-  readonly agItems = signal<AgendaItem[]>(this.defaultAgenda());
+  readonly agItems = signal<AgendaItem[]>(defaultAgenda(this.cmt(), () => ++this.agId));
 
-  readonly logoLeft = signal<string>('logo.png');
-  readonly logoRight = signal<string>('crown.png');
+  readonly logoLeft = signal<string>(DEFAULT_LOGO_LEFT);
+  readonly logoRight = signal<string>(DEFAULT_LOGO_RIGHT);
 
   // ── Computed ──────────────────────────────────────────────────────────────
   readonly agendaFileName = computed(() => {
     const d = this.meeting();
     const dt = d.date ? new Date(d.date + 'T00:00:00') : null;
     const datePart = dt
-      ? dt.toLocaleDateString('en-GB', {
+      ? dt.toLocaleDateString(APP_LOCALE, {
           day: 'numeric',
           month: 'long',
           year: 'numeric',
@@ -162,7 +165,20 @@ export class AgendaStateService {
 
   resetToDefaultAgenda(): void {
     this.agId = 0;
-    this.agItems.set(this.defaultAgenda());
+    this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));
+  }
+
+  /** Replaces agenda items wholesale (e.g. from an imported snapshot) and resets the id counter. */
+  setAgItemsFromSnapshot(items: AgendaItem[]): void {
+    this.agId = items.reduce((max, i) => Math.max(max, i.id), 0);
+    this.agItems.set(JSON.parse(JSON.stringify(items)));
+  }
+
+  /** Replaces speakers wholesale (e.g. from an imported snapshot), reassigning fresh ids. */
+  setSpeakersFromSnapshot(spks: Speaker[]): void {
+    this.spId = 0;
+    this.spks.set([]);
+    for (const s of spks) this.addSpeaker(s);
   }
 
   // ── Speaker methods ───────────────────────────────────────────────────────
@@ -219,233 +235,9 @@ export class AgendaStateService {
 
   resetLogo(side: 'left' | 'right'): void {
     if (side === 'left') {
-      this.logoLeft.set('logo.png');
+      this.logoLeft.set(DEFAULT_LOGO_LEFT);
     } else {
-      this.logoRight.set('crown.png');
+      this.logoRight.set(DEFAULT_LOGO_RIGHT);
     }
-  }
-
-  // ── JSON methods ──────────────────────────────────────────────────────────
-  getSnapshot(): AgendaSnapshot {
-    const m = this.meeting();
-    return {
-      ...JSON.parse(JSON.stringify(m)),
-      agItems: JSON.parse(JSON.stringify(this.agItems())),
-      spks: JSON.parse(JSON.stringify(this.spks())),
-      cmt: JSON.parse(JSON.stringify(this.cmt())),
-      logoLeft: this.logoLeft(),
-      logoRight: this.logoRight(),
-    } as AgendaSnapshot;
-  }
-
-  saveJSON(): void {
-    const snapshot = this.getSnapshot();
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-      type: 'application/json',
-    });
-    saveAs(blob, `${this.agendaFileName()}.json`);
-  }
-
-  loadSnapshot(data: AgendaSnapshot): void {
-    const { agItems, spks, cmt, logoLeft, logoRight, ...meetingData } = data;
-
-    this.meeting.set(meetingData as MeetingData);
-
-    // Reset agId to max id found in snapshot
-    const maxAgId = agItems.reduce((max, item) => Math.max(max, item.id), 0);
-    this.agId = maxAgId;
-    this.agItems.set(JSON.parse(JSON.stringify(agItems)));
-
-    // Reset speakers
-    this.spId = 0;
-    this.spks.set([]);
-    for (const spk of spks) {
-      this.addSpeaker(spk);
-    }
-
-    if (cmt) {
-      this.cmt.set(JSON.parse(JSON.stringify(cmt)));
-    }
-
-    if (logoLeft !== undefined) {
-      this.logoLeft.set(logoLeft);
-    }
-    if (logoRight !== undefined) {
-      this.logoRight.set(logoRight);
-    }
-  }
-
-  // ── Private helpers ───────────────────────────────────────────────────────
-  private defaultAgenda(): AgendaItem[] {
-    const cmt = this.cmt();
-    return [
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Call to order',
-        person: cmt[1]?.name || '',
-        roleLabel: 'Secretary',
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Welcome',
-        person: cmt[0]?.name || '',
-        roleLabel: 'President',
-        duration: 3,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Meeting Leader (Evening Chairman)',
-        person: '',
-        roleLabel: null,
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Programme Information',
-        person: cmt[2]?.name || '',
-        roleLabel: 'VPE',
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Timekeeper (explain role)',
-        person: '',
-        roleLabel: null,
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Grammarian (explain role)',
-        person: '',
-        roleLabel: null,
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Filler Word Counter (explain role)',
-        person: '',
-        roleLabel: null,
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Introductions',
-        person: '',
-        roleLabel: 'Evening Chairman',
-        duration: 16,
-      },
-      {
-        id: ++this.agId,
-        type: 'dual',
-        durationA: 10,
-        items: [
-          { title: 'Impromptu Session', person: '', roleLabel: 'Impromptu Master' },
-          { title: 'Prepared Speaking Session', person: '', roleLabel: 'Evening Chairman' },
-        ],
-      },
-      {
-        id: ++this.agId,
-        type: 'speakers',
-      },
-      {
-        id: ++this.agId,
-        type: 'recess',
-        title: 'Recess',
-        duration: 15,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Call to order',
-        person: cmt[1]?.name || '',
-        roleLabel: 'Secretary',
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Evaluation Session',
-        person: '',
-        roleLabel: 'Evening Chairman',
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'evaluators',
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: "Timekeeper's Report",
-        person: '',
-        roleLabel: null,
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: "Grammarian's Report",
-        person: '',
-        roleLabel: null,
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: "Filler Word Counter's Report",
-        person: '',
-        roleLabel: null,
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Meeting Evaluator',
-        person: '',
-        roleLabel: null,
-        duration: 5,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Educational',
-        person: '',
-        roleLabel: null,
-        duration: 10,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Planning for Next Meeting',
-        person: cmt[2]?.name || '',
-        roleLabel: 'VPE',
-        duration: 2,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Awards/Open Discussion',
-        person: cmt[0]?.name || '',
-        roleLabel: 'President',
-        duration: 4,
-      },
-      {
-        id: ++this.agId,
-        type: 'row',
-        title: 'Meeting Adjourned',
-        person: cmt[0]?.name || '',
-        roleLabel: 'President',
-        duration: 0,
-      },
-    ] as AgendaItem[];
   }
 }

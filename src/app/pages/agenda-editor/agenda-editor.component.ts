@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AgendaStateService } from '../../services/agenda-state.service';
+import { AgendaImportExportService } from '../../services/agenda-import-export.service';
 import { DocxService } from '../../services/docx.service';
 import { MeetingFormComponent } from '../../components/meeting-form/meeting-form.component';
 import { AgendaItemsComponent } from '../../components/agenda-items/agenda-items.component';
@@ -24,13 +25,14 @@ import { AgendaPreviewComponent } from '../../components/agenda-preview/agenda-p
 export class AgendaEditorComponent {
   readonly state = inject(AgendaStateService);
   private readonly docxService = inject(DocxService);
+  private readonly importExport = inject(AgendaImportExportService);
 
   docxBusy = false;
 
   async generateDocx() {
     this.docxBusy = true;
     try {
-      const snapshot = this.state.getSnapshot();
+      const snapshot = this.importExport.getSnapshot();
       await this.docxService.generate(snapshot, this.state.agendaFileName());
     } catch (err) {
       alert('DOCX generation failed:\n' + (err as Error).message);
@@ -41,7 +43,7 @@ export class AgendaEditorComponent {
   }
 
   saveJSON() {
-    this.state.saveJSON();
+    this.importExport.saveJSON(this.state.agendaFileName());
   }
 
   loadJSON() {
@@ -55,7 +57,7 @@ export class AgendaEditorComponent {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target!.result as string);
-        this.state.loadSnapshot(data);
+        this.importExport.loadSnapshot(data);
       } catch (err) {
         alert('Error loading JSON: ' + (err as Error).message);
       }

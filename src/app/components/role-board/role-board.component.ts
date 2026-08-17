@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CheckinStateService } from '../../services/checkin-state.service';
-import { DEFAULT_ROLE_KEYS, ROLE_LABELS } from '../../models/checkin.models';
+import { RoleDefinitionService } from '../../services/role-definition.service';
 
 @Component({
   selector: 'app-role-board',
@@ -9,8 +9,8 @@ import { DEFAULT_ROLE_KEYS, ROLE_LABELS } from '../../models/checkin.models';
 })
 export class RoleBoardComponent {
   readonly state = inject(CheckinStateService);
-  readonly roleKeys = DEFAULT_ROLE_KEYS;
-  readonly roleLabels = ROLE_LABELS;
+  readonly roleDefs = inject(RoleDefinitionService);
+  readonly activeRoles = this.roleDefs.activeRoles;
 
   claimError: string | null = null;
 
@@ -18,29 +18,29 @@ export class RoleBoardComponent {
     return this.state.roles();
   }
 
-  isMine(roleKey: string): boolean {
-    return this.roles[roleKey]?.uid === this.state.currentUid;
+  isMine(roleId: string): boolean {
+    return this.roles[roleId]?.uid === this.state.currentUid;
   }
 
-  isTaken(roleKey: string): boolean {
-    const r = this.roles[roleKey];
+  isTaken(roleId: string): boolean {
+    const r = this.roles[roleId];
     return !!(r && r.uid && r.uid !== this.state.currentUid);
   }
 
-  claim(roleKey: string) {
+  claim(roleId: string) {
     this.claimError = null;
     if (!this.state.currentName()) {
       this.claimError = 'Check in with your name first.';
       return;
     }
-    const ok = this.state.claimRole(roleKey);
+    const ok = this.state.claimRole(roleId);
     if (!ok) {
-      const owner = this.roles[roleKey]?.name || 'someone else';
+      const owner = this.roles[roleId]?.name || 'someone else';
       this.claimError = `Just taken by ${owner}.`;
     }
   }
 
-  release(roleKey: string) {
-    this.state.releaseRole(roleKey);
+  release(roleId: string) {
+    this.state.releaseRole(roleId);
   }
 }

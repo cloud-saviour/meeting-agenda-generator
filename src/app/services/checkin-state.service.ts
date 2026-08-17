@@ -1,12 +1,14 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import {
   Attendee,
   CheckinMeeting,
   CheckinSnapshot,
   CheckinSpeaker,
-  DEFAULT_ROLE_KEYS,
   RoleClaim,
 } from '../models/checkin.models';
+import { RoleDefinitionService } from './role-definition.service';
+import { StorageService } from './storage.service';
+import { APP_LOCALE } from '../utils/locale';
 
 const STORAGE_KEY = 'agora-checkin-data';
 const UID_KEY = 'agora-checkin-uid';
@@ -16,38 +18,17 @@ function makeId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-function emptyRoles(): Record<string, RoleClaim> {
-  const roles: Record<string, RoleClaim> = {};
-  for (const key of DEFAULT_ROLE_KEYS) {
-    roles[key] = { name: '', uid: '' };
-  }
-  return roles;
-}
-
-function defaultSnapshot(): CheckinSnapshot {
-  return {
-    meeting: {
-      id: 'default',
-      date: new Date().toISOString().slice(0, 10),
-      theme: '',
-      word: '',
-      start: '18:15',
-      maxSpeakers: 3,
-    },
-    attendees: [],
-    roles: emptyRoles(),
-    speakers: [],
-  };
-}
-
 @Injectable({ providedIn: 'root' })
 export class CheckinStateService {
+  private readonly roleDefs = inject(RoleDefinitionService);
+  private readonly storage = inject(StorageService);
+
   // ── Local identity (per-browser, persists across visits) ────────────────
   readonly currentUid: string;
   readonly currentName = signal<string>('');
 
   // ── Shared meeting state (Phase 1: localStorage; Phase 2: Firebase) ─────
-  private readonly snapshot = signal<CheckinSnapshot>(this.loadSnapshot());
+  private readonly snapshot = signal<CheckinSnapshot>(this.emptySnapshotPlaceholder());
 
   readonly meeting = computed(() => this.snapshot().meeting);
   readonly attendees = computed(() => this.snapshot().attendees);
@@ -60,15 +41,16 @@ export class CheckinStateService {
 
   constructor() {
     this.currentUid = this.loadOrCreateUid();
-    this.currentName.set(localStorage.getItem(NAME_KEY) || '');
+    this.currentName.set(this.storage.get(NAME_KEY) || '');
+    this.snapshot.set(this.loadSnapshot());
   }
 
   // ── Identity ──────────────────────────────────────────────────────────
   private loadOrCreateUid(): string {
-    let uid = localStorage.getItem(UID_KEY);
+    let uid = this.storage.get(UID_KEY);
     if (!uid) {
       uid = makeId();
-      localStorage.setItem(UID_KEY, uid);
+      this.storage.set(UID_KEY, uid);
     }
     return uid;
   }
@@ -78,7 +60,7 @@ export class CheckinStateService {
     const trimmed = name.trim();
     if (!trimmed) return;
     this.currentName.set(trimmed);
-    localStorage.setItem(NAME_KEY, trimmed);
+    this.storage.set(NAME_KEY, trimmed);
 
     this.update((s) => {
       const already = s.attendees.some((a) => a.uid === this.currentUid);
@@ -93,7 +75,7 @@ export class CheckinStateService {
       const attendee: Attendee = {
         uid: this.currentUid,
         name: trimmed,
-        joinedAt: new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }),
+        joinedAt: new Date().toLocaleTimeString(APP_LOCALE, { hour: '2-digit', minute: '2-digit' }),
       };
       return { ...s, attendees: [...s.attendees, attendee] };
     });
@@ -103,20 +85,14 @@ export class CheckinStateService {
   /** Returns true if the claim succeeded, false if the role was already taken. */
   claimRole(roleKey: string): boolean {
     if (!this.currentName()) return false;
-    let succeeded = false;
-    this.update((s) => {
-      const existing = s.roles[roleKey];
-      if (existing && existing.uid && existing.uid !== this.currentUid) {
-        succeeded = false;
-        return s;
-      }
-      succeeded = true;
-      return {
-        ...s,
-        roles: { ...s.roles, [roleKey]: { name: this.currentName(), uid: this.currentUid } },
-      };
-    });
-    return succeeded;
+    const existing = this.snapshot().roles[roleKey];
+    if (existing?.uid && existing.uid !== this.currentUid) return false;
+
+    this.update((s) => ({
+      ...s,
+      roles: { ...s.roles, [roleKey]: { name: this.currentName(), uid: this.currentUid } },
+    }));
+    return true;
   }
 
   /** A member may only release their own claim. */
@@ -160,21 +136,18 @@ export class CheckinStateService {
   claimEvaluatorSlot(speakerId: string): boolean {
     if (!this.currentName()) return false;
     const s0 = this.snapshot();
-    const alreadyEvaluating = s0.speakers.some((sp) => sp.evaluator?.uid === this.currentUid);
-    if (alreadyEvaluating) return false;
+    if (s0.speakers.some((sp) => sp.evaluator?.uid === this.currentUid)) return false;
 
-    let succeeded = false;
+    const target = s0.speakers.find((sp) => sp.id === speakerId);
+    if (!target || target.evaluator?.uid || target.uid === this.currentUid) return false;
+
     this.update((s) => ({
       ...s,
-      speakers: s.speakers.map((sp) => {
-        if (sp.id !== speakerId) return sp;
-        if (sp.evaluator && sp.evaluator.uid) return sp;
-        if (sp.uid === this.currentUid) return sp; // can't evaluate your own speech
-        succeeded = true;
-        return { ...sp, evaluator: { name: this.currentName(), uid: this.currentUid } };
-      }),
+      speakers: s.speakers.map((sp) =>
+        sp.id === speakerId ? { ...sp, evaluator: { name: this.currentName(), uid: this.currentUid } } : sp
+      ),
     }));
-    return succeeded;
+    return true;
   }
 
   releaseEvaluatorSlot(speakerId: string): void {
@@ -194,7 +167,7 @@ export class CheckinStateService {
   }
 
   resetAll(): void {
-    this.snapshot.set(defaultSnapshot());
+    this.snapshot.set(this.defaultSnapshot());
     this.persist();
   }
 
@@ -205,19 +178,57 @@ export class CheckinStateService {
   }
 
   private persist(): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.snapshot()));
+    this.storage.set(STORAGE_KEY, JSON.stringify(this.snapshot()));
   }
 
   private loadSnapshot(): CheckinSnapshot {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultSnapshot();
+      const raw = this.storage.get(STORAGE_KEY);
+      if (!raw) return this.defaultSnapshot();
       const parsed = JSON.parse(raw) as CheckinSnapshot;
-      // Backfill any role keys added since the data was last saved
-      const roles = { ...emptyRoles(), ...parsed.roles };
-      return { ...defaultSnapshot(), ...parsed, roles };
+      // Backfill any role ids added (or missing) since the data was last saved
+      const roles = { ...this.emptyRoles(), ...parsed.roles };
+      return { ...this.defaultSnapshot(), ...parsed, roles };
     } catch {
-      return defaultSnapshot();
+      return this.defaultSnapshot();
     }
+  }
+
+  /**
+   * Sourced from roleDefs.all() rather than activeRoles() — an archived-but-claimed
+   * role keeps its slot in the snapshot data even though it won't render on the board.
+   */
+  private emptyRoles(): Record<string, RoleClaim> {
+    const roles: Record<string, RoleClaim> = {};
+    for (const def of this.roleDefs.all()) {
+      roles[def.id] = { name: '', uid: '' };
+    }
+    return roles;
+  }
+
+  private defaultSnapshot(): CheckinSnapshot {
+    return {
+      meeting: {
+        id: 'default',
+        date: new Date().toISOString().slice(0, 10),
+        theme: '',
+        word: '',
+        start: '18:15',
+        maxSpeakers: 3,
+      },
+      attendees: [],
+      roles: this.emptyRoles(),
+      speakers: [],
+    };
+  }
+
+  /** Cheap placeholder for the snapshot field initializer; real data loads in the constructor. */
+  private emptySnapshotPlaceholder(): CheckinSnapshot {
+    return {
+      meeting: { id: 'default', date: '', theme: '', word: '', start: '18:15', maxSpeakers: 3 },
+      attendees: [],
+      roles: {},
+      speakers: [],
+    };
   }
 }

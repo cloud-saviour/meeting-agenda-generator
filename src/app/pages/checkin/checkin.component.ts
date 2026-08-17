@@ -6,6 +6,7 @@ import { AttendanceListComponent } from '../../components/attendance-list/attend
 import { RoleBoardComponent } from '../../components/role-board/role-board.component';
 import { SpeakerSignupComponent } from '../../components/speaker-signup/speaker-signup.component';
 import { EvaluatorSlotsComponent } from '../../components/evaluator-slots/evaluator-slots.component';
+import { APP_LOCALE } from '../../utils/locale';
 
 @Component({
   selector: 'app-checkin',
@@ -31,7 +32,7 @@ export class CheckinComponent {
   get dateStr(): string {
     const d = this.state.meeting().date;
     if (!d) return '';
-    return new Date(d + 'T00:00:00').toLocaleDateString('en-ZA', {
+    return new Date(d + 'T00:00:00').toLocaleDateString(APP_LOCALE, {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
