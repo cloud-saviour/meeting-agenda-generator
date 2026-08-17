@@ -1,0 +1,178 @@
+import { AgendaItem, CommitteeMember } from '../models/agenda.models';
+
+/**
+ * Builds the standard Toastmasters-style agenda template, seeded with
+ * committee names where roles are known. `nextId` is called once per
+ * item to obtain ids, mirroring the caller's own id counter.
+ */
+export function defaultAgenda(cmt: CommitteeMember[], nextId: () => number): AgendaItem[] {
+  return [
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Call to order',
+      person: cmt[1]?.name || '',
+      roleLabel: 'Secretary',
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Welcome',
+      person: cmt[0]?.name || '',
+      roleLabel: 'President',
+      duration: 3,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Meeting Leader (Evening Chairman)',
+      person: '',
+      roleLabel: null,
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Programme Information',
+      person: cmt[2]?.name || '',
+      roleLabel: 'VPE',
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Timekeeper (explain role)',
+      person: '',
+      roleLabel: null,
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Grammarian (explain role)',
+      person: '',
+      roleLabel: null,
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Filler Word Counter (explain role)',
+      person: '',
+      roleLabel: null,
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Introductions',
+      person: '',
+      roleLabel: 'Evening Chairman',
+      duration: 16,
+    },
+    {
+      id: nextId(),
+      type: 'dual',
+      durationA: 10,
+      items: [
+        { title: 'Impromptu Session', person: '', roleLabel: 'Impromptu Master' },
+        { title: 'Prepared Speaking Session', person: '', roleLabel: 'Evening Chairman' },
+      ],
+    },
+    {
+      id: nextId(),
+      type: 'speakers',
+    },
+    {
+      id: nextId(),
+      type: 'recess',
+      title: 'Recess',
+      duration: 15,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Call to order',
+      person: cmt[1]?.name || '',
+      roleLabel: 'Secretary',
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Evaluation Session',
+      person: '',
+      roleLabel: 'Evening Chairman',
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'evaluators',
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: "Timekeeper's Report",
+      person: '',
+      roleLabel: null,
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: "Grammarian's Report",
+      person: '',
+      roleLabel: null,
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: "Filler Word Counter's Report",
+      person: '',
+      roleLabel: null,
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Meeting Evaluator',
+      person: '',
+      roleLabel: null,
+      duration: 5,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Educational',
+      person: '',
+      roleLabel: null,
+      duration: 10,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Planning for Next Meeting',
+      person: cmt[2]?.name || '',
+      roleLabel: 'VPE',
+      duration: 2,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Awards/Open Discussion',
+      person: cmt[0]?.name || '',
+      roleLabel: 'President',
+      duration: 4,
+    },
+    {
+      id: nextId(),
+      type: 'row',
+      title: 'Meeting Adjourned',
+      person: cmt[0]?.name || '',
+      roleLabel: 'President',
+      duration: 0,
+    },
+  ] as AgendaItem[];
+}

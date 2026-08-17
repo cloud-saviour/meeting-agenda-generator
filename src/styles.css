@@ -302,15 +302,18 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
   padding: 9px 4px; border-bottom: 1px solid #eee;
 }
 .su-role-row:last-child { border-bottom: none; }
+.su-role-row.archived { opacity: .55; }
 .su-role-name { flex: 1; font-size: .85rem; font-weight: 600; color: var(--dark); }
+.su-role-desc { font-size: .78rem; font-weight: 400; color: #57606a; margin-left: 6px; }
 .su-role-owner { font-size: .78rem; color: #57606a; }
 .su-pill {
   font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   padding: 2px 8px; border-radius: 3px; flex-shrink: 0;
 }
-.su-pill.open  { background: #e8f4ee; color: #10743f; }
-.su-pill.taken { background: #ffdce0; color: #b91c1c; }
-.su-pill.mine  { background: #fff3d6; color: #a86a00; }
+.su-pill.open     { background: #e8f4ee; color: #10743f; }
+.su-pill.taken    { background: #ffdce0; color: #b91c1c; }
+.su-pill.mine     { background: #fff3d6; color: #a86a00; }
+.su-pill.archived { background: #eceef0; color: #57606a; }
 .su-claim-btn {
   background: var(--red); color: #fff; border: none; border-radius: 4px;
   padding: 4px 12px; font-size: .74rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
