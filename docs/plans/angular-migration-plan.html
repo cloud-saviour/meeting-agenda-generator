@@ -1,0 +1,376 @@
+
+<title>Agora Speakers — Angular Migration Plan</title>
+
+<style>
+  :root {
+    --bg:        #F9F7F4;
+    --bg-alt:    #F0EDE8;
+    --bg-card:   #FFFFFF;
+    --rule:      #DDD8D0;
+    --text:      #1A1715;
+    --text-2:    #5A5550;
+    --text-3:    #8A837C;
+    --red:       #CE3C17;
+    --red-pale:  #FDF0EC;
+    --gold:      #B8960C;
+    --gold-pale: #FBF6E2;
+    --green:     #2D6A4F;
+    --green-pale:#E8F4EE;
+    --blue:      #1A4A8A;
+    --blue-pale: #EBF0F8;
+    --amber:     #A15C00;
+    --amber-pale:#FBF0E0;
+    --mono-bg:   #F2F0EC;
+    --shadow:    0 1px 4px rgba(26,23,21,.07), 0 3px 12px rgba(26,23,21,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #141210;
+      --bg-alt:    #1C1916;
+      --bg-card:   #211E1B;
+      --rule:      #332F2A;
+      --text:      #EDE8E2;
+      --text-2:    #9A9189;
+      --text-3:    #6A6259;
+      --red:       #E05030;
+      --red-pale:  #2A1810;
+      --gold:      #CCA820;
+      --gold-pale: #25200A;
+      --green:     #4A9A72;
+      --green-pale:#0E2018;
+      --blue:      #5A8ED0;
+      --blue-pale: #0E1825;
+      --amber:     #D69A3A;
+      --amber-pale:#241804;
+      --mono-bg:   #1A1715;
+      --shadow:    0 1px 4px rgba(0,0,0,.3), 0 3px 12px rgba(0,0,0,.2);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:        #141210;
+    --bg-alt:    #1C1916;
+    --bg-card:   #211E1B;
+    --rule:      #332F2A;
+    --text:      #EDE8E2;
+    --text-2:    #9A9189;
+    --text-3:    #6A6259;
+    --red:       #E05030;
+    --red-pale:  #2A1810;
+    --gold:      #CCA820;
+    --gold-pale: #25200A;
+    --green:     #4A9A72;
+    --green-pale:#0E2018;
+    --blue:      #5A8ED0;
+    --blue-pale: #0E1825;
+    --amber:     #D69A3A;
+    --amber-pale:#241804;
+    --mono-bg:   #1A1715;
+    --shadow:    0 1px 4px rgba(0,0,0,.3), 0 3px 12px rgba(0,0,0,.2);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.6;
+    padding: 0 1rem 6rem;
+  }
+  .page { max-width: 820px; margin: 0 auto; }
+
+  .doc-header {
+    border-bottom: 3px solid var(--red);
+    padding: 3rem 0 1.5rem;
+    margin-bottom: 3rem;
+  }
+  .eyebrow {
+    font-family: 'Courier New', monospace;
+    font-size: .72rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: .6rem;
+  }
+  .doc-title {
+    font-family: Georgia, serif;
+    font-size: clamp(1.9rem, 5vw, 2.8rem);
+    font-weight: bold;
+    color: var(--text);
+    line-height: 1.15;
+    text-wrap: balance;
+    margin-bottom: .5rem;
+  }
+  .doc-sub {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 1.05rem;
+    color: var(--text-2);
+    max-width: 58ch;
+  }
+
+  section { margin-bottom: 3.5rem; }
+  .section-label {
+    font-family: 'Courier New', monospace;
+    font-size: .68rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: .75rem;
+    padding-bottom: .4rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h2 { font-family: Georgia, serif; font-size: 1.45rem; font-weight: bold; color: var(--text); margin-bottom: .5rem; text-wrap: balance; }
+  h3 { font-family: system-ui, sans-serif; font-size: .9rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text); margin-bottom: .35rem; }
+  p { font-size: .97rem; color: var(--text-2); margin-bottom: .75rem; max-width: 68ch; }
+  p:last-child { margin-bottom: 0; }
+  code { font-family: 'Courier New', monospace; font-size: .82em; background: var(--mono-bg); padding: .1rem .3rem; border-radius: 3px; }
+
+  /* Verdict banner */
+  .verdict {
+    background: var(--green-pale);
+    border: 1px solid var(--green);
+    border-radius: 6px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 2rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .verdict-icon { font-size: 1.6rem; flex-shrink: 0; line-height: 1; }
+  .verdict-body h3 { color: var(--green); font-size: .85rem; margin-bottom: .3rem; }
+  .verdict-body p { font-family: system-ui, sans-serif; font-size: .92rem; color: var(--text); margin: 0; max-width: none; }
+
+  /* Status grid */
+  .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .75rem; margin-top: .75rem; }
+  .status-card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: .85rem 1rem;
+    box-shadow: var(--shadow);
+  }
+  .status-card h3 { font-size: .78rem; margin-bottom: .5rem; }
+  .status-label {
+    font-family: 'Courier New', monospace;
+    font-size: .72rem;
+    font-weight: bold;
+    padding: .15rem .5rem;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: .4rem;
+  }
+  .st-done  { background: var(--green-pale); color: var(--green); }
+  .st-part  { background: var(--amber-pale); color: var(--amber); }
+  .st-todo  { background: var(--rule); color: var(--text-3); }
+  .status-card p { font-family: system-ui, sans-serif; font-size: .8rem; color: var(--text-2); max-width: none; margin: 0; }
+
+  /* Component tree */
+  .tree { font-family: 'Courier New', monospace; font-size: .82rem; line-height: 1.8; margin-top: .75rem; background: var(--mono-bg); border: 1px solid var(--rule); border-radius: 5px; padding: 1rem 1.2rem; color: var(--text); overflow-x: auto; white-space: pre; }
+  .t-comp { color: var(--blue); }
+  .t-svc  { color: var(--green); }
+  .t-note { color: var(--text-3); }
+
+  /* Mapping table */
+  .map-table { width: 100%; border-collapse: collapse; font-family: system-ui, sans-serif; font-size: .86rem; margin-top: .75rem; }
+  .map-table th { text-align: left; font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); font-weight: 600; padding: .4rem .7rem; border-bottom: 2px solid var(--rule); }
+  .map-table td { padding: .6rem .7rem; border-bottom: 1px solid var(--rule); color: var(--text-2); vertical-align: top; }
+  .map-table tr:last-child td { border-bottom: none; }
+  .map-table td:first-child { font-family: 'Courier New', monospace; font-size: .78rem; color: var(--text); white-space: nowrap; }
+  .map-table td:nth-child(2) { font-family: 'Courier New', monospace; font-size: .78rem; color: var(--blue); white-space: nowrap; }
+  .tbl-wrap { overflow-x: auto; }
+
+  /* Phases */
+  .phases { display: flex; flex-direction: column; gap: 0; margin-top: .75rem; }
+  .phase { display: grid; grid-template-columns: 110px 1fr; gap: 1.2rem; padding: 1rem 0; border-bottom: 1px solid var(--rule); }
+  .phase:last-child { border-bottom: none; }
+  .phase-tag { font-family: 'Courier New', monospace; font-size: .75rem; font-weight: bold; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding-top: .1rem; }
+  .phase-body h3 { font-size: .88rem; color: var(--text); margin-bottom: .35rem; }
+  .phase-items { list-style: none; display: flex; flex-direction: column; gap: .2rem; }
+  .phase-items li { font-family: system-ui, sans-serif; font-size: .83rem; color: var(--text-2); padding-left: 1.1rem; position: relative; }
+  .phase-items li::before { position: absolute; left: 0; color: var(--text-3); }
+  .phase.done .phase-items li::before { content: '✓'; color: var(--green); }
+  .phase.partial .phase-items li.done::before { content: '✓'; color: var(--green); }
+  .phase.partial .phase-items li.pending::before { content: '○'; color: var(--amber); }
+
+  /* Callout */
+  .callout { border-left: 3px solid var(--gold); background: var(--gold-pale); padding: .75rem 1rem; border-radius: 0 4px 4px 0; margin-top: .75rem; }
+  .callout p { font-family: system-ui, sans-serif; font-size: .88rem; color: var(--text); margin: 0; max-width: none; }
+  .callout strong { color: var(--gold); }
+  .callout.amber { border-left-color: var(--amber); background: var(--amber-pale); }
+  .callout.amber strong { color: var(--amber); }
+
+  .tag { display: inline-block; font-family: 'Courier New', monospace; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; padding: .1rem .45rem; border-radius: 3px; font-weight: bold; }
+  .tag-red  { background: var(--red-pale);   color: var(--red); }
+  .tag-gold { background: var(--gold-pale);  color: var(--gold); }
+  .tag-grn  { background: var(--green-pale); color: var(--green); }
+  .tag-amber{ background: var(--amber-pale); color: var(--amber); }
+
+  @media (max-width: 540px) {
+    .phase { grid-template-columns: 1fr; gap: .3rem; }
+    .status-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="page">
+
+  <header class="doc-header">
+    <div class="eyebrow">Agora Speakers · Migration Status · Updated 2026-08-13</div>
+    <h1 class="doc-title">Angular Migration</h1>
+    <p class="doc-sub">Originally a feasibility plan for moving the single-file agenda app to Angular. Now a status record — the migration happened, plus one feature the original app never had.</p>
+  </header>
+
+  <!-- Verdict -->
+  <div class="verdict">
+    <div class="verdict-icon">✓</div>
+    <div class="verdict-body">
+      <h3>Status: Migration complete, one phase partial</h3>
+      <p>The app now lives at <code>github.com/cloud-saviour/meeting-agenda-generator</code> as a standalone Angular 20 project. Phases 1–3 (scaffold, state, preview) are done and verified working end-to-end — form edits, DOCX export, drag-drop reorder, JSON import/export. Phase 4 shipped as a real feature (the check-in page, formerly planned as "signup") but on <code>localStorage</code> instead of Firebase — see below for why that's a deliberate stand-in, not a shortcut taken and forgotten.</p>
+    </div>
+  </div>
+
+  <!-- 01 Phase status -->
+  <section>
+    <div class="section-label">01 · Phase status</div>
+    <div class="status-grid">
+      <div class="status-card">
+        <span class="status-label st-done">Done</span>
+        <h3>Phase 1 — Scaffold</h3>
+        <p>Angular 20 standalone project, <code>docx</code> + <code>file-saver</code> + <code>@angular/cdk</code> installed, routing configured.</p>
+      </div>
+      <div class="status-card">
+        <span class="status-label st-done">Done</span>
+        <h3>Phase 2 — State</h3>
+        <p><code>AgendaStateService</code> (signals) + all four form components built and verified live.</p>
+      </div>
+      <div class="status-card">
+        <span class="status-label st-done">Done</span>
+        <h3>Phase 3 — Preview</h3>
+        <p>A4 preview component renders from signals; DOCX export produces a valid, correctly laid-out file.</p>
+      </div>
+      <div class="status-card">
+        <span class="status-label st-part">Partial</span>
+        <h3>Phase 4 — Check-in</h3>
+        <p>Full feature built and working — on <code>localStorage</code>, not Firestore. No cross-device sync yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 What actually got built -->
+  <section>
+    <div class="section-label">02 · What actually got built vs. what was planned</div>
+    <div class="tbl-wrap">
+      <table class="map-table">
+        <thead>
+          <tr><th>Planned</th><th>Built</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>AgendaStateService</td><td>AgendaStateService</td><td>As planned — signals for meeting, agItems, spks, cmt</td></tr>
+          <tr><td>MeetingHeaderFormComponent</td><td>MeetingFormComponent</td><td>Covers meeting details, notes, logos, and club info in one component</td></tr>
+          <tr><td>AgendaItemsComponent + AgendaRowComponent</td><td>AgendaItemsComponent</td><td>Row rendering inlined via @switch rather than split into a child component</td></tr>
+          <tr><td>SpeakersFormComponent</td><td>SpeakersFormComponent</td><td>As planned</td></tr>
+          <tr><td>CommitteeFormComponent</td><td>CommitteeFormComponent</td><td>As planned</td></tr>
+          <tr><td>AgendaPreviewComponent</td><td>AgendaPreviewComponent</td><td>As planned — ViewEncapsulation.None for the global preview CSS</td></tr>
+          <tr><td>DocxService</td><td>DocxService</td><td>Direct port; DXA-width assertions carried over from the original app's layout-bug fixes</td></tr>
+          <tr><td><code>SignupComponent</code> + route <code>/signup</code></td><td><code>CheckinComponent</code> + route <code>/checkin</code></td><td>Renamed after the fact — "signup" implied payment/registration, which this page doesn't do</td></tr>
+          <tr><td><code>SignupService</code> (Firebase)</td><td><code>CheckinStateService</code> (localStorage)</td><td>Same method signatures either way — <code>checkIn()</code>, <code>claimRole()</code>, <code>claimEvaluatorSlot()</code> etc. — only the persistence layer differs</td></tr>
+          <tr><td>Role locking via Firestore transactions</td><td>Role locking via in-memory check-then-set</td><td>Same semantics (first claim wins, only the claimant can release), verified by simulating two separate browser identities</td></tr>
+          <tr><td>ImageService</td><td>— not built</td><td>Logo handling stayed inline in AgendaStateService; never became large enough to warrant its own service</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 03 Current component tree -->
+  <section>
+    <div class="section-label">03 · Current component &amp; service tree</div>
+    <div class="tree"><span class="t-comp">App</span>                                    <span class="t-note">// router outlet only</span>
+├── <span class="t-comp">AgendaEditorComponent</span>              <span class="t-note">// route: /</span>
+│   ├── <span class="t-comp">MeetingFormComponent</span>
+│   ├── <span class="t-comp">AgendaItemsComponent</span>             <span class="t-note">// CDK drag-drop, @switch per item type</span>
+│   ├── <span class="t-comp">SpeakersFormComponent</span>
+│   ├── <span class="t-comp">CommitteeFormComponent</span>
+│   └── <span class="t-comp">AgendaPreviewComponent</span>           <span class="t-note">// live A4 preview, read-only</span>
+│
+└── <span class="t-comp">CheckinComponent</span>                   <span class="t-note">// route: /checkin</span>
+    ├── <span class="t-comp">AttendanceListComponent</span>
+    ├── <span class="t-comp">RoleBoardComponent</span>               <span class="t-note">// claim / release, 6 standard roles</span>
+    ├── <span class="t-comp">SpeakerSignupComponent</span>           <span class="t-note">// register to speak — kept its own name</span>
+    └── <span class="t-comp">EvaluatorSlotsComponent</span>          <span class="t-note">// one slot per speech, blocks self-eval</span>
+
+<span class="t-note">── Services ─────────────────────────────────────</span>
+<span class="t-svc">AgendaStateService</span>                         <span class="t-note">// signals, in-memory only</span>
+<span class="t-svc">CheckinStateService</span>                        <span class="t-note">// signals, persisted to localStorage</span>
+<span class="t-svc">DocxService</span>                                <span class="t-note">// all DOCX table-layout builders</span></div>
+  </section>
+
+  <!-- 04 The Firebase question -->
+  <section>
+    <div class="section-label">04 · Phase 4's open question: check-in state is per-browser</div>
+    <p>The check-in page's entire purpose is being a <em>shared</em> sheet — several members checking it at once before a meeting. Right now, "shared" isn't real: <code>CheckinStateService</code> persists to <code>localStorage</code>, so two people on two devices each see their own independent copy. This was a deliberate choice to unblock building and testing the role-locking logic (claim/release, first-come-wins, self-evaluation blocking) without standing up a Firebase project first — not step one of a Firebase rollout that got left half-finished.</p>
+    <div class="callout amber">
+      <p><strong>The swap-in path is already scoped:</strong> <code>CheckinStateService</code>'s public methods stay the same; only their internals move from <code>localStorage</code> reads/writes to Firestore's <code>docData()</code> / <code>updateDoc()</code> / <code>runTransaction()</code>. No component changes. Firestore was chosen over a custom MongoDB + Spring Boot + Render + Auth0 stack specifically because its transactions give atomic role-locking for free and its listeners give live cross-device sync for free — see the separate backend comparison doc for the full reasoning.</p>
+    </div>
+  </section>
+
+  <!-- 05 Phases, updated -->
+  <section>
+    <div class="section-label">05 · Phase log</div>
+    <div class="phases">
+      <div class="phase done">
+        <div class="phase-tag"><span class="tag tag-grn">Phase 1</span><br><br>Scaffold</div>
+        <div class="phase-body">
+          <h3>Project setup &amp; DOCX service</h3>
+          <ul class="phase-items">
+            <li>Angular project created, standalone components, routing configured</li>
+            <li><code>docx</code>, <code>file-saver</code>, <code>@angular/cdk</code> installed</li>
+            <li>All DOCX table-layout functions ported into <code>DocxService</code></li>
+            <li>Smoke-tested: valid DOCX downloads with correct fonts, colors, column widths</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase done">
+        <div class="phase-tag"><span class="tag tag-grn">Phase 2</span><br><br>State</div>
+        <div class="phase-body">
+          <h3>AgendaStateService + form components</h3>
+          <ul class="phase-items">
+            <li>All state signals defined in <code>AgendaStateService</code></li>
+            <li><code>MeetingFormComponent</code>, <code>AgendaItemsComponent</code> (CDK drag-drop), <code>SpeakersFormComponent</code>, <code>CommitteeFormComponent</code> built</li>
+            <li>Verified live: editing a field updates the preview with no manual re-render call</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase done">
+        <div class="phase-tag"><span class="tag tag-grn">Phase 3</span><br><br>Preview</div>
+        <div class="phase-body">
+          <h3>A4 preview component</h3>
+          <ul class="phase-items">
+            <li>Preview converted to an Angular template reading live from signals</li>
+            <li>Preview CSS moved to the global stylesheet under <code>ViewEncapsulation.None</code></li>
+            <li>Full end-to-end test passed: fill form → preview updates → DOCX downloads correctly</li>
+          </ul>
+        </div>
+      </div>
+      <div class="phase partial">
+        <div class="phase-tag"><span class="tag tag-amber">Phase 4</span><br><br>Check-in</div>
+        <div class="phase-body">
+          <h3>Check-in page (formerly "signup")</h3>
+          <ul class="phase-items">
+            <li class="done">Attendance, role board, speaker signup, evaluator slots — all built and verified</li>
+            <li class="done">Role/evaluator locking logic — verified with two simulated identities</li>
+            <li class="done">Renamed signup → check-in across route, components, service, models, storage keys</li>
+            <li class="pending">Swap <code>localStorage</code> for Firestore — real-time, cross-device sync</li>
+            <li class="pending">"Share check-in link" from the agenda editor; pull confirmed roles/speakers back into the agenda form</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 Next up -->
+  <section>
+    <div class="section-label">06 · Next up</div>
+    <p>Finishing Phase 4 is the immediate next step — the Firebase Local Emulator Suite is the way to test the swapped-in Firestore transaction logic offline before it touches a real project. Beyond that, a multi-tenant expansion (multiple clubs, real user accounts, admin-managed subscriptions) is planned separately and documented on its own.</p>
+  </section>
+
+</div>

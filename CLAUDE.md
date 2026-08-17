@@ -5,6 +5,11 @@ an Agora Speakers club) to build meeting agendas, export them as pixel-matched
 Word documents, and let members check in / claim roles / sign up to speak
 before a meeting.
 
+See [`docs/plans/angular-migration-plan.html`](docs/plans/angular-migration-plan.html)
+for the full migration status record (phase-by-phase build history, what was
+planned vs. what actually got built, component tree) — open it directly in a
+browser, it's a formatted page, not plain markdown.
+
 ## Stack
 
 - Angular 20, standalone components, signals for state (no NgRx)
