@@ -1,0 +1,39 @@
+<div class="d-flex flex-column align-items-center justify-content-center vh-100 bg-body-secondary">
+
+  <div class="text-center mb-5">
+    <img src="logo.png" alt="Agora" height="60" class="mb-2">
+    <h1 class="fs-4 fw-bold" style="color:var(--dark)">Agora Agenda Generator</h1>
+  </div>
+
+  <div class="row row-cols-1 row-cols-md-3 g-4 px-3" style="max-width:900px;width:100%;">
+
+    <div class="col">
+      <div class="card h-100 text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#128221;</div>
+        <h2 class="fs-6 fw-bold">Agenda Editor</h2>
+        <p class="text-muted small mb-0">Build the meeting agenda, preview it, and export to Word</p>
+        <a routerLink="/admin" class="stretched-link" aria-label="Open Agenda Editor"></a>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#128101;</div>
+        <h2 class="fs-6 fw-bold">Meeting Check-in</h2>
+        <p class="text-muted small mb-0">Check in, claim a role, or sign up to speak</p>
+        <a routerLink="/checkin" class="stretched-link" aria-label="Open Meeting Check-in"></a>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#9881;</div>
+        <h2 class="fs-6 fw-bold">Manage Roles</h2>
+        <p class="text-muted small mb-0">Admin: add, edit, or archive meeting role definitions</p>
+        <a routerLink="/admin/roles" class="stretched-link" aria-label="Open Manage Roles"></a>
+      </div>
+    </div>
+
+  </div>
+
+</div>

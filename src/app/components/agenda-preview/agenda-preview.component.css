@@ -1,0 +1,127 @@
+/* ═══════════════════════════════════════════════════════
+   A4 PAGE — pixel-matched to DocxService's Word export.
+   Relocated verbatim from src/styles.css; do not "fix" a
+   layout bug here by changing fonts or adding line breaks —
+   see CLAUDE.md's DOCX export notes.
+   ═══════════════════════════════════════════════════════ */
+.page {
+  background: #fff; width: 210mm; height: 297mm;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,.25);
+  font-family: Arial, sans-serif; font-size: 8pt; color: #000;
+  display: flex; flex-direction: column;
+  padding: 5mm 6mm 3mm 6mm;
+}
+
+.doc-header {
+  display: grid;
+  grid-template-columns: 42mm 1fr 24mm;
+  align-items: center;
+  column-gap: 3mm;
+  margin-bottom: 2mm;
+  flex-shrink: 0;
+}
+.doc-logo-left  { width: 100%; height: auto; display: block; }
+.doc-logo-right { width: 100%; height: auto; display: block; }
+.doc-hdr-center { text-align: center; line-height: 1.3; }
+.club-name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 12.5pt; font-weight: 700; color: #9B2F1F; display: block;
+}
+.club-addr {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 9pt; font-weight: 700; color: #C89000;
+  display: block; line-height: 1.35;
+}
+.header-underline {
+  width: 320px; height: 2px;
+  margin: 16px auto 0 auto;
+  background: linear-gradient(to right, transparent, #CE3C17, transparent);
+}
+.meeting-agenda-lbl {
+  display: block;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 9.5pt; font-weight: 700; color: #000;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  margin: 14px 0 0 0;
+}
+.doc-divider {
+  height: 6px; flex-shrink: 0;
+  margin: 3mm 0 2mm 0;
+  background: linear-gradient(to bottom,
+    #CE3C17 0, #CE3C17 2.5px,
+    #fff    2.5px, #fff    3.5px,
+    #CE3C17 3.5px, #CE3C17 6px);
+}
+
+.info-outer {
+  width: 100%; border-collapse: separate; border-spacing: 4px 0;
+  border: none; flex-shrink: 0;
+}
+.info-outer > tbody > tr > td { border: none; padding: 0; vertical-align: middle; }
+.info-outer > tbody > tr > td:first-child { padding-left: 0; }
+.info-outer > tbody > tr > td:last-child  { padding-right: 0; }
+.info-box { width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
+.info-box td {
+  text-align: center; vertical-align: middle; padding: 3mm 2mm;
+  font-family: Arial, Helvetica, sans-serif; line-height: 1.6;
+}
+.ib-head { display: block; font-size: 7pt;   font-weight: 700; font-style: italic; color: #000;    text-transform: uppercase; }
+.ib-val  { display: block; font-size: 7.5pt; font-weight: 700; font-style: italic; color: #D6451E; }
+.ib-date { display: block; font-size: 8.5pt; font-weight: 700; font-style: italic; color: #000; }
+.ib-time { display: block; font-size: 7.5pt; font-weight: 700; font-style: italic; color: #D6451E; }
+
+.info-gap { height: 10mm; flex-shrink: 0; }
+
+.mission {
+  text-align: center; font-family: Arial, sans-serif;
+  margin-bottom: 2.5mm; flex-shrink: 0;
+}
+.m-head    { display: block; font-size: 10pt; font-weight: 700; font-style: italic; color: #D6451E; text-transform: uppercase; margin-bottom: 2mm; }
+.m-body    { display: block; font-size: 7.5pt; font-weight: 700; font-style: italic; color: #000; line-height: 1.55; margin-bottom: 1.5mm; }
+.m-contact { display: block; font-size: 7pt;   font-weight: 400; font-style: italic; color: #FF0000; line-height: 1.4; }
+
+.agenda-container {
+  width: 90%; margin: 0 auto; box-sizing: border-box;
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+}
+.body-area { flex: 1; overflow: hidden; min-height: 0; }
+
+.ag { width: 100%; border-collapse: collapse; font-family: Arial; font-size: 7.5pt; font-style: italic; }
+.ag td { padding: 1.5px 4px; vertical-align: top; line-height: 1.4; }
+.ag .t  { width: 36px; white-space: nowrap; }
+.ag .i  { width: 43%; }
+.ag .p b { font-weight: 700; font-style: italic; }
+.dual .da { width: 43%; }
+
+.stbl { border-collapse: collapse; font-family: Arial; font-size: 7pt; margin: 0.5mm 0 1.5mm 0; width: 100%; }
+.stbl th {
+  border: 1px solid #000; padding: 2px 4px;
+  font-weight: 700; font-style: italic; background: #e0e0e0;
+  text-align: left; font-size: 6.5pt;
+}
+.stbl td { border: 1px solid #000; padding: 2px 4px; font-style: italic; vertical-align: top; }
+.stbl tr:nth-child(even) td { background: #fafafa; }
+
+.agenda-notes { font-family: Arial; font-size: 7.5pt; font-style: italic; margin-top: 1mm; padding-left: 36px; line-height: 1.5; }
+
+.meeting-notes { margin-top: 20px; margin-bottom: 24px; text-align: left; flex-shrink: 0; }
+.meeting-notes p { margin: 4px 0; font-family: Arial; font-size: 7.5pt; font-style: italic; line-height: 1.4; color: #000; }
+
+.footer { border-top: 1.5px solid #000; padding-top: 1.5mm; flex-shrink: 0; }
+.footer-title { font-family: Arial; font-size: 7.5pt; font-weight: 700; font-style: italic; color: var(--red); margin-bottom: 1.5mm; text-align: center; }
+.ftbl { width: 100%; border-collapse: collapse; font-family: Arial; font-size: 6pt; }
+.ftbl td { border: 1px solid #000; padding: 1.5px 3px; vertical-align: middle; line-height: 1.4; }
+.ftbl .role  { font-weight: 700; white-space: nowrap; }
+.ftbl .phone { white-space: nowrap; }
+.ftbl .visit { color: var(--red); font-weight: 700; font-style: italic; }
+.ftbl .url   { color: #0000CC; font-style: italic; text-align: center; }
+.footer-fb { font-family: Arial; font-size: 6.5pt; text-align: center; margin-top: 1.5mm; font-weight: 700; color: var(--red); }
+
+/* ── PRINT ───────────────────────────────────────────── */
+@media print {
+  .page { box-shadow: none; }
+  .info-box, .stbl, .ftbl, .doc-divider { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .info-box { border: 1.5px solid #000 !important; }
+  @page { size: A4 portrait; margin: 0; }
+}

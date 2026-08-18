@@ -1,40 +1,40 @@
-<div class="sec">
-  <div class="sec-t">Prepared Speakers</div>
+<div class="mb-4">
+  <div class="section-title">Prepared Speakers</div>
 
   @for (s of spks; track s.id; let i = $index) {
-    <div class="card">
-      <div class="ch">
-        <span class="cl">Speaker {{ i + 1 }}</span>
-        <button class="brm" (click)="remove(s.id)">✕</button>
+    <div class="card card-body p-2 mb-2">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-bold small">Speaker {{ i + 1 }}</span>
+        <button type="button" class="btn-close" aria-label="Remove speaker" (click)="remove(s.id)"></button>
       </div>
-      <div class="f">
-        <label>Name</label>
-        <input type="text" [value]="s.name" (input)="update(s.id, 'name', $any($event.target).value)">
+      <div class="mb-2">
+        <label class="form-label small mb-1">Name</label>
+        <input class="form-control form-control-sm" type="text" [value]="s.name" (input)="update(s.id, 'name', $any($event.target).value)">
       </div>
-      <div class="g2">
-        <div class="f">
-          <label>Level</label>
-          <input type="text" [value]="s.level" placeholder="e.g. L1 P1" (input)="update(s.id, 'level', $any($event.target).value)">
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label small mb-1">Level</label>
+          <input class="form-control form-control-sm" type="text" [value]="s.level" placeholder="e.g. L1 P1" (input)="update(s.id, 'level', $any($event.target).value)">
         </div>
-        <div class="f">
-          <label>Time (mins)</label>
-          <div style="display:flex;gap:4px;align-items:center">
-            <input type="number" min="1" max="60" [value]="s.timeLo" style="width:48px" (input)="update(s.id, 'timeLo', +$any($event.target).value)">
-            <span>–</span>
-            <input type="number" min="1" max="60" [value]="s.timeHi" style="width:48px" (input)="update(s.id, 'timeHi', +$any($event.target).value)">
+        <div class="col-6">
+          <label class="form-label small mb-1">Time (mins)</label>
+          <div class="input-group input-group-sm">
+            <input class="form-control" type="number" min="1" max="60" [value]="s.timeLo" (input)="update(s.id, 'timeLo', +$any($event.target).value)">
+            <span class="input-group-text">–</span>
+            <input class="form-control" type="number" min="1" max="60" [value]="s.timeHi" (input)="update(s.id, 'timeHi', +$any($event.target).value)">
           </div>
         </div>
       </div>
-      <div class="f">
-        <label>Title</label>
-        <input type="text" [value]="s.title" (input)="update(s.id, 'title', $any($event.target).value)">
+      <div class="mb-2">
+        <label class="form-label small mb-1">Title</label>
+        <input class="form-control form-control-sm" type="text" [value]="s.title" (input)="update(s.id, 'title', $any($event.target).value)">
       </div>
-      <div class="f">
-        <label>Evaluator</label>
-        <input type="text" [value]="s.evaluator" (input)="update(s.id, 'evaluator', $any($event.target).value)">
+      <div class="mb-2">
+        <label class="form-label small mb-1">Evaluator</label>
+        <input class="form-control form-control-sm" type="text" [value]="s.evaluator" (input)="update(s.id, 'evaluator', $any($event.target).value)">
       </div>
     </div>
   }
 
-  <button class="badd" (click)="add()">+ Add Speaker</button>
+  <button class="btn btn-danger btn-sm" (click)="add()">+ Add Speaker</button>
 </div>

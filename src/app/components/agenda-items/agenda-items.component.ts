@@ -51,17 +51,17 @@ export class AgendaItemsComponent {
 
   typeClass(type: string): string {
     const map: Record<string, string> = {
-      dual: 'type-dual', speakers: 'type-special', evaluators: 'type-special',
-      recess: 'type-recess', notes: 'type-notes',
+      dual: 'bg-primary-subtle', speakers: 'bg-info-subtle', evaluators: 'bg-info-subtle',
+      recess: 'bg-success-subtle', notes: 'bg-warning-subtle',
     };
     return map[type] ?? '';
   }
 
   badgeClass(type: string): string {
     const map: Record<string, string> = {
-      row: 'badge-row', dual: 'badge-dual', speakers: 'badge-special', evaluators: 'badge-special',
-      recess: 'badge-recess', notes: 'badge-notes',
+      row: 'bg-secondary', dual: 'bg-primary', speakers: 'bg-info', evaluators: 'bg-info',
+      recess: 'bg-success', notes: 'bg-warning text-dark',
     };
-    return map[type] ?? 'badge-row';
+    return map[type] ?? 'bg-secondary';
   }
 }

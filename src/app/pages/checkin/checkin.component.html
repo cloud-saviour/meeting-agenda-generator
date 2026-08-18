@@ -1,34 +1,36 @@
-<div class="app-bar">
-  <img src="logo.png" alt="Agora">
-  <h1>Meeting Check-in</h1>
-  <div class="sp"></div>
-  <a class="btn" routerLink="/admin/roles">&#9881; Manage Roles</a>
-  <a class="btn" routerLink="/">&#8592; Back to Agenda</a>
-</div>
+<nav class="navbar navbar-dark bg-dark fixed-top d-flex align-items-center px-3 gap-2">
+  <img src="logo.png" alt="Agora" height="30">
+  <span class="navbar-brand mb-0 fs-6 fw-bold">Meeting Check-in</span>
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <a class="btn btn-outline-light btn-sm" routerLink="/admin">&#128221; Agenda Editor</a>
+    <a class="btn btn-outline-light btn-sm" routerLink="/admin/roles">&#9881; Manage Roles</a>
+    <a class="btn btn-outline-light btn-sm" routerLink="/">&#127968; Home</a>
+  </div>
+</nav>
 
-<div class="su-wrap" style="margin-top:64px;">
+<div class="container py-4" style="max-width:760px;margin-top:64px;">
 
-  <div class="su-hero">
-    <h2>{{ state.meeting().theme || 'Upcoming Meeting' }}</h2>
-    <div class="su-meta">
-      <span>Date: <b>{{ dateStr || 'TBC' }}</b></span>
-      <span>Starts: <b>{{ state.meeting().start }}</b></span>
+  <div class="card p-3 mb-3 border-start border-danger border-4">
+    <h2 class="fs-5">{{ state.meeting().theme || 'Upcoming Meeting' }}</h2>
+    <div class="d-flex flex-wrap gap-3 text-muted small">
+      <span>Date: <b class="text-body">{{ dateStr || 'TBC' }}</b></span>
+      <span>Starts: <b class="text-body">{{ state.meeting().start }}</b></span>
       @if (state.meeting().word) {
-        <span>Word of the Day: <b>{{ state.meeting().word }}</b></span>
+        <span>Word of the Day: <b class="text-body">{{ state.meeting().word }}</b></span>
       }
     </div>
   </div>
 
-  <div class="su-checkin" [class.checked-in]="state.isCheckedIn()">
-    <div class="f">
-      <label>Your Name</label>
-      <input type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()">
+  <div class="card p-3 mb-3 d-flex flex-row align-items-end gap-2" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
+    <div class="flex-grow-1">
+      <label class="form-label small mb-1">Your Name</label>
+      <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()">
     </div>
-    <button class="badd" (click)="checkIn()">
+    <button class="btn btn-danger" (click)="checkIn()">
       {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
     </button>
     @if (state.isCheckedIn()) {
-      <span class="su-status-ok">&#10003; Checked in</span>
+      <span class="text-success fw-bold small">&#10003; Checked in</span>
     }
   </div>
 

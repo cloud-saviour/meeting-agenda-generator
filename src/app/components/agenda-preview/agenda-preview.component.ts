@@ -26,6 +26,7 @@ type Segment =
   selector: 'app-agenda-preview',
   standalone: true,
   templateUrl: './agenda-preview.component.html',
+  styleUrl: './agenda-preview.component.css',
   encapsulation: ViewEncapsulation.None,
 })
 export class AgendaPreviewComponent {
