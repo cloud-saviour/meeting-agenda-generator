@@ -5,7 +5,7 @@ an Agora Speakers club) to build meeting agendas, export them as pixel-matched
 Word documents, and let members check in / claim roles / sign up to speak
 before a meeting.
 
-See [`docs/plans/angular-migration-plan.html`](docs/plans/angular-migration-plan.html)
+See [`docs/architecture/2. angular-migration-plan.html`](docs/architecture/2.%20angular-migration-plan.html)
 for the full migration status record (phase-by-phase build history, what was
 planned vs. what actually got built, component tree) — open it directly in a
 browser, it's a formatted page, not plain markdown.
@@ -13,34 +13,60 @@ browser, it's a formatted page, not plain markdown.
 ## Stack
 
 - Angular 20, standalone components, signals for state (no NgRx)
+- Bootstrap 5 (`bootstrap` + `@ng-bootstrap/ng-bootstrap`) for styling —
+  see `src/styles.css` for the brand-color theme-variable overrides
 - `docx` npm package for Word export, `file-saver` for downloads
 - `@angular/cdk` drag-drop for agenda item reordering
 - No backend yet — all state is client-side (see Persistence below)
 
 ## Structure
 
+`src/app/` is organized **by feature**, not by artifact type. Each feature
+folder mirrors a `pages/components/services/models/utils` shape; `core/`
+holds everything 2+ features depend on; `layout/` holds shared app-shell
+chrome.
+
 ```
 src/app/
-  pages/
-    agenda-editor/     Route "/" — the agenda-building tool
-    checkin/            Route "/checkin" — member-facing check-in page
-  components/
-    meeting-form, agenda-items, speakers-form, committee-form,
-    agenda-preview                    → children of agenda-editor
-    attendance-list, role-board,
-    speaker-signup, evaluator-slots   → children of checkin
-  services/
-    agenda-state.service.ts   AgendaStateService — agenda editor state (signals)
-    checkin-state.service.ts  CheckinStateService — check-in page state (signals)
-    docx.service.ts           DocxService — all DOCX generation logic
-  models/
-    agenda.models.ts    Agenda editor types
-    checkin.models.ts   Check-in page types
+  core/
+    services/   storage.service.ts, role-definition.service.ts (+ specs)
+    models/     role-definition.models.ts
+    utils/      locale.ts (APP_LOCALE)
+
+  layout/
+    navbar/     NavbarComponent — shared nav bar used by agenda-editor,
+                checkin, and admin-roles (title/links/action-buttons via
+                @Input + <ng-content>); home has no navbar
+
+  features/
+    agenda-editor/    Route "/admin" — the agenda-building tool
+      pages/           agenda-editor.component.ts
+      components/      meeting-form, agenda-items, speakers-form,
+                        committee-form, agenda-preview
+      services/        agenda-state.service.ts (AgendaStateService),
+                        agenda-import-export.service.ts, docx.service.ts
+                        (DocxService — all DOCX generation logic),
+                        default-agenda.ts
+      models/          agenda.models.ts
+      utils/           agenda-timeline.ts
+
+    checkin/          Route "/checkin" — member-facing check-in page
+      pages/           checkin.component.ts
+      components/      attendance-list, role-board, speaker-signup,
+                        evaluator-slots
+      services/        checkin-state.service.ts (CheckinStateService)
+      models/          checkin.models.ts
+
+    admin-roles/      Route "/admin/roles" — manage role definitions
+      pages/           admin-roles.component.ts
+
+    home/             Route "/" — tile picker linking to the 3 pages above
+      pages/           home.component.ts
 ```
 
 ## Two independent features, two independent state services
 
-**Agenda editor** (`/`) — single-user authoring tool. Build an agenda, preview
+**Agenda editor** (`/admin`) — single-user authoring tool. Build an agenda, preview
 it as a live A4 page, export to DOCX or print. State lives only in memory
 (`AgendaStateService`); nothing persists on reload except via manual
 Export/Import JSON.
@@ -128,5 +154,7 @@ npm install
 ng serve --port 4300
 ```
 
-Two routes: `http://localhost:4300/` (agenda editor) and
-`http://localhost:4300/checkin` (check-in page).
+Four routes: `http://localhost:4300/` (home tile picker),
+`http://localhost:4300/admin` (agenda editor),
+`http://localhost:4300/checkin` (check-in page), and
+`http://localhost:4300/admin/roles` (manage role definitions).

@@ -1,0 +1,13 @@
+<nav class="navbar navbar-dark bg-dark d-flex align-items-center px-3 gap-2"
+     [class.fixed-top]="fixed"
+     [class.flex-shrink-0]="!fixed"
+     [class.d-print-none]="printHidden">
+  <img src="logo.png" alt="Agora" height="30">
+  <span class="navbar-brand mb-0 fs-6 fw-bold">{{ title }}</span>
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <ng-content></ng-content>
+    @for (link of links; track link.path) {
+      <a class="btn btn-outline-light btn-sm" [routerLink]="link.path">{{ link.label }}</a>
+    }
+  </div>
+</nav>

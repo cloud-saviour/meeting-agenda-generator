@@ -2,7 +2,7 @@ import { Component, inject, ViewEncapsulation } from '@angular/core';
 import { AgendaStateService } from '../../services/agenda-state.service';
 import { AgendaDualItem, CommitteeMember } from '../../models/agenda.models';
 import { computeAgendaTimeline } from '../../utils/agenda-timeline';
-import { APP_LOCALE } from '../../utils/locale';
+import { APP_LOCALE } from '../../../../core/utils/locale';
 
 interface RenderedRow {
   time: string;

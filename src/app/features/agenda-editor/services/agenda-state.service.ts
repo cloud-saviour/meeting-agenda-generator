@@ -6,7 +6,7 @@ import {
   Speaker,
 } from '../models/agenda.models';
 import { defaultAgenda } from './default-agenda';
-import { APP_LOCALE } from '../utils/locale';
+import { APP_LOCALE } from '../../../core/utils/locale';
 
 const DEFAULT_LOGO_LEFT = 'logo.png';
 const DEFAULT_LOGO_RIGHT = 'crown.png';

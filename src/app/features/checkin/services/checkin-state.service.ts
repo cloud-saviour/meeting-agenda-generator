@@ -6,9 +6,9 @@ import {
   CheckinSpeaker,
   RoleClaim,
 } from '../models/checkin.models';
-import { RoleDefinitionService } from './role-definition.service';
-import { StorageService } from './storage.service';
-import { APP_LOCALE } from '../utils/locale';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+import { StorageService } from '../../../core/services/storage.service';
+import { APP_LOCALE } from '../../../core/utils/locale';
 
 const STORAGE_KEY = 'agora-checkin-data';
 const UID_KEY = 'agora-checkin-uid';

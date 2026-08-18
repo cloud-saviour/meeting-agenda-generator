@@ -1,5 +1,6 @@
-// PostToolUse hook (Write|Edit): warns if a .ts file written under
-// src/app/services/ or src/app/utils/ has no sibling .spec.ts file.
+// PostToolUse hook (Write|Edit): warns if a .ts file written under any
+// services/ or utils/ folder under src/app/ (e.g. src/app/core/services/,
+// src/app/features/<name>/utils/) has no sibling .spec.ts file.
 // See .claude/skills/tdd-workflow/SKILL.md.
 const fs = require('fs');
 const path = require('path');
@@ -13,7 +14,7 @@ process.stdin.on('end', () => {
     if (!filePath) return;
 
     const normalized = filePath.replace(/\\/g, '/');
-    const isTarget = /\/src\/app\/(services|utils)\/.*\.ts$/.test(normalized);
+    const isTarget = /\/src\/app\/.*\/(services|utils)\/.*\.ts$/.test(normalized);
     const isSpec = normalized.endsWith('.spec.ts');
     if (!isTarget || isSpec) return;
 

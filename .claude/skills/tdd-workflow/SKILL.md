@@ -1,6 +1,6 @@
 ---
 name: tdd-workflow
-description: The red-green-refactor loop for this project. Use whenever implementing a new service, utility function, or behavior change in src/app/services/ or src/app/utils/ — write the failing test before the implementation, not after.
+description: The red-green-refactor loop for this project. Use whenever implementing a new service, utility function, or behavior change in any feature's services/ or utils/ folder, or in core/services/ or core/utils/ — write the failing test before the implementation, not after.
 ---
 
 Tests in this project exist to be written first, not backfilled. This
@@ -44,7 +44,7 @@ you know what behavior you're testing.
   `RoleDefinitionService`, `AgendaStateService`, `AgendaImportExportService`):
   always test-first. These are the files with the most existing spec
   coverage and the clearest existing patterns to follow.
-- **`src/app/utils/*.ts`** — pure functions are the cheapest thing in this
+- **Any feature's `utils/*.ts` (or `core/utils/*.ts`)** — pure functions are the cheapest thing in this
   codebase to test-first; there's no `TestBed` ceremony. See
   `agenda-timeline.spec.ts`, which was written against the *current*
   duplicated clock logic before the extraction that created
@@ -58,7 +58,8 @@ you know what behavior you're testing.
 ## The enforcement backstop
 
 A `PostToolUse` hook (see `.claude/settings.json`) warns when a `.ts` file
-lands in `services/` or `utils/` without a sibling `.spec.ts`. That hook
+lands in any `services/` or `utils/` folder under `src/app/` without a
+sibling `.spec.ts`. That hook
 catches the case where this workflow got skipped — it's not a substitute
 for following steps 1–6, since a warning after the fact can't un-skip
 "red" (you can still write a passing test for code that already exists,

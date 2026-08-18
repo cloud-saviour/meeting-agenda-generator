@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CheckinStateService } from '../../services/checkin-state.service';
-import { RoleDefinitionService } from '../../services/role-definition.service';
+import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
 
 @Component({
   selector: 'app-role-board',

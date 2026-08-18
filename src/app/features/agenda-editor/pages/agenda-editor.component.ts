@@ -1,19 +1,19 @@
 import { Component, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { AgendaStateService } from '../../services/agenda-state.service';
-import { AgendaImportExportService } from '../../services/agenda-import-export.service';
-import { DocxService } from '../../services/docx.service';
-import { MeetingFormComponent } from '../../components/meeting-form/meeting-form.component';
-import { AgendaItemsComponent } from '../../components/agenda-items/agenda-items.component';
-import { SpeakersFormComponent } from '../../components/speakers-form/speakers-form.component';
-import { CommitteeFormComponent } from '../../components/committee-form/committee-form.component';
-import { AgendaPreviewComponent } from '../../components/agenda-preview/agenda-preview.component';
+import { AgendaStateService } from '../services/agenda-state.service';
+import { AgendaImportExportService } from '../services/agenda-import-export.service';
+import { DocxService } from '../services/docx.service';
+import { MeetingFormComponent } from '../components/meeting-form/meeting-form.component';
+import { AgendaItemsComponent } from '../components/agenda-items/agenda-items.component';
+import { SpeakersFormComponent } from '../components/speakers-form/speakers-form.component';
+import { CommitteeFormComponent } from '../components/committee-form/committee-form.component';
+import { AgendaPreviewComponent } from '../components/agenda-preview/agenda-preview.component';
+import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
 @Component({
   selector: 'app-agenda-editor',
   standalone: true,
   imports: [
-    RouterLink,
+    NavbarComponent,
     MeetingFormComponent,
     AgendaItemsComponent,
     SpeakersFormComponent,

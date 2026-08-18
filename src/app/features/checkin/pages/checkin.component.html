@@ -1,12 +1,10 @@
-<nav class="navbar navbar-dark bg-dark fixed-top d-flex align-items-center px-3 gap-2">
-  <img src="logo.png" alt="Agora" height="30">
-  <span class="navbar-brand mb-0 fs-6 fw-bold">Meeting Check-in</span>
-  <div class="ms-auto d-flex align-items-center gap-2">
-    <a class="btn btn-outline-light btn-sm" routerLink="/admin">&#128221; Agenda Editor</a>
-    <a class="btn btn-outline-light btn-sm" routerLink="/admin/roles">&#9881; Manage Roles</a>
-    <a class="btn btn-outline-light btn-sm" routerLink="/">&#127968; Home</a>
-  </div>
-</nav>
+<app-navbar title="Meeting Check-in" [fixed]="true"
+  [links]="[
+    { label: '📝 Agenda Editor', path: '/admin' },
+    { label: '⚙ Manage Roles', path: '/admin/roles' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
 
 <div class="container py-4" style="max-width:760px;margin-top:64px;">
 

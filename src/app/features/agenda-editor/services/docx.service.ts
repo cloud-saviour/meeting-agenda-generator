@@ -7,7 +7,7 @@ import {
 import { saveAs } from 'file-saver';
 import { AgendaItem, AgendaSnapshot, CommitteeMember, Speaker } from '../models/agenda.models';
 import { computeAgendaTimeline } from '../utils/agenda-timeline';
-import { APP_LOCALE } from '../utils/locale';
+import { APP_LOCALE } from '../../../core/utils/locale';
 
 // ── Layout constants (all sums = CONTENT_W = 10546) ──────────────────────────
 const CONTENT_W       = 10546;

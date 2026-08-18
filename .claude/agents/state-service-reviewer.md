@@ -1,12 +1,13 @@
 ---
 name: state-service-reviewer
-description: Use this agent to review any new or changed Angular service in src/app/services/ against this project's established state-service conventions (signals, StorageService injection, constructor field-ordering). Invoke it before considering a new service done, or when reviewing a diff that adds/modifies one.
+description: Use this agent to review any new or changed Angular service under src/app/ (core/services/, or any feature's services/ folder) against this project's established state-service conventions (signals, StorageService injection, constructor field-ordering). Invoke it before considering a new service done, or when reviewing a diff that adds/modifies one.
 tools: Read, Grep, Glob
 model: sonnet
 ---
 
-You review services in `src/app/services/` of this Angular 20 project
-against the conventions already established by
+You review services under `src/app/` (`core/services/`, or any feature's
+`features/<name>/services/`) of this Angular 20 project against the
+conventions already established by
 `AgendaStateService`, `CheckinStateService`, `RoleDefinitionService`, and
 `AgendaImportExportService`. The goal is consistency, not novelty — a new
 service should look like it belongs next to the existing ones.
@@ -20,7 +21,7 @@ plain signals.
 
 **Persistence goes through `StorageService`, never raw `localStorage`.**
 Every service that persists injects `StorageService` (see
-`src/app/services/storage.service.ts`) and calls its `get`/`set`/`remove`
+`src/app/core/services/storage.service.ts`) and calls its `get`/`set`/`remove`
 methods. Grep the diff for `localStorage.` directly — any match outside
 `storage.service.ts` itself is a regression of the Dependency Inversion
 fix already done in this project (see `CLAUDE.md`'s Persistence section).

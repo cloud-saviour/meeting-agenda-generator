@@ -21,8 +21,8 @@ import { TestBed } from '@angular/core/testing';
 ```
 
 **Testing a service that depends on `StorageService`.** Look at
-`src/app/services/role-definition.service.spec.ts` or
-`src/app/services/checkin-state.service.spec.ts` for the pattern: define
+`src/app/core/services/role-definition.service.spec.ts` or
+`src/app/features/checkin/services/checkin-state.service.spec.ts` for the pattern: define
 a `FakeStorage` class implementing the same `get`/`set`/`remove` shape as
 `StorageService`, backed by an in-memory `Map`, and provide it via
 `TestBed.configureTestingModule({ providers: [{ provide: StorageService,
@@ -32,7 +32,7 @@ unless the spec's whole point is testing `StorageService` itself (see
 deliberately).
 
 **Testing a pure function.** Look at
-`src/app/utils/agenda-timeline.spec.ts`. No `TestBed` needed — construct
+`src/app/features/agenda-editor/utils/agenda-timeline.spec.ts`. No `TestBed` needed — construct
 inputs directly, call the function, assert the output. For anything
 involving the agenda's clock-ticking logic
 (`computeAgendaTimeline`), hand-verify the arithmetic in a comment before
@@ -41,7 +41,7 @@ subtly wrong and a wrong assertion that happens to pass is worse than no
 test.
 
 **Testing a service with a real dependency chain.** Look at
-`src/app/services/agenda-import-export.service.spec.ts` — it injects both
+`src/app/features/agenda-editor/services/agenda-import-export.service.spec.ts` — it injects both
 the service under test and its dependency (`AgendaStateService`) from the
 same `TestBed`, and exercises real round-trips (export → mutate → import →
 compare) rather than mocking the dependency, since `AgendaStateService`
@@ -53,7 +53,7 @@ has no external side effects of its own.
   behavior, every public mutation method's success and rejection paths
   (e.g. `claimRole` succeeding vs. blocked by another uid), and that
   persistence round-trips through the injected `StorageService`.
-- **Pure utils** (`src/app/utils/*.ts`): every branch, plus one
+- **Pure utils** (any feature's `utils/*.ts`, or `core/utils/*.ts`): every branch, plus one
   "realistic combined scenario" golden test if the function has multiple
   interacting rules (see `agenda-timeline.spec.ts`'s golden test).
 - **`docx.service.ts`**: don't write unit tests here unless explicitly

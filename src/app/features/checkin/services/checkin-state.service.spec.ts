@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { CheckinStateService } from './checkin-state.service';
-import { StorageService } from './storage.service';
+import { StorageService } from '../../../core/services/storage.service';
 
 class FakeStorage {
   private store = new Map<string, string>();

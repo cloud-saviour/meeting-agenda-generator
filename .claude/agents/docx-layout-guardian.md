@@ -1,11 +1,11 @@
 ---
 name: docx-layout-guardian
-description: Use this agent to review any change touching src/app/services/docx.service.ts before it lands. It checks that Word table-layout math stays internally consistent and flags "fixes" that paper over a layout bug with fonts or line breaks instead of correcting the widths.
+description: Use this agent to review any change touching src/app/features/agenda-editor/services/docx.service.ts before it lands. It checks that Word table-layout math stays internally consistent and flags "fixes" that paper over a layout bug with fonts or line breaks instead of correcting the widths.
 tools: Read, Grep, Glob
 model: sonnet
 ---
 
-You review changes to `src/app/services/docx.service.ts` in this Angular
+You review changes to `src/app/features/agenda-editor/services/docx.service.ts` in this Angular
 project. This file generates a Word document (via the `docx` npm package)
 whose tables use `TableLayoutType.FIXED` — Word requires every table's
 column widths to sum exactly to the table's own width, on every nested
@@ -45,7 +45,7 @@ from the rendered output.
    should use DXA exclusively; mixing types was a real bug class earlier
    in this project's history.
 5. **New locale-sensitive date/time formatting that doesn't use
-   `APP_LOCALE`** from `src/app/utils/locale.ts` — this file's date
+   `APP_LOCALE`** from `src/app/core/utils/locale.ts` — this file's date
    formatting must stay `en-GB` regardless of the browser generating the
    document, so the same "Generate DOCX" click produces identical output
    on any admin's machine.

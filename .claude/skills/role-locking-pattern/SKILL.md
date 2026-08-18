@@ -6,7 +6,7 @@ description: The read-decide-update pattern for any first-come-first-served clai
 The check-in page's core value is atomic, first-come-first-served claims:
 once someone claims a role or an evaluator slot, no one else can take it
 until they release it. Two existing methods on
-`src/app/services/checkin-state.service.ts` implement this correctly —
+`src/app/features/checkin/services/checkin-state.service.ts` implement this correctly —
 `claimRole()` and `claimEvaluatorSlot()`. Any new claimable resource
 should follow the same shape.
 
@@ -73,6 +73,6 @@ Every claim/release pair needs spec coverage for: success when open,
 rejection when already claimed by another uid, rejection when not
 checked in, and — if applicable — the self-referential and
 one-at-a-time rules. See
-`src/app/services/checkin-state.service.spec.ts` for the existing
+`src/app/features/checkin/services/checkin-state.service.spec.ts` for the existing
 `claimRole`/`releaseRole`/`claimEvaluatorSlot` cases as the template to
 follow, including the `FakeStorage` TestBed setup.

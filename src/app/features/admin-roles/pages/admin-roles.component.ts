@@ -1,12 +1,12 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { RoleDefinitionService } from '../../services/role-definition.service';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
 @Component({
   selector: 'app-admin-roles',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, NavbarComponent],
   templateUrl: './admin-roles.component.html',
 })
 export class AdminRolesComponent {
