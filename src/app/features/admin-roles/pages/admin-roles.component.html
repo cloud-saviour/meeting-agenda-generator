@@ -1,0 +1,61 @@
+<app-navbar title="Manage Meeting Roles" [fixed]="true"
+  [links]="[
+    { label: '📝 Agenda Editor', path: '/admin' },
+    { label: '👥 Check-in', path: '/checkin' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:760px;margin-top:64px;">
+
+  <div class="card p-3 mb-3">
+    <h3 class="section-title">Add a Role</h3>
+    <div class="mb-2">
+      <label class="form-label small mb-1">Label</label>
+      <input class="form-control form-control-sm" type="text" [(ngModel)]="newLabel" name="newLabel" placeholder="e.g. Table Topics Master">
+    </div>
+    <div class="mb-2">
+      <label class="form-label small mb-1">Description (optional)</label>
+      <input class="form-control form-control-sm" type="text" [(ngModel)]="newDescription" name="newDescription" placeholder="Shown to admins only">
+    </div>
+    <button class="btn btn-danger btn-sm" (click)="create()">+ Add Role</button>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h3 class="section-title">All Roles ({{ roles.length }})</h3>
+    <div class="list-group list-group-flush">
+      @for (r of roles; track r.id) {
+        <div class="list-group-item d-flex align-items-center gap-2" [class.opacity-50]="!r.active">
+          @if (r.active) {
+            <span class="badge bg-success-subtle text-success-emphasis">Active</span>
+          } @else {
+            <span class="badge bg-secondary-subtle text-secondary-emphasis">Archived</span>
+          }
+
+          @if (editingId === r.id) {
+            <div class="d-flex flex-grow-1 gap-2 align-items-center">
+              <input class="form-control form-control-sm" type="text" [(ngModel)]="editLabel" name="editLabel" placeholder="Label">
+              <input class="form-control form-control-sm" type="text" [(ngModel)]="editDescription" name="editDescription" placeholder="Description (optional)">
+              <button class="btn btn-danger btn-sm" (click)="saveEdit()">Save</button>
+              <button class="btn btn-outline-secondary btn-sm" (click)="cancelEdit()">Cancel</button>
+            </div>
+          } @else {
+            <span class="flex-grow-1 small fw-semibold">
+              {{ r.label }}
+              @if (r.description) {
+                <span class="text-muted fw-normal">— {{ r.description }}</span>
+              }
+            </span>
+            <button class="btn btn-outline-secondary btn-sm" (click)="startEdit(r.id, r.label, r.description)">Edit</button>
+            @if (r.active) {
+              <button class="btn btn-outline-secondary btn-sm" (click)="archive(r.id)">Archive</button>
+            } @else {
+              <button class="btn btn-danger btn-sm" (click)="restore(r.id)">Restore</button>
+            }
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+</div>

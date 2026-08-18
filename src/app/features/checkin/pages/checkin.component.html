@@ -1,0 +1,40 @@
+<app-navbar title="Meeting Check-in" [fixed]="true"
+  [links]="[
+    { label: '📝 Agenda Editor', path: '/admin' },
+    { label: '⚙ Manage Roles', path: '/admin/roles' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:760px;margin-top:64px;">
+
+  <div class="card p-3 mb-3 border-start border-danger border-4">
+    <h2 class="fs-5">{{ state.meeting().theme || 'Upcoming Meeting' }}</h2>
+    <div class="d-flex flex-wrap gap-3 text-muted small">
+      <span>Date: <b class="text-body">{{ dateStr || 'TBC' }}</b></span>
+      <span>Starts: <b class="text-body">{{ state.meeting().start }}</b></span>
+      @if (state.meeting().word) {
+        <span>Word of the Day: <b class="text-body">{{ state.meeting().word }}</b></span>
+      }
+    </div>
+  </div>
+
+  <div class="card p-3 mb-3 d-flex flex-row align-items-end gap-2" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
+    <div class="flex-grow-1">
+      <label class="form-label small mb-1">Your Name</label>
+      <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()">
+    </div>
+    <button class="btn btn-danger" (click)="checkIn()">
+      {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
+    </button>
+    @if (state.isCheckedIn()) {
+      <span class="text-success fw-bold small">&#10003; Checked in</span>
+    }
+  </div>
+
+  <app-attendance-list></app-attendance-list>
+  <app-role-board></app-role-board>
+  <app-speaker-signup></app-speaker-signup>
+  <app-evaluator-slots></app-evaluator-slots>
+
+</div>

@@ -1,0 +1,33 @@
+<div class="card p-3 mb-3">
+  <h3 class="section-title">Evaluations</h3>
+
+  @if (error) {
+    <div class="alert alert-danger py-1 px-2 small mb-2">{{ error }}</div>
+  }
+
+  @if (speakers.length) {
+    <div class="list-group list-group-flush">
+      @for (s of speakers; track s.id) {
+        <div class="list-group-item d-flex align-items-center gap-2">
+          <span class="flex-grow-1 small">
+            <b>{{ s.title || 'Untitled speech' }}</b> — {{ s.name }}
+          </span>
+          @if (s.evaluator?.uid) {
+            @if (isMine(s.evaluator?.uid)) {
+              <span class="badge bg-warning-subtle text-warning-emphasis">You</span>
+              <button class="btn btn-outline-secondary btn-sm" (click)="release(s.id)">Release</button>
+            } @else {
+              <span class="badge bg-danger-subtle text-danger-emphasis">{{ s.evaluator?.name }}</span>
+            }
+          } @else if (isSpeakerSelf(s.uid)) {
+            <span class="badge bg-success-subtle text-success-emphasis opacity-50">N/A</span>
+          } @else {
+            <button class="btn btn-danger btn-sm" (click)="claim(s.id)">Evaluate</button>
+          }
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="text-muted fst-italic small">No speeches to evaluate yet — check back once speakers sign up.</div>
+  }
+</div>

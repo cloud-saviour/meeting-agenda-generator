@@ -1,0 +1,28 @@
+<div class="card p-3 mb-3">
+  <h3 class="section-title">Meeting Roles</h3>
+  @if (claimError) {
+    <div class="alert alert-danger py-1 px-2 small mb-2">{{ claimError }}</div>
+  }
+  <div class="list-group list-group-flush">
+    @for (def of activeRoles(); track def.id) {
+      <div class="list-group-item d-flex align-items-center gap-2">
+        @if (isMine(def.id)) {
+          <span class="badge bg-warning-subtle text-warning-emphasis">Yours</span>
+        } @else if (isTaken(def.id)) {
+          <span class="badge bg-danger-subtle text-danger-emphasis">Taken</span>
+        } @else {
+          <span class="badge bg-success-subtle text-success-emphasis">Open</span>
+        }
+        <span class="flex-grow-1 fw-semibold small">{{ def.label }}</span>
+        @if (roles[def.id]?.uid) {
+          <span class="text-muted small">{{ roles[def.id].name }}</span>
+        }
+        @if (isMine(def.id)) {
+          <button class="btn btn-outline-secondary btn-sm" (click)="release(def.id)">Release</button>
+        } @else if (!isTaken(def.id)) {
+          <button class="btn btn-danger btn-sm" (click)="claim(def.id)">Claim</button>
+        }
+      </div>
+    }
+  </div>
+</div>

@@ -1,104 +1,63 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── APP SHELL ───────────────────────────────────────── */
-:root { --red: #CE3C17; --dark: #3b1f10; }
+/* ── BRAND ───────────────────────────────────────────── */
+:root {
+  --red: #CE3C17; --dark: #3b1f10;
+
+  /* Root-level theme tokens. These alone are enough for Bootstrap's
+     token-driven utilities (.text-danger, .border-danger, plain .bg-danger,
+     links) to pick up the brand red. */
+  --bs-primary: var(--red);
+  --bs-primary-rgb: 206, 60, 23;
+  --bs-link-color: var(--red);
+  --bs-link-color-rgb: 206, 60, 23;
+  --bs-link-hover-color: #b33210;
+  --bs-danger: var(--red);
+  --bs-danger-rgb: 206, 60, 23;
+}
 
 body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
 
-.app-bar {
-  background: var(--dark); color: #fff; height: 48px;
-  display: flex; align-items: center; gap: 10px; padding: 0 14px;
-  position: fixed; top: 0; left: 0; right: 0; z-index: 300;
-  box-shadow: 0 1px 4px rgba(0,0,0,.4);
+/* Bootstrap's precompiled CSS seeds *component* colors (buttons, subtle
+   badges, alerts, focus rings) as static values on component-local custom
+   properties, not as references to the root tokens above — only utility
+   classes read the root tokens directly. Verified in-browser: .btn-danger's
+   background stayed Bootstrap's stock red until these were added. These
+   overrides cover every Bootstrap component this app actually uses that
+   would otherwise silently fall back to stock Bootstrap colors instead of
+   the club's brand red. */
+.btn-danger {
+  --bs-btn-bg: var(--red);
+  --bs-btn-border-color: var(--red);
+  --bs-btn-hover-bg: #b33210;
+  --bs-btn-hover-border-color: #b33210;
+  --bs-btn-active-bg: #b33210;
+  --bs-btn-active-border-color: #b33210;
+  --bs-btn-disabled-bg: var(--red);
+  --bs-btn-disabled-border-color: var(--red);
+  --bs-btn-focus-shadow-rgb: 206, 60, 23;
 }
-.app-bar img { height: 30px; }
-.app-bar h1 { font-size: .95rem; font-weight: 700; }
-.app-bar .sp { flex: 1; }
-.btn {
-  background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3);
-  color: #fff; padding: 5px 11px; border-radius: 4px;
-  font-size: .75rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+.bg-danger-subtle { background-color: #f8ded5 !important; }
+.text-danger-emphasis { color: #7a2510 !important; }
+.alert-danger {
+  --bs-alert-bg: #f8ded5;
+  --bs-alert-border-color: #edb5a3;
+  --bs-alert-color: #7a2510;
 }
-.btn:hover { background: rgba(255,255,255,.25); }
-.btn.red { background: var(--red); border-color: var(--red); }
-.btn.red:hover { background: #b33210; }
-a.btn { text-decoration: none; display: inline-flex; align-items: center; }
-
-.layout {
-  display: grid; grid-template-columns: 390px 1fr;
-  height: calc(100vh - 48px); margin-top: 48px;
+.form-control:focus, .form-select:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 .2rem rgba(206, 60, 23, .15);
 }
 
-/* ── FORM ────────────────────────────────────────────── */
-.fp { background: #fff; border-right: 1px solid #d0d7de; overflow-y: auto; }
-.fb { padding: 14px 13px; }
-
-.sec { margin-bottom: 18px; }
-.sec-t {
+/* Section heading — small uppercase label with a red underline.
+   No Bootstrap utility covers this exact treatment. */
+.section-title {
   font-size: .68rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .7px; color: var(--dark);
   border-bottom: 2px solid var(--red); padding-bottom: 4px; margin-bottom: 10px;
 }
-.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
-.g4 { display: grid; grid-template-columns: 2fr 2fr 1.2fr; gap: 7px; }
 
-.f { margin-bottom: 7px; }
-.f label { display: block; font-size: .69rem; font-weight: 600; color: #57606a; margin-bottom: 2px; }
-.f input, .f select, .f textarea {
-  width: 100%; padding: 4px 7px; border: 1px solid #d0d7de;
-  border-radius: 3px; font-size: .78rem; font-family: inherit; background: #fafbfc;
-}
-.f input:focus, .f select:focus, .f textarea:focus {
-  outline: none; border-color: var(--red);
-  box-shadow: 0 0 0 2px rgba(206,60,23,.1); background: #fff;
-}
-.f textarea { resize: vertical; min-height: 42px; }
-
-.card {
-  background: #f8f9fa; border: 1px solid #d0d7de;
-  border-radius: 4px; padding: 9px 10px; margin-bottom: 7px;
-}
-.ch { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
-.cl { font-size: .73rem; font-weight: 700; color: var(--dark); }
-.brm {
-  background: #ffdce0; color: #b91c1c;
-  border: 1px solid #fbb; border-radius: 3px;
-  padding: 2px 7px; font-size: .68rem; font-weight: 600; cursor: pointer;
-}
-.badd {
-  background: var(--red); color: #fff; border: none; border-radius: 3px;
-  padding: 5px 11px; font-size: .75rem; font-weight: 600; cursor: pointer; margin-top: 2px;
-}
-.badd:hover { background: #b33210; }
-
-/* ── AGENDA FORM CARDS ───────────────────────────────── */
-.ag-card { padding: 5px 8px; margin-bottom: 4px; }
-.ag-card.type-dual { background: #f0f4ff; border-color: #c5d5f5; }
-.ag-card.type-special { background: #f5f0ff; border-color: #d5c5f5; }
-.ag-card.type-notes { background: #fff8f0; border-color: #f5d5c5; }
-.ag-card.type-recess { background: #f0fff4; border-color: #c5f5d5; }
-
-.ag-row { display: flex; align-items: center; gap: 3px; }
-.ag-title { flex: 3; min-width: 0; font-size: .72rem !important; padding: 3px 5px !important; }
-.ag-role  { flex: 1.5; min-width: 0; font-size: .72rem !important; padding: 3px 5px !important; }
-.ag-person { flex: 2; min-width: 0; font-size: .72rem !important; padding: 3px 5px !important; }
-.ag-dur { width: 38px !important; text-align: center; font-size: .72rem !important; padding: 3px 4px !important; flex-shrink: 0; }
-.ag-ta { width: 100%; font-size: .72rem !important; padding: 3px 5px !important; min-height: 32px; resize: vertical; }
-.ag-row input, .ag-row select { border: 1px solid #d0d7de; border-radius: 3px; background: #fff; font-family: inherit; }
-.ag-row input:focus, .ag-row select:focus { outline: none; border-color: var(--red); }
-
-.ag-special-lbl { font-size: .71rem; font-weight: 700; color: #666; font-style: italic; flex: 1; }
-.ag-type-badge {
-  font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
-  padding: 1px 5px; border-radius: 3px; color: #fff; margin-right: 4px; flex-shrink: 0;
-}
-.badge-row     { background: #6c757d; }
-.badge-dual    { background: #3b82f6; }
-.badge-special { background: #8b5cf6; }
-.badge-recess  { background: #10b981; }
-.badge-notes   { background: #f59e0b; }
-
+/* CDK drag-drop visuals (unrelated to Bootstrap, must stay). */
 .drag-handle {
   cursor: grab; color: #bbb; font-size: .9rem; flex-shrink: 0;
   padding: 0 3px; user-select: none; line-height: 1;
@@ -107,245 +66,12 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .cdk-drag-preview  { opacity: .8; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
 .cdk-drag-placeholder { opacity: .35; outline: 2px dashed #aaa; }
 
-/* Edit-mode toggle */
-.ag-edit-btn {
-  font-size: .68rem; padding: 2px 8px; border-radius: 3px; cursor: pointer;
-  border: 1px solid #ccc; background: #f4f4f4; color: #555; font-weight: 600;
-  transition: background .15s, color .15s;
-}
-.ag-edit-btn.active { background: var(--red); color: #fff; border-color: var(--red); }
-
-/* Hide controls when not in edit mode */
-.sec:not(.ag-edit-active) .drag-handle { display: none !important; }
-.sec:not(.ag-edit-active) .ag-card .brm { display: none !important; }
-.sec:not(.ag-edit-active) .ag-add-bar   { display: none !important; }
-
-.ag-add-bar { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.badd-type {
-  font-size: .68rem; font-weight: 600; cursor: pointer; padding: 3px 8px;
-  border-radius: 3px; border: 1px solid; flex-shrink: 0;
-}
-.badd-type.t-row     { background: #f0f2f5; border-color: #aaa; color: #333; }
-.badd-type.t-dual    { background: #e8eeff; border-color: #99b; color: #335; }
-.badd-type.t-spk     { background: #ede8ff; border-color: #99b; color: #353; }
-.badd-type.t-eval    { background: #ffe8f0; border-color: #b99; color: #533; }
-.badd-type.t-recess  { background: #e8fff0; border-color: #9b9; color: #353; }
-.badd-type.t-notes   { background: #fff8e8; border-color: #bb9; color: #553; }
-.badd-type:hover { opacity: .8; }
-
-/* ── PREVIEW PANEL ───────────────────────────────────── */
-.pp {
-  overflow-y: auto; background: #c0c4cc;
-  padding: 20px; display: flex; justify-content: center; align-items: flex-start;
-}
-
-/* ═══════════════════════════════════════════════════════
-   A4 PAGE
-   ═══════════════════════════════════════════════════════ */
-.page {
-  background: #fff; width: 210mm; height: 297mm;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25);
-  font-family: Arial, sans-serif; font-size: 8pt; color: #000;
-  display: flex; flex-direction: column;
-  padding: 5mm 6mm 3mm 6mm;
-}
-
-.doc-header {
-  display: grid;
-  grid-template-columns: 42mm 1fr 24mm;
-  align-items: center;
-  column-gap: 3mm;
-  margin-bottom: 2mm;
-  flex-shrink: 0;
-}
-.doc-logo-left  { width: 100%; height: auto; display: block; }
-.doc-logo-right { width: 100%; height: auto; display: block; }
-.doc-hdr-center { text-align: center; line-height: 1.3; }
-.club-name {
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 12.5pt; font-weight: 700; color: #9B2F1F; display: block;
-}
-.club-addr {
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 9pt; font-weight: 700; color: #C89000;
-  display: block; line-height: 1.35;
-}
-.header-underline {
-  width: 320px; height: 2px;
-  margin: 16px auto 0 auto;
-  background: linear-gradient(to right, transparent, #CE3C17, transparent);
-}
-.meeting-agenda-lbl {
-  display: block;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 9.5pt; font-weight: 700; color: #000;
-  text-transform: uppercase; letter-spacing: 1.5px;
-  margin: 14px 0 0 0;
-}
-.doc-divider {
-  height: 6px; flex-shrink: 0;
-  margin: 3mm 0 2mm 0;
-  background: linear-gradient(to bottom,
-    #CE3C17 0, #CE3C17 2.5px,
-    #fff    2.5px, #fff    3.5px,
-    #CE3C17 3.5px, #CE3C17 6px);
-}
-
-.info-outer {
-  width: 100%; border-collapse: separate; border-spacing: 4px 0;
-  border: none; flex-shrink: 0;
-}
-.info-outer > tbody > tr > td { border: none; padding: 0; vertical-align: middle; }
-.info-outer > tbody > tr > td:first-child { padding-left: 0; }
-.info-outer > tbody > tr > td:last-child  { padding-right: 0; }
-.info-box { width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
-.info-box td {
-  text-align: center; vertical-align: middle; padding: 3mm 2mm;
-  font-family: Arial, Helvetica, sans-serif; line-height: 1.6;
-}
-.ib-head { display: block; font-size: 7pt;   font-weight: 700; font-style: italic; color: #000;    text-transform: uppercase; }
-.ib-val  { display: block; font-size: 7.5pt; font-weight: 700; font-style: italic; color: #D6451E; }
-.ib-date { display: block; font-size: 8.5pt; font-weight: 700; font-style: italic; color: #000; }
-.ib-time { display: block; font-size: 7.5pt; font-weight: 700; font-style: italic; color: #D6451E; }
-
-.info-gap { height: 10mm; flex-shrink: 0; }
-
-.mission {
-  text-align: center; font-family: Arial, sans-serif;
-  margin-bottom: 2.5mm; flex-shrink: 0;
-}
-.m-head    { display: block; font-size: 10pt; font-weight: 700; font-style: italic; color: #D6451E; text-transform: uppercase; margin-bottom: 2mm; }
-.m-body    { display: block; font-size: 7.5pt; font-weight: 700; font-style: italic; color: #000; line-height: 1.55; margin-bottom: 1.5mm; }
-.m-contact { display: block; font-size: 7pt;   font-weight: 400; font-style: italic; color: #FF0000; line-height: 1.4; }
-
-.agenda-container {
-  width: 90%; margin: 0 auto; box-sizing: border-box;
-  flex: 1; min-height: 0; display: flex; flex-direction: column;
-}
-.body-area { flex: 1; overflow: hidden; min-height: 0; }
-
-.ag { width: 100%; border-collapse: collapse; font-family: Arial; font-size: 7.5pt; font-style: italic; }
-.ag td { padding: 1.5px 4px; vertical-align: top; line-height: 1.4; }
-.ag .t  { width: 36px; white-space: nowrap; }
-.ag .i  { width: 43%; }
-.ag .p b { font-weight: 700; font-style: italic; }
-.dual .da { width: 43%; }
-
-.stbl { border-collapse: collapse; font-family: Arial; font-size: 7pt; margin: 0.5mm 0 1.5mm 0; width: 100%; }
-.stbl th {
-  border: 1px solid #000; padding: 2px 4px;
-  font-weight: 700; font-style: italic; background: #e0e0e0;
-  text-align: left; font-size: 6.5pt;
-}
-.stbl td { border: 1px solid #000; padding: 2px 4px; font-style: italic; vertical-align: top; }
-.stbl tr:nth-child(even) td { background: #fafafa; }
-
-.agenda-notes { font-family: Arial; font-size: 7.5pt; font-style: italic; margin-top: 1mm; padding-left: 36px; line-height: 1.5; }
-
-.meeting-notes { margin-top: 20px; margin-bottom: 24px; text-align: left; flex-shrink: 0; }
-.meeting-notes p { margin: 4px 0; font-family: Arial; font-size: 7.5pt; font-style: italic; line-height: 1.4; color: #000; }
-
-.footer { border-top: 1.5px solid #000; padding-top: 1.5mm; flex-shrink: 0; }
-.footer-title { font-family: Arial; font-size: 7.5pt; font-weight: 700; font-style: italic; color: var(--red); margin-bottom: 1.5mm; text-align: center; }
-.ftbl { width: 100%; border-collapse: collapse; font-family: Arial; font-size: 6pt; }
-.ftbl td { border: 1px solid #000; padding: 1.5px 3px; vertical-align: middle; line-height: 1.4; }
-.ftbl .role  { font-weight: 700; white-space: nowrap; }
-.ftbl .phone { white-space: nowrap; }
-.ftbl .visit { color: var(--red); font-weight: 700; font-style: italic; }
-.ftbl .url   { color: #0000CC; font-style: italic; text-align: center; }
-.footer-fb { font-family: Arial; font-size: 6.5pt; text-align: center; margin-top: 1.5mm; font-weight: 700; color: var(--red); }
-
-/* ── PRINT ───────────────────────────────────────────── */
+/* Editor app shell: navbar + sidebar are hidden on print via Bootstrap's
+   d-print-none; these unlock the flex/grid layout itself so the preview
+   page can flow naturally onto the printed page instead of staying
+   clipped inside its on-screen scroll container. */
 @media print {
-  body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .app-bar, .fp { display: none !important; }
-  .layout { display: block; margin-top: 0; height: auto; }
-  .pp { background: #fff; padding: 0; display: block; }
-  .page { box-shadow: none; }
-  .info-box, .stbl, .ftbl, .doc-divider { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .info-box { border: 1.5px solid #000 !important; }
-  @page { size: A4 portrait; margin: 0; }
+  .app-shell { display: block; height: auto; }
+  .app-body  { display: block; }
+  .app-preview { overflow: visible; padding: 0; background: #fff; display: block; }
 }
-
-/* ── SIGNUP PAGE ─────────────────────────────────────── */
-.su-wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
-
-.su-hero {
-  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
-  padding: 18px 22px; margin-bottom: 18px;
-  border-left: 4px solid var(--red);
-}
-.su-hero h2 { font-size: 1.05rem; color: var(--dark); margin-bottom: 4px; }
-.su-hero .su-meta { font-size: .78rem; color: #57606a; display: flex; gap: 14px; flex-wrap: wrap; }
-.su-hero .su-meta span b { color: var(--dark); }
-
-.su-checkin {
-  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
-  padding: 16px 22px; margin-bottom: 18px; display: flex; gap: 10px; align-items: flex-end;
-}
-.su-checkin .f { flex: 1; margin-bottom: 0; }
-.su-checkin.checked-in { border-left: 4px solid #10b981; }
-.su-status-ok { font-size: .8rem; color: #10b981; font-weight: 700; }
-
-.su-section {
-  background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
-  padding: 16px 22px; margin-bottom: 18px;
-}
-.su-section h3 {
-  font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
-  color: var(--dark); border-bottom: 2px solid var(--red); padding-bottom: 6px; margin-bottom: 12px;
-}
-
-.su-role-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 4px; border-bottom: 1px solid #eee;
-}
-.su-role-row:last-child { border-bottom: none; }
-.su-role-row.archived { opacity: .55; }
-.su-role-name { flex: 1; font-size: .85rem; font-weight: 600; color: var(--dark); }
-.su-role-desc { font-size: .78rem; font-weight: 400; color: #57606a; margin-left: 6px; }
-.su-role-owner { font-size: .78rem; color: #57606a; }
-.su-pill {
-  font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-  padding: 2px 8px; border-radius: 3px; flex-shrink: 0;
-}
-.su-pill.open     { background: #e8f4ee; color: #10743f; }
-.su-pill.taken    { background: #ffdce0; color: #b91c1c; }
-.su-pill.mine     { background: #fff3d6; color: #a86a00; }
-.su-pill.archived { background: #eceef0; color: #57606a; }
-.su-claim-btn {
-  background: var(--red); color: #fff; border: none; border-radius: 4px;
-  padding: 4px 12px; font-size: .74rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
-}
-.su-claim-btn:hover { background: #b33210; }
-.su-release-btn {
-  background: #f4f4f4; color: #666; border: 1px solid #ccc; border-radius: 4px;
-  padding: 4px 12px; font-size: .74rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
-}
-.su-release-btn:hover { background: #e8e8e8; }
-
-.su-attendee-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.su-attendee-chip {
-  background: #f8f9fa; border: 1px solid #d0d7de; border-radius: 14px;
-  padding: 4px 12px; font-size: .78rem; color: var(--dark);
-}
-.su-attendee-chip b { font-weight: 700; }
-.su-attendee-time { color: #999; font-size: .7rem; margin-left: 4px; }
-.su-empty { font-size: .8rem; color: #999; font-style: italic; padding: 6px 0; }
-
-.su-speaker-card {
-  background: #f8f9fa; border: 1px solid #d0d7de; border-radius: 6px;
-  padding: 12px 14px; margin-bottom: 10px;
-}
-.su-speaker-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.su-speaker-name { font-size: .88rem; font-weight: 700; color: var(--dark); }
-.su-speaker-meta { font-size: .76rem; color: #57606a; margin-bottom: 8px; }
-.su-eval-row { display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px dashed #ddd; }
-.su-eval-label { font-size: .76rem; color: #57606a; flex: 1; }
-
-.su-signup-form { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-.su-signup-form .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.su-full-btn { background: #f4f4f4; color: #999; }
-
-.su-cap-note { font-size: .76rem; color: #999; margin-top: 6px; }

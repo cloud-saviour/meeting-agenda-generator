@@ -1,0 +1,39 @@
+<div class="mb-4">
+  <div class="section-title">Executive Committee</div>
+
+  <div class="mb-2">
+    <label class="form-label small mb-1">Committee Period</label>
+    <input class="form-control form-control-sm" type="text" [value]="m.period" (input)="updateMeeting('period', $any($event.target).value)">
+  </div>
+
+  <div class="mb-1">
+    <small class="text-muted">Name &nbsp;&nbsp; Email &nbsp;&nbsp; Phone</small>
+  </div>
+
+  @for (c of cmt; track c.role; let i = $index) {
+    <div class="card card-body p-2 mb-2">
+      <div class="fw-bold small mb-1">{{ c.role }}</div>
+      <div class="row g-2">
+        <div class="col-5">
+          <input class="form-control form-control-sm" type="text" [value]="c.name" placeholder="Name" (input)="updateMember(i, 'name', $any($event.target).value)">
+        </div>
+        <div class="col-5">
+          <input class="form-control form-control-sm" type="email" [value]="c.email" placeholder="Email" (input)="updateMember(i, 'email', $any($event.target).value)">
+        </div>
+        <div class="col-2">
+          <input class="form-control form-control-sm" type="tel" [value]="c.phone" placeholder="Phone" (input)="updateMember(i, 'phone', $any($event.target).value)">
+        </div>
+      </div>
+    </div>
+  }
+
+  <div class="mb-2">
+    <label class="form-label small mb-1">Website URL</label>
+    <input class="form-control form-control-sm" type="text" [value]="m.web" (input)="updateMeeting('web', $any($event.target).value)">
+  </div>
+
+  <div class="mb-2">
+    <label class="form-label small mb-1">Facebook Group Name</label>
+    <input class="form-control form-control-sm" type="text" [value]="m.fb" (input)="updateMeeting('fb', $any($event.target).value)">
+  </div>
+</div>

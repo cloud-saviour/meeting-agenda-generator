@@ -1,0 +1,15 @@
+<div class="card p-3 mb-3">
+  <h3 class="section-title">Attendance ({{ attendees.length }})</h3>
+  @if (attendees.length) {
+    <div class="d-flex flex-wrap gap-2">
+      @for (a of attendees; track a.uid) {
+        <span class="badge rounded-pill text-bg-light border">
+          <b>{{ a.name }}</b>
+          <span class="text-muted">{{ a.joinedAt }}</span>
+        </span>
+      }
+    </div>
+  } @else {
+    <div class="text-muted fst-italic small">No one has checked in yet — be the first!</div>
+  }
+</div>

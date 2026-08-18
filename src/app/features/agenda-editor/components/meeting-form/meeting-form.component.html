@@ -1,0 +1,101 @@
+<!-- Meeting Details -->
+<div class="mb-4">
+  <div class="section-title">Meeting Details</div>
+  <div class="row g-2">
+    <div class="col-4">
+      <label class="form-label small mb-1">Meeting Number</label>
+      <input class="form-control form-control-sm" type="number" [value]="m.no" (input)="update('no', $any($event.target).value)">
+    </div>
+    <div class="col-4">
+      <label class="form-label small mb-1">Meeting Date</label>
+      <input class="form-control form-control-sm" type="date" [value]="m.date" (input)="update('date', $any($event.target).value)">
+    </div>
+    <div class="col-4">
+      <label class="form-label small mb-1">Arrival Time</label>
+      <input class="form-control form-control-sm" type="time" [value]="m.arr" (input)="update('arr', $any($event.target).value)">
+    </div>
+    <div class="col-4">
+      <label class="form-label small mb-1">Start Time</label>
+      <input class="form-control form-control-sm" type="time" [value]="m.st" (input)="update('st', $any($event.target).value)">
+    </div>
+    <div class="col-4">
+      <label class="form-label small mb-1">Meeting Theme</label>
+      <input class="form-control form-control-sm" type="text" [value]="m.theme" placeholder="e.g. April Fool's Day" (input)="update('theme', $any($event.target).value)">
+    </div>
+    <div class="col-4">
+      <label class="form-label small mb-1">Word of the Day</label>
+      <input class="form-control form-control-sm" type="text" [value]="m.word" placeholder="e.g. Expedient" (input)="update('word', $any($event.target).value)">
+    </div>
+  </div>
+</div>
+
+<!-- Meeting Notes -->
+<div class="mb-4">
+  <div class="section-title">Meeting Notes</div>
+  <div class="row g-2">
+    <div class="col-6">
+      <label class="form-label small mb-1">Hot Seat</label>
+      <input class="form-control form-control-sm" type="text" [value]="m.hotSeat" placeholder="Name" (input)="update('hotSeat', $any($event.target).value)">
+    </div>
+    <div class="col-6">
+      <label class="form-label small mb-1">Reserve Speaker</label>
+      <input class="form-control form-control-sm" type="text" [value]="m.reserve" placeholder="Name" (input)="update('reserve', $any($event.target).value)">
+    </div>
+    <div class="col-12">
+      <label class="form-label small mb-1">Apologies</label>
+      <input class="form-control form-control-sm" type="text" [value]="m.apologies" placeholder="Name(s)" (input)="update('apologies', $any($event.target).value)">
+    </div>
+  </div>
+</div>
+
+<!-- Logos -->
+<div class="mb-4">
+  <div class="section-title">Logos</div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Left Logo</label>
+    <div class="d-flex gap-2 align-items-center">
+      <img [src]="state.logoLeft()" class="border p-1" style="height:36px;object-fit:contain;">
+      <label class="btn btn-outline-secondary btn-sm mb-0">Change
+        <input type="file" accept="image/*" class="d-none" (change)="onLogoChange('left', $event)">
+      </label>
+      <button class="btn btn-outline-secondary btn-sm" (click)="resetLogo('left')">Reset</button>
+    </div>
+  </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Right Logo</label>
+    <div class="d-flex gap-2 align-items-center">
+      <img [src]="state.logoRight()" class="border p-1" style="height:36px;object-fit:contain;">
+      <label class="btn btn-outline-secondary btn-sm mb-0">Change
+        <input type="file" accept="image/*" class="d-none" (change)="onLogoChange('right', $event)">
+      </label>
+      <button class="btn btn-outline-secondary btn-sm" (click)="resetLogo('right')">Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Club Info -->
+<div class="mb-4">
+  <div class="section-title">Club Info</div>
+  <div class="row g-2 mb-2">
+    <div class="col-6">
+      <label class="form-label small mb-1">Club Name</label>
+      <input class="form-control form-control-sm" type="text" [value]="m.club" (input)="update('club', $any($event.target).value)">
+    </div>
+    <div class="col-6">
+      <label class="form-label small mb-1">Club Sub-Name / Group</label>
+      <input class="form-control form-control-sm" type="text" [value]="m.sub" (input)="update('sub', $any($event.target).value)">
+    </div>
+  </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Club Address</label>
+    <input class="form-control form-control-sm" type="text" [value]="m.addr" (input)="update('addr', $any($event.target).value)">
+  </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Mission Statement</label>
+    <textarea class="form-control form-control-sm" rows="2" [value]="m.mission" (input)="update('mission', $any($event.target).value)"></textarea>
+  </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Mission Contact VPE name</label>
+    <input class="form-control form-control-sm" type="text" [value]="m.vpe" (input)="update('vpe', $any($event.target).value)">
+  </div>
+</div>
