@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-tdd-spec.js 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Checking for a sibling spec file..."
+          }
+        ]
+      }
+    ]
+  }
+}
