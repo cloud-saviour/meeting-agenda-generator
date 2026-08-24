@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { CheckinStateService } from '../services/checkin-state.service';
 import { AttendanceListComponent } from '../components/attendance-list/attendance-list.component';
 import { RoleBoardComponent } from '../components/role-board/role-board.component';
@@ -23,9 +24,12 @@ import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 })
 export class CheckinComponent {
   readonly state = inject(CheckinStateService);
+  private readonly route = inject(ActivatedRoute);
   nameInput = '';
 
   constructor() {
+    const meetingId = this.route.snapshot.queryParamMap.get('meeting') ?? 'default';
+    this.state.loadMeeting(meetingId);
     this.nameInput = this.state.currentName();
   }
 

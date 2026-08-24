@@ -29,6 +29,8 @@ export class CheckinStateService {
 
   // ── Shared meeting state (Phase 1: localStorage; Phase 2: Firebase) ─────
   private readonly snapshot = signal<CheckinSnapshot>(this.emptySnapshotPlaceholder());
+  /** Which localStorage key persist()/loadSnapshot() target — set by loadMeeting(). */
+  private currentStorageKey: string = STORAGE_KEY;
 
   readonly meeting = computed(() => this.snapshot().meeting);
   readonly attendees = computed(() => this.snapshot().attendees);
@@ -42,7 +44,18 @@ export class CheckinStateService {
   constructor() {
     this.currentUid = this.loadOrCreateUid();
     this.currentName.set(this.storage.get(NAME_KEY) || '');
-    this.snapshot.set(this.loadSnapshot());
+    this.snapshot.set(this.loadSnapshot(this.currentStorageKey, 'default'));
+  }
+
+  /**
+   * Switches to a specific meeting's check-in sheet, isolated from every other
+   * meeting id. 'default' (the fallback when a URL has no ?meeting= param) uses
+   * the original fixed storage key unsuffixed, so pre-existing bookmarked data
+   * keeps working untouched; any other id gets its own `${STORAGE_KEY}-<id>` key.
+   */
+  loadMeeting(meetingId: string): void {
+    this.currentStorageKey = meetingId === 'default' ? STORAGE_KEY : `${STORAGE_KEY}-${meetingId}`;
+    this.snapshot.set(this.loadSnapshot(this.currentStorageKey, meetingId));
   }
 
   // ── Identity ──────────────────────────────────────────────────────────
@@ -167,7 +180,7 @@ export class CheckinStateService {
   }
 
   resetAll(): void {
-    this.snapshot.set(this.defaultSnapshot());
+    this.snapshot.set(this.defaultSnapshot(this.snapshot().meeting.id));
     this.persist();
   }
 
@@ -178,19 +191,19 @@ export class CheckinStateService {
   }
 
   private persist(): void {
-    this.storage.set(STORAGE_KEY, JSON.stringify(this.snapshot()));
+    this.storage.set(this.currentStorageKey, JSON.stringify(this.snapshot()));
   }
 
-  private loadSnapshot(): CheckinSnapshot {
+  private loadSnapshot(key: string, meetingId: string): CheckinSnapshot {
     try {
-      const raw = this.storage.get(STORAGE_KEY);
-      if (!raw) return this.defaultSnapshot();
+      const raw = this.storage.get(key);
+      if (!raw) return this.defaultSnapshot(meetingId);
       const parsed = JSON.parse(raw) as CheckinSnapshot;
       // Backfill any role ids added (or missing) since the data was last saved
       const roles = { ...this.emptyRoles(), ...parsed.roles };
-      return { ...this.defaultSnapshot(), ...parsed, roles };
+      return { ...this.defaultSnapshot(meetingId), ...parsed, roles };
     } catch {
-      return this.defaultSnapshot();
+      return this.defaultSnapshot(meetingId);
     }
   }
 
@@ -206,10 +219,10 @@ export class CheckinStateService {
     return roles;
   }
 
-  private defaultSnapshot(): CheckinSnapshot {
+  private defaultSnapshot(meetingId: string = 'default'): CheckinSnapshot {
     return {
       meeting: {
-        id: 'default',
+        id: meetingId,
         date: new Date().toISOString().slice(0, 10),
         theme: '',
         word: '',

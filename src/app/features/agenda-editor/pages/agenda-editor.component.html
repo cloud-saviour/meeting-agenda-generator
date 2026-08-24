@@ -13,6 +13,9 @@
       {{ docxBusy ? 'Building…' : '⬇ DOCX' }}
     </button>
     <button class="btn btn-danger btn-sm" (click)="printAgenda()">&#128438; Print / PDF</button>
+    <button class="btn btn-outline-light btn-sm" [disabled]="!state.meeting().no" (click)="copyCheckinLink()">
+      {{ linkCopied ? '✓ Copied!' : '🔗 Share Check-in Link' }}
+    </button>
   </app-navbar>
 
   <div class="row g-0 flex-grow-1 app-body" style="min-height:0;">

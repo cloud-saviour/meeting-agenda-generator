@@ -107,4 +107,42 @@ describe('CheckinStateService', () => {
     service.releaseEvaluatorSlot(speakerId);
     expect(service.speakers()[0].evaluator).toBeNull();
   });
+
+  it('loadMeeting() isolates data between different meeting ids', () => {
+    const service = makeService();
+
+    service.loadMeeting('160');
+    service.checkIn('Alice');
+    const roleKey = Object.keys(service.roles())[0];
+    service.claimRole(roleKey);
+    expect(service.attendees().length).toBe(1);
+
+    service.loadMeeting('161');
+    expect(service.attendees().length).toBe(0);
+    expect(service.roles()[roleKey].uid).toBe('');
+
+    service.loadMeeting('160');
+    expect(service.attendees().length).toBe(1);
+    expect(service.attendees()[0].name).toBe('Alice');
+    expect(service.roles()[roleKey].uid).toBe(service.currentUid);
+  });
+
+  it('loadMeeting() seeds a brand-new meeting id onto CheckinMeeting.id', () => {
+    const service = makeService();
+    service.loadMeeting('999');
+    expect(service.meeting().id).toBe('999');
+  });
+
+  it('loadMeeting("default") persists to the legacy fixed storage key, unsuffixed', () => {
+    const fake = new FakeStorage();
+    TestBed.configureTestingModule({ providers: [{ provide: StorageService, useValue: fake }] });
+    const service = TestBed.inject(CheckinStateService);
+
+    service.loadMeeting('default');
+    service.checkIn('Bongani');
+
+    const raw = fake.get('agora-checkin-data');
+    expect(raw).toBeTruthy();
+    expect(JSON.parse(raw!).attendees[0].name).toBe('Bongani');
+  });
 });

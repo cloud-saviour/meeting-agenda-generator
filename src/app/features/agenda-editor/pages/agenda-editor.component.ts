@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { AgendaStateService } from '../services/agenda-state.service';
 import { AgendaImportExportService } from '../services/agenda-import-export.service';
 import { DocxService } from '../services/docx.service';
@@ -26,8 +27,25 @@ export class AgendaEditorComponent {
   readonly state = inject(AgendaStateService);
   private readonly docxService = inject(DocxService);
   private readonly importExport = inject(AgendaImportExportService);
+  private readonly router = inject(Router);
 
   docxBusy = false;
+  linkCopied = false;
+
+  async copyCheckinLink() {
+    const meetingNo = this.state.meeting().no;
+    if (!meetingNo) return;
+    const tree = this.router.createUrlTree(['/checkin'], { queryParams: { meeting: meetingNo } });
+    const url = window.location.origin + this.router.serializeUrl(tree);
+    try {
+      await navigator.clipboard.writeText(url);
+      this.linkCopied = true;
+      setTimeout(() => (this.linkCopied = false), 2000);
+    } catch (err) {
+      console.error(err);
+      alert('Could not copy automatically — here is the check-in link:\n' + url);
+    }
+  }
 
   async generateDocx() {
     this.docxBusy = true;
