@@ -1,0 +1,40 @@
+<div class="mb-4">
+  <div class="section-title">Prepared Speakers</div>
+
+  @for (s of spks; track s.id; let i = $index) {
+    <div class="card card-body p-2 mb-2">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-bold small">Speaker {{ i + 1 }}</span>
+        <button type="button" class="btn-close" aria-label="Remove speaker" (click)="remove(s.id)"></button>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-1">Name</label>
+        <input class="form-control form-control-sm" type="text" [value]="s.name" (input)="update(s.id, 'name', $any($event.target).value)">
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label small mb-1">Level</label>
+          <input class="form-control form-control-sm" type="text" [value]="s.level" placeholder="e.g. L1 P1" (input)="update(s.id, 'level', $any($event.target).value)">
+        </div>
+        <div class="col-6">
+          <label class="form-label small mb-1">Time (mins)</label>
+          <div class="input-group input-group-sm">
+            <input class="form-control" type="number" min="1" max="60" [value]="s.timeLo" (input)="update(s.id, 'timeLo', +$any($event.target).value)">
+            <span class="input-group-text">–</span>
+            <input class="form-control" type="number" min="1" max="60" [value]="s.timeHi" (input)="update(s.id, 'timeHi', +$any($event.target).value)">
+          </div>
+        </div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-1">Title</label>
+        <input class="form-control form-control-sm" type="text" [value]="s.title" (input)="update(s.id, 'title', $any($event.target).value)">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-1">Evaluator</label>
+        <input class="form-control form-control-sm" type="text" [value]="s.evaluator" (input)="update(s.id, 'evaluator', $any($event.target).value)">
+      </div>
+    </div>
+  }
+
+  <button class="btn btn-danger btn-sm" (click)="add()">+ Add Speaker</button>
+</div>

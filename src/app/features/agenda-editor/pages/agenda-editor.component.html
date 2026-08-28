@@ -1,0 +1,42 @@
+<div class="d-flex flex-column vh-100 app-shell">
+
+  <!-- APP BAR -->
+  <app-navbar title="Agora Agenda Creator" [printHidden]="true"
+    [links]="[
+      { label: '👥 Meeting Check-in', path: '/checkin' },
+      { label: '⚙ Manage Roles', path: '/admin/roles' },
+      { label: '🏠 Home', path: '/' }
+    ]">
+    <button class="btn btn-outline-light btn-sm" (click)="saveJSON()">&#128190; Export JSON</button>
+    <button class="btn btn-outline-light btn-sm" (click)="loadJSON()">&#128193; Import JSON</button>
+    <button class="btn btn-outline-light btn-sm" [disabled]="docxBusy" (click)="generateDocx()">
+      {{ docxBusy ? 'Building…' : '⬇ DOCX' }}
+    </button>
+    <button class="btn btn-danger btn-sm" (click)="printAgenda()">&#128438; Print / PDF</button>
+    <button class="btn btn-outline-light btn-sm" [disabled]="!state.meeting().no" (click)="copyCheckinLink()">
+      {{ linkCopied ? '✓ Copied!' : '🔗 Share Check-in Link' }}
+    </button>
+  </app-navbar>
+
+  <div class="row g-0 flex-grow-1 app-body" style="min-height:0;">
+
+    <!-- FORM PANEL -->
+    <div class="col-12 col-md-4 col-lg-3 bg-white border-end overflow-auto d-print-none app-sidebar" style="min-height:0;">
+      <div class="p-3 pb-4">
+        <app-meeting-form></app-meeting-form>
+        <app-agenda-items></app-agenda-items>
+        <app-speakers-form></app-speakers-form>
+        <app-committee-form></app-committee-form>
+      </div>
+    </div>
+
+    <!-- PREVIEW PANEL -->
+    <div class="col bg-body-secondary overflow-auto d-flex justify-content-center align-items-start p-4 app-preview" style="min-height:0;">
+      <app-agenda-preview></app-agenda-preview>
+    </div>
+
+  </div>
+
+</div>
+
+<input type="file" id="jf" accept=".json" class="d-none" (change)="onImportJSON($event)">
