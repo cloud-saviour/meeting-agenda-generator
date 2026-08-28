@@ -79,8 +79,13 @@ Role/evaluator claims are first-come-first-served — `CheckinStateService`
 enforces "only the current claimant can release their own claim" and blocks
 self-evaluation.
 
-These two pages don't talk to each other yet. Pushing confirmed check-in data
-(who's speaking, who claimed what) into the agenda editor's form fields is
+These two pages are linked one way: the agenda editor has a "🔗 Share
+Check-in Link" button that copies `/checkin?meeting=<no>` (using the
+agenda's own meeting number) to the clipboard — check-in data is isolated
+per meeting number (`CheckinStateService.loadMeeting()`, keyed by
+`?meeting=`), so different meetings don't share a sheet. What's still
+missing is the other direction: pushing confirmed check-in data (who's
+speaking, who claimed what) back into the agenda editor's form fields is
 planned but not built.
 
 ## Persistence — deliberately localStorage, not Firebase (for now)
@@ -142,8 +147,10 @@ debug from the rendered output alone.
 2. Multi-tenant support — multiple clubs, real user accounts (Firebase Auth),
    admin-managed yearly subscriptions (manually flagged for now, modeled to
    slot in real payments later without a schema rewrite)
-3. Wire the agenda editor and check-in page together (push confirmed roles/
-   speakers into the agenda form; "Share check-in link" from the editor)
+3. Push confirmed check-in data (roles claimed, speakers signed up) back into
+   the agenda editor's form fields — the other half of wiring the two features
+   together. ("Share check-in link" from the editor, and per-meeting check-in
+   isolation via `?meeting=<no>`, are done — see above.)
 4. Admin console for the check-in page: reset a role, cap speaker slots,
    lock the sheet once the meeting starts
 

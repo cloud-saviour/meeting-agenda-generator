@@ -10,12 +10,12 @@ function makeId(): string {
 
 function seedRoles(): RoleDefinition[] {
   return [
-    { id: 'toastmaster',        label: 'Toastmaster of the Day', order: 0, active: true },
-    { id: 'generalEvaluator',   label: 'General Evaluator',       order: 1, active: true },
-    { id: 'grammarian',         label: 'Grammarian',              order: 2, active: true },
-    { id: 'timer',              label: 'Timer',                   order: 3, active: true },
-    { id: 'ahCounter',          label: 'Ah-Counter',              order: 4, active: true },
-    { id: 'evaluationChairman', label: 'Evaluation Chairman',     order: 5, active: true },
+    { id: 'toastmaster',        label: 'Evening Chairman',         order: 0, active: true },
+    { id: 'generalEvaluator',   label: 'Meeting Evaluator',        order: 1, active: true },
+    { id: 'grammarian',         label: 'Grammarian',               order: 2, active: true },
+    { id: 'timer',              label: 'Timekeeper',               order: 3, active: true },
+    { id: 'ahCounter',          label: 'Filler Word Counter',      order: 4, active: true },
+    { id: 'evaluationChairman', label: 'Evaluation Chairman',      order: 5, active: true },
   ];
 }
 
