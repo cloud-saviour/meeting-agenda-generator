@@ -48,6 +48,20 @@ export class AgendaItemsComponent {
     this.state.updateDualSubItem(id, subIdx, field, value);
   }
 
+  /** Picking a real role clears any custom label — re-selecting the synthetic
+   * custom-label option itself (value "") is a no-op. */
+  onRoleChange(id: number, value: string) {
+    if (!value) return;
+    this.state.updateAgItem(id, 'roleId', value);
+    this.state.updateAgItem(id, 'customRoleLabel', null);
+  }
+
+  onDualRoleChange(id: number, subIdx: 0 | 1, value: string) {
+    if (!value) return;
+    this.state.updateDualSubItem(id, subIdx, 'roleId', value);
+    this.state.updateDualSubItem(id, subIdx, 'customRoleLabel', null);
+  }
+
   typeBadge(type: string): string {
     const map: Record<string, string> = {
       row: 'row', dual: 'dual', speakers: 'tbl', evaluators: 'tbl', recess: 'break', notes: 'notes',

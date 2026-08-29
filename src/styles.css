@@ -66,12 +66,27 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
 .cdk-drag-preview  { opacity: .8; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
 .cdk-drag-placeholder { opacity: .35; outline: 2px dashed #aaa; }
 
-/* Editor app shell: navbar + sidebar are hidden on print via Bootstrap's
-   d-print-none; these unlock the flex/grid layout itself so the preview
-   page can flow naturally onto the printed page instead of staying
-   clipped inside its on-screen scroll container. */
+/* Editor app shell: form panel and preview panel scroll independently of
+   each other and of the page — each is clamped to the row's actual height
+   (flex stretch alone doesn't reliably clamp an overflow:auto flex item to
+   its container in this nested row/col layout) so its own scrollbar, not
+   the window's, is what moves when its content overflows. */
+.app-sidebar, .app-preview { height: 100%; }
+
+/* 40/60 split — Bootstrap's twelfths (col-md-5/7 = 41.67%/58.33%) can't hit
+   this exactly, so it's expressed directly; gated at the same 768px
+   breakpoint col-md-* used, so panels still stack full-width on mobile. */
+@media (min-width: 768px) {
+  .app-sidebar { flex: 0 0 40%; max-width: 40%; }
+  .app-preview { flex: 0 0 60%; max-width: 60%; }
+}
+
+/* On print, sidebar + navbar are hidden via Bootstrap's d-print-none; these
+   unlock the flex/grid layout itself (including the height clamp above) so
+   the preview page can flow naturally across printed pages instead of
+   staying clipped inside its on-screen scroll container. */
 @media print {
   .app-shell { display: block; height: auto; }
   .app-body  { display: block; }
-  .app-preview { overflow: visible; padding: 0; background: #fff; display: block; }
+  .app-preview { overflow: visible; padding: 0; background: #fff; display: block; height: auto; }
 }
