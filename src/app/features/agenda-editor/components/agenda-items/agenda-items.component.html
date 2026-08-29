@@ -6,7 +6,7 @@
     </button>
   </div>
   <div class="text-muted small mb-2">
-    Title &nbsp;|&nbsp; Role Label &nbsp;|&nbsp; Person &nbsp;|&nbsp; Duration (min)
+    Title &nbsp;|&nbsp; Role &nbsp;|&nbsp; or custom &nbsp;|&nbsp; Show &nbsp;|&nbsp; Person &nbsp;|&nbsp; Duration (min)
   </div>
 
   <div cdkDropList (cdkDropListDropped)="drop($event)">
@@ -21,9 +21,25 @@
               <span class="badge" [ngClass]="badgeClass(item.type)">{{ typeBadge(item.type) }}</span>
               <input class="form-control form-control-sm" style="flex:3" type="text" [value]="$any(item).title || ''" placeholder="Title"
                 (input)="update(item.id, 'title', $any($event.target).value)">
-              <input class="form-control form-control-sm" style="flex:1.5" type="text" [value]="$any(item).roleLabel || ''" placeholder="Role"
-                (input)="update(item.id, 'roleLabel', $any($event.target).value || null)">
-              <input class="form-control form-control-sm" style="flex:2" type="text" [value]="$any(item).person || ''" placeholder="Person"
+              <select class="form-select form-select-sm" style="flex:1.3"
+                (change)="update(item.id, 'roleId', $any($event.target).value)">
+                <optgroup label="Meeting Roles">
+                  @for (def of activeRoles(); track def.id) {
+                    <option [value]="def.id" [selected]="def.id === $any(item).roleId">{{ def.label }}</option>
+                  }
+                </optgroup>
+                <optgroup label="Committee Roles">
+                  @for (def of activeCommitteeRoles(); track def.id) {
+                    <option [value]="def.id" [selected]="def.id === $any(item).roleId">{{ def.label }}</option>
+                  }
+                </optgroup>
+              </select>
+              <input class="form-control form-control-sm" style="flex:1" type="text" [value]="$any(item).customRoleLabel || ''" placeholder="or custom"
+                (input)="update(item.id, 'customRoleLabel', $any($event.target).value || null)">
+              <input type="checkbox" class="form-check-input flex-shrink-0" title="Show role in printed agenda"
+                [checked]="$any(item).roleVisible"
+                (change)="update(item.id, 'roleVisible', $any($event.target).checked)">
+              <input class="form-control form-control-sm" style="flex:1.8" type="text" [value]="$any(item).person || ''" placeholder="Person"
                 (input)="update(item.id, 'person', $any($event.target).value)">
               <input class="form-control form-control-sm text-center" style="width:52px;flex-shrink:0" type="number" [value]="$any(item).duration || 0" min="0" title="Duration (mins)"
                 (input)="update(item.id, 'duration', +$any($event.target).value)">
@@ -61,9 +77,25 @@
             <div class="d-flex align-items-center gap-1 mb-1">
               <input class="form-control form-control-sm" style="flex:3" type="text" [value]="$any(item).items[0].title || ''" placeholder="Line A title"
                 (input)="updateDual(item.id, 0, 'title', $any($event.target).value)">
-              <input class="form-control form-control-sm" style="flex:1.5" type="text" [value]="$any(item).items[0].roleLabel || ''" placeholder="Role A"
-                (input)="updateDual(item.id, 0, 'roleLabel', $any($event.target).value || null)">
-              <input class="form-control form-control-sm" style="flex:2" type="text" [value]="$any(item).items[0].person || ''" placeholder="Person A"
+              <select class="form-select form-select-sm" style="flex:1.3"
+                (change)="updateDual(item.id, 0, 'roleId', $any($event.target).value)">
+                <optgroup label="Meeting Roles">
+                  @for (def of activeRoles(); track def.id) {
+                    <option [value]="def.id" [selected]="def.id === $any(item).items[0].roleId">{{ def.label }}</option>
+                  }
+                </optgroup>
+                <optgroup label="Committee Roles">
+                  @for (def of activeCommitteeRoles(); track def.id) {
+                    <option [value]="def.id" [selected]="def.id === $any(item).items[0].roleId">{{ def.label }}</option>
+                  }
+                </optgroup>
+              </select>
+              <input class="form-control form-control-sm" style="flex:1" type="text" [value]="$any(item).items[0].customRoleLabel || ''" placeholder="or custom"
+                (input)="updateDual(item.id, 0, 'customRoleLabel', $any($event.target).value || null)">
+              <input type="checkbox" class="form-check-input flex-shrink-0" title="Show role in printed agenda"
+                [checked]="$any(item).items[0].roleVisible"
+                (change)="updateDual(item.id, 0, 'roleVisible', $any($event.target).checked)">
+              <input class="form-control form-control-sm" style="flex:1.8" type="text" [value]="$any(item).items[0].person || ''" placeholder="Person A"
                 (input)="updateDual(item.id, 0, 'person', $any($event.target).value)">
               <input class="form-control form-control-sm text-center" style="width:52px;flex-shrink:0" type="number" [value]="$any(item).durationA || 10" min="0" title="Line A duration (mins)"
                 (input)="update(item.id, 'durationA', +$any($event.target).value)">
@@ -71,9 +103,25 @@
             <div class="d-flex align-items-center gap-1">
               <input class="form-control form-control-sm" style="flex:3" type="text" [value]="$any(item).items[1].title || ''" placeholder="Line B title"
                 (input)="updateDual(item.id, 1, 'title', $any($event.target).value)">
-              <input class="form-control form-control-sm" style="flex:1.5" type="text" [value]="$any(item).items[1].roleLabel || ''" placeholder="Role B"
-                (input)="updateDual(item.id, 1, 'roleLabel', $any($event.target).value || null)">
-              <input class="form-control form-control-sm" style="flex:2" type="text" [value]="$any(item).items[1].person || ''" placeholder="Person B"
+              <select class="form-select form-select-sm" style="flex:1.3"
+                (change)="updateDual(item.id, 1, 'roleId', $any($event.target).value)">
+                <optgroup label="Meeting Roles">
+                  @for (def of activeRoles(); track def.id) {
+                    <option [value]="def.id" [selected]="def.id === $any(item).items[1].roleId">{{ def.label }}</option>
+                  }
+                </optgroup>
+                <optgroup label="Committee Roles">
+                  @for (def of activeCommitteeRoles(); track def.id) {
+                    <option [value]="def.id" [selected]="def.id === $any(item).items[1].roleId">{{ def.label }}</option>
+                  }
+                </optgroup>
+              </select>
+              <input class="form-control form-control-sm" style="flex:1" type="text" [value]="$any(item).items[1].customRoleLabel || ''" placeholder="or custom"
+                (input)="updateDual(item.id, 1, 'customRoleLabel', $any($event.target).value || null)">
+              <input type="checkbox" class="form-check-input flex-shrink-0" title="Show role in printed agenda"
+                [checked]="$any(item).items[1].roleVisible"
+                (change)="updateDual(item.id, 1, 'roleVisible', $any($event.target).checked)">
+              <input class="form-control form-control-sm" style="flex:1.8" type="text" [value]="$any(item).items[1].person || ''" placeholder="Person B"
                 (input)="updateDual(item.id, 1, 'person', $any($event.target).value)">
               <span class="text-muted small text-center" style="width:52px;flex-shrink:0">spks</span>
             </div>

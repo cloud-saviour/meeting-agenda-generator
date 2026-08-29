@@ -3,6 +3,8 @@ import { NgClass } from '@angular/common';
 import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
 import { AgendaStateService } from '../../services/agenda-state.service';
 import { AgendaItem } from '../../models/agenda.models';
+import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
+import { CommitteeRoleDefinitionService } from '../../services/committee-role-definition.service';
 
 @Component({
   selector: 'app-agenda-items',
@@ -12,6 +14,10 @@ import { AgendaItem } from '../../models/agenda.models';
 })
 export class AgendaItemsComponent {
   readonly state = inject(AgendaStateService);
+  readonly roleDefs = inject(RoleDefinitionService);
+  readonly committeeRoleDefs = inject(CommitteeRoleDefinitionService);
+  readonly activeRoles = this.roleDefs.activeRoles;
+  readonly activeCommitteeRoles = this.committeeRoleDefs.activeRoles;
   editMode = false;
 
   get items() {

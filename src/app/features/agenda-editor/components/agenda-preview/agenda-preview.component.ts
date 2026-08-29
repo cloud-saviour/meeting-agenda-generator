@@ -3,6 +3,8 @@ import { AgendaStateService } from '../../services/agenda-state.service';
 import { AgendaDualItem, CommitteeMember } from '../../models/agenda.models';
 import { computeAgendaTimeline } from '../../utils/agenda-timeline';
 import { APP_LOCALE } from '../../../../core/utils/locale';
+import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
+import { CommitteeRoleDefinitionService } from '../../services/committee-role-definition.service';
 
 interface RenderedRow {
   time: string;
@@ -31,6 +33,17 @@ type Segment =
 })
 export class AgendaPreviewComponent {
   readonly state = inject(AgendaStateService);
+  private readonly roleDefs = inject(RoleDefinitionService);
+  private readonly committeeRoleDefs = inject(CommitteeRoleDefinitionService);
+
+  resolveRole(roleId: string | undefined, roleVisible: boolean | undefined, customLabel?: string | null): string | null {
+    if (roleVisible === false) return null;
+    if (customLabel && customLabel.trim()) return customLabel.trim();
+    if (!roleId) return null;
+    return this.roleDefs.all().find((r) => r.id === roleId)?.label
+      ?? this.committeeRoleDefs.all().find((r) => r.id === roleId)?.label
+      ?? null;
+  }
 
   get d() {
     return this.state.meeting();
@@ -96,7 +109,7 @@ export class AgendaPreviewComponent {
             row: {
               time: entry.time!,
               title: item.title,
-              roleLabel: 'roleLabel' in item ? item.roleLabel : null,
+              roleLabel: 'roleId' in item ? this.resolveRole(item.roleId, item.roleVisible, item.customRoleLabel) : null,
               person: 'person' in item ? item.person : '',
               isDual: false,
             },
@@ -112,8 +125,8 @@ export class AgendaPreviewComponent {
               timeB: entry.timeB!,
               title: a.title,
               titleB: b.title,
-              roleLabel: a.roleLabel,
-              roleLabelB: b.roleLabel,
+              roleLabel: this.resolveRole(a.roleId, a.roleVisible, a.customRoleLabel),
+              roleLabelB: this.resolveRole(b.roleId, b.roleVisible, b.customRoleLabel),
               person: a.person,
               personB: b.person,
               isDual: true,
