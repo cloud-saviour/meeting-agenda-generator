@@ -83,16 +83,19 @@ export class AgendaPreviewComponent {
     return !!(this.d.hotSeat || this.d.reserve || this.d.apologies);
   }
 
+  private memberByRole(roleId: string): CommitteeMember | undefined {
+    return this.cmt.find((m) => m.roleId === roleId);
+  }
+
   get cmtPairs(): [CommitteeMember | undefined, CommitteeMember | undefined][] {
-    const c = this.cmt;
     return [
-      [c[0], c[1]],
-      [c[2], c[3]],
-      [c[4], c[5]],
+      [this.memberByRole('president'), this.memberByRole('secretary')],
+      [this.memberByRole('vpEducation'), this.memberByRole('communityManager')],
+      [this.memberByRole('vpMembership'), this.memberByRole('rsaAmbassador')],
     ];
   }
   get cmtTreasurer(): CommitteeMember | undefined {
-    return this.cmt[6];
+    return this.memberByRole('treasurer');
   }
 
   private get renderedAgenda(): { row?: RenderedRow; kind: 'row' | 'speakers' | 'evaluators' | 'notes'; text?: string }[] {

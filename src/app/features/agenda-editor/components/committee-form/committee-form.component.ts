@@ -14,8 +14,13 @@ export class CommitteeFormComponent {
   get cmt() { return this.state.cmt(); }
   get m() { return this.state.meeting(); }
   saved = false;
-  updateMember(i: number, field: string, value: string) {
-    this.state.updateCommitteeMember(i, field as any, value);
+  updateMember(index: number, field: string, value: string) {
+    this.state.updateCommitteeMember(index, field as any, value);
+  }
+  /** Excludes roles already assigned to another slot, so roleId stays unique across cmt. */
+  availableRolesFor(currentRoleId: string) {
+    const usedElsewhere = new Set(this.cmt.filter((m) => m.roleId !== currentRoleId).map((m) => m.roleId));
+    return this.activeRoles().filter((def) => !usedElsewhere.has(def.id));
   }
   updateMeeting(field: string, value: string) {
     this.state.updateMeeting({ [field]: value } as any);

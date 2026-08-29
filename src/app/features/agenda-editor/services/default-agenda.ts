@@ -6,12 +6,16 @@ import { AgendaItem, CommitteeMember } from '../models/agenda.models';
  * item to obtain ids, mirroring the caller's own id counter.
  */
 export function defaultAgenda(cmt: CommitteeMember[], nextId: () => number): AgendaItem[] {
+  const president = cmt.find((m) => m.roleId === 'president');
+  const secretary = cmt.find((m) => m.roleId === 'secretary');
+  const vpEducation = cmt.find((m) => m.roleId === 'vpEducation');
+
   return [
     {
       id: nextId(),
       type: 'row',
       title: 'Call to order',
-      person: cmt[1]?.name || '',
+      person: secretary?.name || '',
       roleId: 'secretary',
       roleVisible: true,
       customRoleLabel: null,
@@ -21,7 +25,7 @@ export function defaultAgenda(cmt: CommitteeMember[], nextId: () => number): Age
       id: nextId(),
       type: 'row',
       title: 'Welcome',
-      person: cmt[0]?.name || '',
+      person: president?.name || '',
       roleId: 'president',
       roleVisible: true,
       customRoleLabel: null,
@@ -41,7 +45,7 @@ export function defaultAgenda(cmt: CommitteeMember[], nextId: () => number): Age
       id: nextId(),
       type: 'row',
       title: 'Programme Information',
-      person: cmt[2]?.name || '',
+      person: vpEducation?.name || '',
       roleId: 'vpEducation',
       roleVisible: true,
       customRoleLabel: null,
@@ -110,7 +114,7 @@ export function defaultAgenda(cmt: CommitteeMember[], nextId: () => number): Age
       id: nextId(),
       type: 'row',
       title: 'Call to order',
-      person: cmt[1]?.name || '',
+      person: secretary?.name || '',
       roleId: 'secretary',
       roleVisible: true,
       customRoleLabel: null,
@@ -184,7 +188,7 @@ export function defaultAgenda(cmt: CommitteeMember[], nextId: () => number): Age
       id: nextId(),
       type: 'row',
       title: 'Planning for Next Meeting',
-      person: cmt[2]?.name || '',
+      person: vpEducation?.name || '',
       roleId: 'vpEducation',
       roleVisible: true,
       customRoleLabel: null,
@@ -194,7 +198,7 @@ export function defaultAgenda(cmt: CommitteeMember[], nextId: () => number): Age
       id: nextId(),
       type: 'row',
       title: 'Awards/Open Discussion',
-      person: cmt[0]?.name || '',
+      person: president?.name || '',
       roleId: 'president',
       roleVisible: true,
       customRoleLabel: null,
@@ -204,7 +208,7 @@ export function defaultAgenda(cmt: CommitteeMember[], nextId: () => number): Age
       id: nextId(),
       type: 'row',
       title: 'Meeting Adjourned',
-      person: cmt[0]?.name || '',
+      person: president?.name || '',
       roleId: 'president',
       roleVisible: true,
       customRoleLabel: null,

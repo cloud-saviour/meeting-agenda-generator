@@ -5,15 +5,12 @@ import { StorageService } from '../../../core/services/storage.service';
 const STORAGE_KEY = 'agora-committee-roster';
 
 function seedRoster(): CommitteeMember[] {
-  return [
-    'president',
-    'secretary',
-    'vpEducation',
-    'communityManager',
-    'vpMembership',
-    'rsaAmbassador',
-    'treasurer',
-  ].map((roleId) => ({ roleId, name: '', email: '', phone: '' }));
+  // Blank on purpose: pre-assigning a distinct role per slot left every
+  // slot's dropdown with only one selectable option (itself), since the
+  // duplicate-prevention filter excludes roles already used elsewhere.
+  // Starting unassigned lets every role stay pickable until an admin
+  // actually assigns it.
+  return Array.from({ length: 7 }, () => ({ roleId: '', name: '', email: '', phone: '' }));
 }
 
 /**

@@ -14,7 +14,8 @@
     <div class="card card-body p-2 mb-2">
       <select class="form-select form-select-sm fw-bold mb-1" style="width:auto"
         (change)="updateMember(i, 'roleId', $any($event.target).value)">
-        @for (def of activeRoles(); track def.id) {
+        <option value="" [selected]="!c.roleId">— Select a role —</option>
+        @for (def of availableRolesFor(c.roleId); track def.id) {
           <option [value]="def.id" [selected]="def.id === c.roleId">{{ def.label }}</option>
         }
       </select>

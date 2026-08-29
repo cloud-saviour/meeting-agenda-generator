@@ -329,6 +329,7 @@ function buildMeetingNotes(d: AgendaSnapshot) {
 
 function buildCommitteeFooter(cmt: CommitteeMember[], d: AgendaSnapshot, roleLabelById: Map<string, string>) {
   assertWidths('FOOTER_WIDTHS', FOOTER_WIDTHS, CONTENT_W);
+  const byRole = (roleId: string) => cmt.find((m) => m.roleId === roleId);
   const S = 12;
   const cR = (text: string, bold?: boolean, color?: string, italic?: boolean) =>
     new TextRun({ text, font: 'Arial', size: S, bold: !!bold, italics: !!italic, color: color ?? '000000' });
@@ -343,7 +344,7 @@ function buildCommitteeFooter(cmt: CommitteeMember[], d: AgendaSnapshot, roleLab
     return dxRow([...half(a, 0), ...half(b, 3)], { cantSplit: true, height: { value: 220, rule: HeightRule.ATLEAST } });
   };
 
-  const treas = cmt[6];
+  const treas = byRole('treasurer');
   const row4 = dxRow([
     cC([cR(`${(treas && roleLabelById.get(treas.roleId)) || 'Treasurer'}: `, true), cR(treas?.name || '')], FOOTER_WIDTHS[0]),
     cC([cR(treas?.email || '')], FOOTER_WIDTHS[1]),
@@ -363,7 +364,12 @@ function buildCommitteeFooter(cmt: CommitteeMember[], d: AgendaSnapshot, roleLab
     dxPara([new TextRun({ text: '' })], { spacing: { before: 60, after: 40 } }),
     dxPara([new TextRun({ text: `Executive Committee:  ${d.period || ''}`, font: 'Arial', size: 15, bold: true, italics: true, color: 'CE3C17' })],
       { alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 } }),
-    dxTable([cmtRow(cmt[0], cmt[1]), cmtRow(cmt[2], cmt[3]), cmtRow(cmt[4], cmt[5]), row4], { columnWidths: FOOTER_WIDTHS }),
+    dxTable([
+      cmtRow(byRole('president'), byRole('secretary')),
+      cmtRow(byRole('vpEducation'), byRole('communityManager')),
+      cmtRow(byRole('vpMembership'), byRole('rsaAmbassador')),
+      row4,
+    ], { columnWidths: FOOTER_WIDTHS }),
     ...(fbRuns.length ? [dxPara(fbRuns, { alignment: AlignmentType.CENTER, spacing: { before: 60, after: 0 } })] : []),
   ];
 }

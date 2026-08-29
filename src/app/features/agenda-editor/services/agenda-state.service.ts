@@ -226,6 +226,14 @@ export class AgendaStateService {
   }
 
   // ── Committee methods ─────────────────────────────────────────────────────
+  // Addressed by array position, not roleId: cmt is a fixed-length, never-
+  // reordered list of edit-form rows, and multiple rows can legitimately
+  // share the same roleId (e.g. all unassigned, roleId === '') — a value
+  // lookup would be ambiguous there, while position never is. This is
+  // unrelated to (and doesn't reintroduce) the positional-index bug fixed
+  // elsewhere: readers like the preview/DOCX footer and default-agenda still
+  // resolve *who holds a given role* via roleId, never via array position —
+  // this method only identifies *which row the edit form is patching*.
   updateCommitteeMember(index: number, field: keyof CommitteeMember, value: string): void {
     this.cmt.update((members) =>
       members.map((m, i) => (i === index ? { ...m, [field]: value } : m))
