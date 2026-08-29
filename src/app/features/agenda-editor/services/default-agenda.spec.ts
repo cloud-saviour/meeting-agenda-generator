@@ -17,9 +17,9 @@ describe('defaultAgenda', () => {
 
   it('seeds President/Secretary/VPE names from the committee array when present', () => {
     const cmt: CommitteeMember[] = [
-      { role: 'President', name: 'Ada', email: '', phone: '' },
-      { role: 'Secretary', name: 'Grace', email: '', phone: '' },
-      { role: 'VP Education', name: 'Alan', email: '', phone: '' },
+      { roleId: 'president', name: 'Ada', email: '', phone: '' },
+      { roleId: 'secretary', name: 'Grace', email: '', phone: '' },
+      { roleId: 'vpEducation', name: 'Alan', email: '', phone: '' },
     ];
     const items = defaultAgenda(cmt, nextIdCounter());
     const welcome = items.find((i) => i.type === 'row' && i.title === 'Welcome');

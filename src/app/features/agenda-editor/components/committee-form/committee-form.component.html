@@ -10,9 +10,15 @@
     <small class="text-muted">Name &nbsp;&nbsp; Email &nbsp;&nbsp; Phone</small>
   </div>
 
-  @for (c of cmt; track c.role; let i = $index) {
+  @for (c of cmt; track $index; let i = $index) {
     <div class="card card-body p-2 mb-2">
-      <div class="fw-bold small mb-1">{{ c.role }}</div>
+      <select class="form-select form-select-sm fw-bold mb-1" style="width:auto"
+        (change)="updateMember(i, 'roleId', $any($event.target).value)">
+        <option value="" [selected]="!c.roleId">— Select a role —</option>
+        @for (def of availableRolesFor(c.roleId); track def.id) {
+          <option [value]="def.id" [selected]="def.id === c.roleId">{{ def.label }}</option>
+        }
+      </select>
       <div class="row g-2">
         <div class="col-5">
           <input class="form-control form-control-sm" type="text" [value]="c.name" placeholder="Name" (input)="updateMember(i, 'name', $any($event.target).value)">
@@ -26,6 +32,13 @@
       </div>
     </div>
   }
+
+  <div class="mb-3">
+    <button type="button" class="btn btn-danger btn-sm" (click)="saveRoster()">
+      {{ saved ? '✓ Saved' : '💾 Save Committee' }}
+    </button>
+    <div class="form-text">Saves these members so future agendas start prepopulated with them.</div>
+  </div>
 
   <div class="mb-2">
     <label class="form-label small mb-1">Website URL</label>

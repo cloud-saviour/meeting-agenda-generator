@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { RoleDefinition } from '../models/role-definition.models';
-import { StorageService } from './storage.service';
+import { RoleDefinition } from '../../../core/models/role-definition.models';
+import { StorageService } from '../../../core/services/storage.service';
 
-const STORAGE_KEY = 'agora-role-definitions';
+const STORAGE_KEY = 'agora-committee-role-definitions';
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -10,19 +10,24 @@ function makeId(): string {
 
 function seedRoles(): RoleDefinition[] {
   return [
-    { id: 'toastmaster',        label: 'Evening Chairman',         order: 0, active: true },
-    { id: 'generalEvaluator',   label: 'Meeting Evaluator',        order: 1, active: true },
-    { id: 'grammarian',         label: 'Grammarian',               order: 2, active: true },
-    { id: 'timer',              label: 'Timekeeper',               order: 3, active: true },
-    { id: 'ahCounter',          label: 'Filler Word Counter',      order: 4, active: true },
-    { id: 'evaluationChairman', label: 'Evaluation Chairman',      order: 5, active: true },
-    { id: 'impromptuMaster',    label: 'Impromptu Master',         order: 6, active: true },
-    { id: 'evaluator',          label: 'Evaluator',                order: 7, active: true },
+    { id: 'president',        label: 'President',         order: 0, active: true },
+    { id: 'secretary',        label: 'Secretary',         order: 1, active: true },
+    { id: 'vpEducation',      label: 'VP Education',      order: 2, active: true },
+    { id: 'communityManager', label: 'Community Manager', order: 3, active: true },
+    { id: 'vpMembership',     label: 'VP Membership',     order: 4, active: true },
+    { id: 'rsaAmbassador',    label: 'RSA Ambassador',    order: 5, active: true },
+    { id: 'treasurer',        label: 'Treasurer',         order: 6, active: true },
   ];
 }
 
+/**
+ * Committee (governance) role titles — deliberately kept separate from
+ * RoleDefinitionService's meeting roles. Meeting roles are claimed live by
+ * members via check-in and are read by the check-in role board; committee
+ * titles are assigned only by the admin and must never appear there.
+ */
 @Injectable({ providedIn: 'root' })
-export class RoleDefinitionService {
+export class CommitteeRoleDefinitionService {
   // Declared before `definitions` so it's assigned before the field initializer below runs.
   private readonly storage = inject(StorageService);
 

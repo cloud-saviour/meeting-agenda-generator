@@ -1,7 +1,6 @@
-<app-navbar title="Manage Meeting Roles" [fixed]="true"
+<app-navbar title="Manage Committee Roles" [fixed]="true"
   [links]="[
     { label: '📝 Agenda Editor', path: '/admin' },
-    { label: '👥 Check-in', path: '/checkin' },
     { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
     { label: '🏠 Home', path: '/' }
   ]">
@@ -10,20 +9,20 @@
 <div class="container py-4" style="max-width:760px;margin-top:64px;">
 
   <div class="card p-3 mb-3">
-    <h3 class="section-title">Add a Role</h3>
+    <h3 class="section-title">Add a Committee Role</h3>
     <div class="mb-2">
       <label class="form-label small mb-1">Label</label>
-      <input class="form-control form-control-sm" type="text" [(ngModel)]="newLabel" name="newLabel" placeholder="e.g. Table Topics Master">
+      <input class="form-control form-control-sm" type="text" [(ngModel)]="newLabel" name="newLabel" placeholder="e.g. Webmaster">
     </div>
     <div class="mb-2">
       <label class="form-label small mb-1">Description (optional)</label>
       <input class="form-control form-control-sm" type="text" [(ngModel)]="newDescription" name="newDescription" placeholder="Shown to admins only">
     </div>
-    <button class="btn btn-danger btn-sm" (click)="create()">+ Add Role</button>
+    <button class="btn btn-danger btn-sm" (click)="create()">+ Add Committee Role</button>
   </div>
 
   <div class="card p-3 mb-3">
-    <h3 class="section-title">All Roles ({{ roles.length }})</h3>
+    <h3 class="section-title">All Committee Roles ({{ roles.length }})</h3>
     <div class="list-group list-group-flush">
       @for (r of roles; track r.id) {
         <div class="list-group-item d-flex align-items-center gap-2" [class.opacity-50]="!r.active">

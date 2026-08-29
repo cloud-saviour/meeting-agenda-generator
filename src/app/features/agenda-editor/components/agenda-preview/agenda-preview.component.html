@@ -94,7 +94,10 @@
                   <td>{{ s.level || '—' }}</td>
                   <td>{{ s.timeLo }}-{{ s.timeHi }} mins</td>
                   <td>{{ s.title || '—' }}</td>
-                  <td>{{ s.evaluator || '—' }}</td>
+                  <td>
+                    @if (resolveRole(s.roleId, s.roleVisible); as srole) { <b>{{ srole }}:</b> }
+                    {{ s.evaluator || '—' }}
+                  </td>
                 </tr>
               }
             </tbody>
@@ -106,7 +109,10 @@
             <tbody>
               @for (s of spks; track s.id) {
                 <tr>
-                  <td>{{ s.evaluator || '—' }}</td>
+                  <td>
+                    @if (resolveRole(s.roleId, s.roleVisible); as srole) { <b>{{ srole }}:</b> }
+                    {{ s.evaluator || '—' }}
+                  </td>
                   <td>2–4 mins</td>
                   <td>{{ s.title || '—' }}</td>
                   <td>{{ s.name || '—' }}</td>
@@ -138,14 +144,14 @@
           @for (pair of cmtPairs; track $index) {
             <tr>
               @if (pair[0]) {
-                <td class="role">{{ pair[0]!.role }}: {{ pair[0]!.name || '—' }}</td>
+                <td class="role">{{ resolveRole(pair[0]!.roleId, true) }}: {{ pair[0]!.name || '—' }}</td>
                 <td class="email">{{ pair[0]!.email }}</td>
                 <td class="phone">{{ pair[0]!.phone }}</td>
               } @else {
                 <td></td><td></td><td></td>
               }
               @if (pair[1]) {
-                <td class="role">{{ pair[1]!.role }}: {{ pair[1]!.name || '—' }}</td>
+                <td class="role">{{ resolveRole(pair[1]!.roleId, true) }}: {{ pair[1]!.name || '—' }}</td>
                 <td class="email">{{ pair[1]!.email }}</td>
                 <td class="phone">{{ pair[1]!.phone }}</td>
               } @else {
@@ -155,7 +161,7 @@
           }
           <tr>
             @if (cmtTreasurer) {
-              <td class="role">{{ cmtTreasurer.role }}: {{ cmtTreasurer.name || '—' }}</td>
+              <td class="role">{{ resolveRole(cmtTreasurer.roleId, true) }}: {{ cmtTreasurer.name || '—' }}</td>
               <td class="email">{{ cmtTreasurer.email }}</td>
               <td class="phone">{{ cmtTreasurer.phone }}</td>
             } @else {

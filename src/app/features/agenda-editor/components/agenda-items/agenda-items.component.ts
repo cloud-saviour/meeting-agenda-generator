@@ -3,6 +3,8 @@ import { NgClass } from '@angular/common';
 import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
 import { AgendaStateService } from '../../services/agenda-state.service';
 import { AgendaItem } from '../../models/agenda.models';
+import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
+import { CommitteeRoleDefinitionService } from '../../services/committee-role-definition.service';
 
 @Component({
   selector: 'app-agenda-items',
@@ -12,6 +14,10 @@ import { AgendaItem } from '../../models/agenda.models';
 })
 export class AgendaItemsComponent {
   readonly state = inject(AgendaStateService);
+  readonly roleDefs = inject(RoleDefinitionService);
+  readonly committeeRoleDefs = inject(CommitteeRoleDefinitionService);
+  readonly activeRoles = this.roleDefs.activeRoles;
+  readonly activeCommitteeRoles = this.committeeRoleDefs.activeRoles;
   editMode = false;
 
   get items() {
@@ -40,6 +46,20 @@ export class AgendaItemsComponent {
 
   updateDual(id: number, subIdx: 0 | 1, field: string, value: unknown) {
     this.state.updateDualSubItem(id, subIdx, field, value);
+  }
+
+  /** Picking a real role clears any custom label — re-selecting the synthetic
+   * custom-label option itself (value "") is a no-op. */
+  onRoleChange(id: number, value: string) {
+    if (!value) return;
+    this.state.updateAgItem(id, 'roleId', value);
+    this.state.updateAgItem(id, 'customRoleLabel', null);
+  }
+
+  onDualRoleChange(id: number, subIdx: 0 | 1, value: string) {
+    if (!value) return;
+    this.state.updateDualSubItem(id, subIdx, 'roleId', value);
+    this.state.updateDualSubItem(id, subIdx, 'customRoleLabel', null);
   }
 
   typeBadge(type: string): string {

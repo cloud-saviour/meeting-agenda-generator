@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, inject, signal, computed } from '@angular/core';
 import {
   AgendaItem,
   CommitteeMember,
@@ -7,12 +7,17 @@ import {
 } from '../models/agenda.models';
 import { defaultAgenda } from './default-agenda';
 import { APP_LOCALE } from '../../../core/utils/locale';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+import { CommitteeRosterService } from './committee-roster.service';
 
 const DEFAULT_LOGO_LEFT = 'logo.png';
 const DEFAULT_LOGO_RIGHT = 'crown.png';
 
 @Injectable({ providedIn: 'root' })
 export class AgendaStateService {
+  private readonly roleDefs = inject(RoleDefinitionService);
+  private readonly committeeRoster = inject(CommitteeRosterService);
+
   // ── Private counters ──────────────────────────────────────────────────────
   private agId = 0;
   private spId = 0;
@@ -41,16 +46,12 @@ export class AgendaStateService {
 
   readonly spks = signal<Speaker[]>([]);
 
+  // Seeded from the persistent committee roster so every agenda starts
+  // prepopulated with the admin-assigned members; from here on `cmt` is a
+  // per-agenda working copy (frozen at export time), kept in sync with the
+  // roster only through `updateCommitteeMember()`.
   readonly cmt = signal<CommitteeMember[]>(
-    [
-      'President',
-      'Secretary',
-      'VP Education',
-      'Community Manager',
-      'VP Membership',
-      'RSA Ambassador',
-      'Treasurer',
-    ].map((role) => ({ role, name: '', email: '', phone: '' }))
+    JSON.parse(JSON.stringify(this.committeeRoster.all()))
   );
 
   readonly agItems = signal<AgendaItem[]>(defaultAgenda(this.cmt(), () => ++this.agId));
@@ -80,6 +81,7 @@ export class AgendaStateService {
   // ── AgendaItem methods ────────────────────────────────────────────────────
   addAgItem(type: AgendaItem['type']): void {
     const id = ++this.agId;
+    const defaultRoleId = this.roleDefs.activeRoles()[0]?.id ?? '';
     let item: AgendaItem;
 
     switch (type) {
@@ -89,7 +91,9 @@ export class AgendaStateService {
           type: 'row',
           title: 'New item',
           person: '',
-          roleLabel: null,
+          roleId: defaultRoleId,
+          roleVisible: true,
+          customRoleLabel: null,
           duration: 5,
         } as AgendaItem;
         break;
@@ -99,8 +103,8 @@ export class AgendaStateService {
           type: 'dual',
           durationA: 10,
           items: [
-            { title: 'Session A', person: '', roleLabel: null },
-            { title: 'Session B', person: '', roleLabel: null },
+            { title: 'Session A', person: '', roleId: defaultRoleId, roleVisible: true, customRoleLabel: null },
+            { title: 'Session B', person: '', roleId: defaultRoleId, roleVisible: true, customRoleLabel: null },
           ],
         } as AgendaItem;
         break;
@@ -122,7 +126,9 @@ export class AgendaStateService {
           type: 'row',
           title: 'New item',
           person: '',
-          roleLabel: null,
+          roleId: defaultRoleId,
+          roleVisible: true,
+          customRoleLabel: null,
           duration: 5,
         } as AgendaItem;
     }
@@ -192,6 +198,8 @@ export class AgendaStateService {
       timeHi: d?.timeHi ?? 10,
       title: d?.title ?? '',
       evaluator: d?.evaluator ?? '',
+      roleId: d?.roleId ?? 'evaluator',
+      roleVisible: d?.roleVisible ?? true,
     };
     this.spks.update((spks) => [...spks, speaker]);
   }
@@ -218,10 +226,23 @@ export class AgendaStateService {
   }
 
   // ── Committee methods ─────────────────────────────────────────────────────
+  // Addressed by array position, not roleId: cmt is a fixed-length, never-
+  // reordered list of edit-form rows, and multiple rows can legitimately
+  // share the same roleId (e.g. all unassigned, roleId === '') — a value
+  // lookup would be ambiguous there, while position never is. This is
+  // unrelated to (and doesn't reintroduce) the positional-index bug fixed
+  // elsewhere: readers like the preview/DOCX footer and default-agenda still
+  // resolve *who holds a given role* via roleId, never via array position —
+  // this method only identifies *which row the edit form is patching*.
   updateCommitteeMember(index: number, field: keyof CommitteeMember, value: string): void {
     this.cmt.update((members) =>
       members.map((m, i) => (i === index ? { ...m, [field]: value } : m))
     );
+  }
+
+  /** Persists the current committee list so future agendas start prepopulated with it. */
+  saveCommitteeRoster(): void {
+    this.committeeRoster.replaceAll(this.cmt());
   }
 
   // ── Logo methods ──────────────────────────────────────────────────────────

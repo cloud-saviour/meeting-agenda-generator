@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import {
   Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, ImageRun,
   AlignmentType, BorderStyle, HeightRule, ShadingType, TableLayoutType,
@@ -8,6 +8,8 @@ import { saveAs } from 'file-saver';
 import { AgendaItem, AgendaSnapshot, CommitteeMember, Speaker } from '../models/agenda.models';
 import { computeAgendaTimeline } from '../utils/agenda-timeline';
 import { APP_LOCALE } from '../../../core/utils/locale';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+import { CommitteeRoleDefinitionService } from './committee-role-definition.service';
 
 // ── Layout constants (all sums = CONTENT_W = 10546) ──────────────────────────
 const CONTENT_W       = 10546;
@@ -208,12 +210,13 @@ function buildMission(d: AgendaSnapshot) {
   ];
 }
 
-function buildAgendaBody(items: AgendaItem[], spks: Speaker[], d: AgendaSnapshot) {
+function buildAgendaBody(items: AgendaItem[], spks: Speaker[], d: AgendaSnapshot, roleLabelById: Map<string, string>) {
   assertWidths('AGENDA', [TIME_W, ACTIVITY_W, PERSON_W], CONTENT_W);
   const timeline = computeAgendaTimeline(items, spks, d.st || '18:15');
 
-  function personRuns(item: { roleLabel?: string | null; person?: string }) {
-    const role = item.roleLabel || '', name = item.person || '';
+  function personRuns(item: { roleId?: string; roleVisible?: boolean; person?: string; customRoleLabel?: string | null }) {
+    const custom = item.customRoleLabel?.trim();
+    const role = item.roleVisible !== false ? (custom || roleLabelById.get(item.roleId ?? '') || '') : '', name = item.person || '';
     const runs: TextRun[] = [];
     if (role) runs.push(new TextRun({ text: role + (name ? ': ' : ''), font: 'Arial', size: 15, bold: true, italics: true }));
     if (name) runs.push(new TextRun({ text: name, font: 'Arial', size: 15, italics: true }));
@@ -242,7 +245,7 @@ function buildAgendaBody(items: AgendaItem[], spks: Speaker[], d: AgendaSnapshot
     switch (item.type) {
       case 'row':
       case 'recess': {
-        rowBuf.push(agRow(entry.time!, item.title || '', personRuns(item as { roleLabel?: string | null; person?: string })));
+        rowBuf.push(agRow(entry.time!, item.title || '', personRuns(item as { roleId?: string; roleVisible?: boolean; person?: string; customRoleLabel?: string | null })));
         break;
       }
       case 'dual': {
@@ -260,12 +263,12 @@ function buildAgendaBody(items: AgendaItem[], spks: Speaker[], d: AgendaSnapshot
       }
       case 'speakers': {
         flush();
-        if (spks.length) sections.push(buildSpeakersTable(spks));
+        if (spks.length) sections.push(buildSpeakersTable(spks, roleLabelById));
         break;
       }
       case 'evaluators': {
         flush();
-        if (spks.length) sections.push(buildEvaluatorsTable(spks));
+        if (spks.length) sections.push(buildEvaluatorsTable(spks, roleLabelById));
         break;
       }
     }
@@ -291,14 +294,21 @@ function buildDataTable<T>(
   ], { columnWidths: widths });
 }
 
-function buildSpeakersTable(spks: Speaker[]) {
-  return buildDataTable(['Speaker', 'Level', 'Time', 'Title', 'Evaluator'], SPK_WIDTHS, spks,
-    (s) => [s.name || '—', s.level || '—', `${s.timeLo}-${s.timeHi} mins`, s.title || '—', s.evaluator || '—']);
+function evaluatorCell(s: Speaker, roleLabelById: Map<string, string>): string {
+  const label = s.roleVisible !== false ? (roleLabelById.get(s.roleId ?? '') ?? '') : '';
+  const name = s.evaluator || '';
+  if (label && name) return `${label}: ${name}`;
+  return label || name || '—';
 }
 
-function buildEvaluatorsTable(spks: Speaker[]) {
+function buildSpeakersTable(spks: Speaker[], roleLabelById: Map<string, string>) {
+  return buildDataTable(['Speaker', 'Level', 'Time', 'Title', 'Evaluator'], SPK_WIDTHS, spks,
+    (s) => [s.name || '—', s.level || '—', `${s.timeLo}-${s.timeHi} mins`, s.title || '—', evaluatorCell(s, roleLabelById)]);
+}
+
+function buildEvaluatorsTable(spks: Speaker[], roleLabelById: Map<string, string>) {
   return buildDataTable(['Evaluator', 'Time', 'Title', 'Speaker'], EVAL_WIDTHS, spks,
-    (s) => [s.evaluator || '—', '2–4 mins', s.title || '—', s.name || '—']);
+    (s) => [evaluatorCell(s, roleLabelById), '2–4 mins', s.title || '—', s.name || '—']);
 }
 
 function buildMeetingNotes(d: AgendaSnapshot) {
@@ -317,8 +327,9 @@ function buildMeetingNotes(d: AgendaSnapshot) {
   ];
 }
 
-function buildCommitteeFooter(cmt: CommitteeMember[], d: AgendaSnapshot) {
+function buildCommitteeFooter(cmt: CommitteeMember[], d: AgendaSnapshot, roleLabelById: Map<string, string>) {
   assertWidths('FOOTER_WIDTHS', FOOTER_WIDTHS, CONTENT_W);
+  const byRole = (roleId: string) => cmt.find((m) => m.roleId === roleId);
   const S = 12;
   const cR = (text: string, bold?: boolean, color?: string, italic?: boolean) =>
     new TextRun({ text, font: 'Arial', size: S, bold: !!bold, italics: !!italic, color: color ?? '000000' });
@@ -328,14 +339,14 @@ function buildCommitteeFooter(cmt: CommitteeMember[], d: AgendaSnapshot) {
 
   const cmtRow = (a: CommitteeMember | undefined, b: CommitteeMember | undefined) => {
     const half = (m: CommitteeMember | undefined, base: number): TableCell[] => m
-      ? [cC([cR(`${m.role}: `, true), cR(m.name || '')], FOOTER_WIDTHS[base]), cC([cR(m.email || '')], FOOTER_WIDTHS[base + 1]), cC([cR(m.phone || '')], FOOTER_WIDTHS[base + 2])]
+      ? [cC([cR(`${roleLabelById.get(m.roleId) ?? ''}: `, true), cR(m.name || '')], FOOTER_WIDTHS[base]), cC([cR(m.email || '')], FOOTER_WIDTHS[base + 1]), cC([cR(m.phone || '')], FOOTER_WIDTHS[base + 2])]
       : [cC([cR('')], FOOTER_WIDTHS[base]), cC([cR('')], FOOTER_WIDTHS[base + 1]), cC([cR('')], FOOTER_WIDTHS[base + 2])];
     return dxRow([...half(a, 0), ...half(b, 3)], { cantSplit: true, height: { value: 220, rule: HeightRule.ATLEAST } });
   };
 
-  const treas = cmt[6];
+  const treas = byRole('treasurer');
   const row4 = dxRow([
-    cC([cR(`${treas?.role || 'Treasurer'}: `, true), cR(treas?.name || '')], FOOTER_WIDTHS[0]),
+    cC([cR(`${(treas && roleLabelById.get(treas.roleId)) || 'Treasurer'}: `, true), cR(treas?.name || '')], FOOTER_WIDTHS[0]),
     cC([cR(treas?.email || '')], FOOTER_WIDTHS[1]),
     cC([cR(treas?.phone || '')], FOOTER_WIDTHS[2]),
     cC([cR('For more information visit:', true, 'CE3C17', true)], FOOTER_WIDTHS[3]),
@@ -353,7 +364,12 @@ function buildCommitteeFooter(cmt: CommitteeMember[], d: AgendaSnapshot) {
     dxPara([new TextRun({ text: '' })], { spacing: { before: 60, after: 40 } }),
     dxPara([new TextRun({ text: `Executive Committee:  ${d.period || ''}`, font: 'Arial', size: 15, bold: true, italics: true, color: 'CE3C17' })],
       { alignment: AlignmentType.CENTER, spacing: { before: 0, after: 60 } }),
-    dxTable([cmtRow(cmt[0], cmt[1]), cmtRow(cmt[2], cmt[3]), cmtRow(cmt[4], cmt[5]), row4], { columnWidths: FOOTER_WIDTHS }),
+    dxTable([
+      cmtRow(byRole('president'), byRole('secretary')),
+      cmtRow(byRole('vpEducation'), byRole('communityManager')),
+      cmtRow(byRole('vpMembership'), byRole('rsaAmbassador')),
+      row4,
+    ], { columnWidths: FOOTER_WIDTHS }),
     ...(fbRuns.length ? [dxPara(fbRuns, { alignment: AlignmentType.CENTER, spacing: { before: 60, after: 0 } })] : []),
   ];
 }
@@ -383,7 +399,11 @@ async function getImageDims(src: string): Promise<{ w: number; h: number }> {
 // ── Main service ──────────────────────────────────────────────────────────────
 @Injectable({ providedIn: 'root' })
 export class DocxService {
+  private readonly roleDefs = inject(RoleDefinitionService);
+  private readonly committeeRoleDefs = inject(CommitteeRoleDefinitionService);
+
   async generate(snapshot: AgendaSnapshot, fileName: string): Promise<void> {
+    const roleLabelById = new Map([...this.roleDefs.all(), ...this.committeeRoleDefs.all()].map((r) => [r.id, r.label]));
     const logoLeft  = snapshot.logoLeft  ?? 'logo.png';
     const logoRight = snapshot.logoRight ?? 'crown.png';
 
@@ -400,9 +420,9 @@ export class DocxService {
       dxPara([new TextRun({ text: '' })], { spacing: { before: 60, after: 60 } }),
       buildInfoBoxes(snapshot),
       ...buildMission(snapshot),
-      ...buildAgendaBody(snapshot.agItems, snapshot.spks, snapshot),
+      ...buildAgendaBody(snapshot.agItems, snapshot.spks, snapshot, roleLabelById),
       ...buildMeetingNotes(snapshot),
-      ...buildCommitteeFooter(snapshot.cmt, snapshot),
+      ...buildCommitteeFooter(snapshot.cmt, snapshot, roleLabelById),
     ];
 
     const doc = new Document({

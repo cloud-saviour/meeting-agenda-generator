@@ -23,7 +23,10 @@ export interface AgendaRowItem {
   type: 'row';
   title: string;
   person: string;
-  roleLabel: string | null;
+  roleId: string;
+  roleVisible: boolean;
+  /** One-off role text for this row only (e.g. "Acting VPE"), overriding roleId's resolved label. */
+  customRoleLabel: string | null;
   duration: number;
 }
 
@@ -37,7 +40,9 @@ export interface AgendaDualItem {
 export interface DualSubItem {
   title: string;
   person: string;
-  roleLabel: string | null;
+  roleId: string;
+  roleVisible: boolean;
+  customRoleLabel: string | null;
 }
 
 export interface AgendaSpecialItem {
@@ -73,10 +78,12 @@ export interface Speaker {
   timeHi: number;
   title: string;
   evaluator: string;
+  roleId: string;
+  roleVisible: boolean;
 }
 
 export interface CommitteeMember {
-  role: string;
+  roleId: string;
   name: string;
   email: string;
   phone: string;

@@ -38,7 +38,7 @@ describe('AgendaImportExportService', () => {
   it('loadSnapshot() resets the agenda id counter to the max id present in the imported data', () => {
     importExport.loadSnapshot({
       ...importExport.getSnapshot(),
-      agItems: [{ id: 500, type: 'row', title: 'Imported', person: '', roleLabel: null, duration: 1 }],
+      agItems: [{ id: 500, type: 'row', title: 'Imported', person: '', roleId: '', roleVisible: true, customRoleLabel: null, duration: 1 }],
     });
     state.addAgItem('row');
     const newItem = state.agItems()[state.agItems().length - 1];
@@ -49,8 +49,8 @@ describe('AgendaImportExportService', () => {
     importExport.loadSnapshot({
       ...importExport.getSnapshot(),
       spks: [
-        { id: 999, name: 'A', level: '', timeLo: 5, timeHi: 7, title: '', evaluator: '' },
-        { id: 998, name: 'B', level: '', timeLo: 5, timeHi: 7, title: '', evaluator: '' },
+        { id: 999, name: 'A', level: '', timeLo: 5, timeHi: 7, title: '', evaluator: '', roleId: 'evaluator', roleVisible: true },
+        { id: 998, name: 'B', level: '', timeLo: 5, timeHi: 7, title: '', evaluator: '', roleId: 'evaluator', roleVisible: true },
       ],
     });
     expect(state.spks().map((s) => s.id)).toEqual([1, 2]);

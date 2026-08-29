@@ -3,11 +3,11 @@ import { computeAgendaTimeline } from './agenda-timeline';
 import { AgendaItem, Speaker } from '../models/agenda.models';
 
 function row(id: number, duration: number): AgendaItem {
-  return { id, type: 'row', title: `Item ${id}`, person: '', roleLabel: null, duration };
+  return { id, type: 'row', title: `Item ${id}`, person: '', roleId: '', roleVisible: true, customRoleLabel: null, duration };
 }
 
 function speaker(timeHi: number): Speaker {
-  return { id: 1, name: 'Speaker', level: '', timeLo: 5, timeHi, title: '', evaluator: '' };
+  return { id: 1, name: 'Speaker', level: '', timeLo: 5, timeHi, title: '', evaluator: '', roleId: 'evaluator', roleVisible: true };
 }
 
 describe('computeAgendaTimeline', () => {
@@ -21,8 +21,8 @@ describe('computeAgendaTimeline', () => {
   it('dual item emits two times and advances the clock by the sum of speaker timeHi+2, plus an extra +1 minute', () => {
     const items: AgendaItem[] = [
       { id: 1, type: 'dual', durationA: 10, items: [
-        { title: 'A', person: '', roleLabel: null },
-        { title: 'B', person: '', roleLabel: null },
+        { title: 'A', person: '', roleId: '', roleVisible: true, customRoleLabel: null },
+        { title: 'B', person: '', roleId: '', roleVisible: true, customRoleLabel: null },
       ] },
       row(2, 0),
     ];
@@ -70,8 +70,8 @@ describe('computeAgendaTimeline', () => {
       row(1, 2),
       row(2, 3),
       { id: 3, type: 'dual', durationA: 10, items: [
-        { title: 'Impromptu', person: '', roleLabel: null },
-        { title: 'Prepared',  person: '', roleLabel: null },
+        { title: 'Impromptu', person: '', roleId: '', roleVisible: true, customRoleLabel: null },
+        { title: 'Prepared',  person: '', roleId: '', roleVisible: true, customRoleLabel: null },
       ] },
       { id: 4, type: 'speakers' },
       { id: 5, type: 'recess', title: 'Recess', duration: 15 },
