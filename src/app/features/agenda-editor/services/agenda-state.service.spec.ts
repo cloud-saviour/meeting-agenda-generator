@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { AgendaStateService } from './agenda-state.service';
 import { CommitteeRosterService } from './committee-roster.service';
 import { StorageService } from '../../../core/services/storage.service';
-import { CommitteeMember } from '../models/agenda.models';
+import { AgendaItem, CommitteeMember } from '../models/agenda.models';
 
 class FakeStorage {
   private store = new Map<string, string>();
@@ -103,5 +103,164 @@ describe('AgendaStateService — committee methods', () => {
       expect(roster.all()[0].name).toBe('Persisted Name');
       expect(roster.all().length).toBe(state.cmt().length);
     });
+  });
+});
+
+describe('AgendaStateService — role/person sync across agenda items', () => {
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function rowItem(id: number, roleId: string, person = ''): AgendaItem {
+    return { id, type: 'row', title: `Row ${id}`, person, roleId, roleVisible: true, customRoleLabel: null, duration: 5 } as AgendaItem;
+  }
+
+  function dualItem(id: number, roleIdA: string, personA = '', roleIdB = '', personB = ''): AgendaItem {
+    return {
+      id,
+      type: 'dual',
+      durationA: 10,
+      items: [
+        { title: 'A', person: personA, roleId: roleIdA, roleVisible: true, customRoleLabel: null },
+        { title: 'B', person: personB, roleId: roleIdB, roleVisible: true, customRoleLabel: null },
+      ],
+    } as AgendaItem;
+  }
+
+  it('typing a person into a row fills every other row and dual sub-item sharing that roleId', () => {
+    const { state } = makeService();
+    state.agItems.set([
+      rowItem(1, 'timer'),
+      rowItem(2, 'timer'),
+      dualItem(3, 'timer', '', 'grammarian', ''),
+    ]);
+
+    state.updateAgItem(1, 'person', 'Alice');
+
+    const items = state.agItems();
+    expect((items[0] as any).person).toBe('Alice');
+    expect((items[1] as any).person).toBe('Alice');
+    expect((items[2] as any).items[0].person).toBe('Alice');
+    expect((items[2] as any).items[1].person).toBe('');
+  });
+
+  it('editing an already-synced row re-syncs the whole group to the new value', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'timer', 'Alice'), rowItem(2, 'timer', 'Alice')]);
+
+    state.updateAgItem(2, 'person', 'Bob');
+
+    const items = state.agItems();
+    expect((items[0] as any).person).toBe('Bob');
+    expect((items[1] as any).person).toBe('Bob');
+  });
+
+  it('clearing a synced row clears the whole group', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'timer', 'Alice'), rowItem(2, 'timer', 'Alice')]);
+
+    state.updateAgItem(1, 'person', '');
+
+    const items = state.agItems();
+    expect((items[0] as any).person).toBe('');
+    expect((items[1] as any).person).toBe('');
+  });
+
+  it('assigning a role to a blank-person row inherits the group\'s existing name', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'timer', 'Bob'), rowItem(2, '')]);
+
+    state.updateAgItem(2, 'roleId', 'timer');
+
+    const items = state.agItems();
+    expect((items[1] as any).roleId).toBe('timer');
+    expect((items[1] as any).person).toBe('Bob');
+  });
+
+  it('assigning a role with no existing group name leaves the row blank', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, ''), rowItem(2, '')]);
+
+    state.updateAgItem(1, 'roleId', 'grammarian');
+
+    expect((state.agItems()[0] as any).person).toBe('');
+  });
+
+  it('does not leak a row\'s stale person into its newly-assigned role group', () => {
+    const { state } = makeService();
+    // row 1 starts on 'timer' with a name, then switches to 'grammarian'
+    // which has no assigned name yet — its old 'timer' name must not carry over.
+    state.agItems.set([rowItem(1, 'timer', 'Alice'), rowItem(2, 'grammarian', '')]);
+
+    state.updateAgItem(1, 'roleId', 'grammarian');
+
+    const items = state.agItems();
+    expect((items[0] as any).person).toBe('');
+    expect((items[1] as any).person).toBe('');
+  });
+
+  it('items with a different or empty roleId are unaffected', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'timer'), rowItem(2, 'grammarian', 'Existing'), rowItem(3, '')]);
+
+    state.updateAgItem(1, 'person', 'Alice');
+
+    const items = state.agItems();
+    expect((items[1] as any).person).toBe('Existing');
+    expect((items[2] as any).person).toBe('');
+  });
+
+  it('recess items are unaffected', () => {
+    const { state } = makeService();
+    const recess: AgendaItem = { id: 2, type: 'recess', title: 'Recess', duration: 15 } as AgendaItem;
+    state.agItems.set([rowItem(1, 'timer'), recess]);
+
+    state.updateAgItem(1, 'person', 'Alice');
+
+    expect(state.agItems()[1]).toEqual(recess);
+  });
+
+  it('propagates through updateDualSubItem the same way as updateAgItem', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'timer'), dualItem(2, 'timer', '', 'grammarian', '')]);
+
+    state.updateDualSubItem(2, 0, 'person', 'Carol');
+
+    const items = state.agItems();
+    expect((items[0] as any).person).toBe('Carol');
+    expect((items[1] as any).items[0].person).toBe('Carol');
+    expect((items[1] as any).items[1].person).toBe('');
+  });
+
+  it('re-firing the same roleId (no-op) does not wipe the row\'s own person, even as the sole holder of that role', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'generalEvaluator', 'Jane')]);
+
+    state.updateAgItem(1, 'roleId', 'generalEvaluator');
+
+    expect((state.agItems()[0] as any).person).toBe('Jane');
+  });
+
+  it('re-firing the same roleId on a dual sub-item (no-op) does not wipe its own person', () => {
+    const { state } = makeService();
+    state.agItems.set([dualItem(1, 'generalEvaluator', 'Jane', 'grammarian', '')]);
+
+    state.updateDualSubItem(1, 0, 'roleId', 'generalEvaluator');
+
+    expect((state.agItems()[0] as any).items[0].person).toBe('Jane');
+  });
+
+  it('assigning one dual sub-item to the roleId its sibling already holds does not wipe the sibling', () => {
+    const { state } = makeService();
+    // items[0] holds 'impromptuMaster' with a name already; items[1] is being
+    // switched to the SAME roleId as its sibling — the sibling must survive,
+    // and (per the group-sync invariant) items[1] should adopt its name.
+    state.agItems.set([dualItem(1, 'impromptuMaster', 'Alice', 'grammarian', '')]);
+
+    state.updateDualSubItem(1, 1, 'roleId', 'impromptuMaster');
+
+    const dual = state.agItems()[0] as any;
+    expect(dual.items[0].person).toBe('Alice');
+    expect(dual.items[1].person).toBe('Alice');
   });
 });
