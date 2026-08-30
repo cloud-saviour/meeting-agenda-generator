@@ -9,7 +9,7 @@ import { RouterLink } from '@angular/router';
 })
 export class NavbarComponent {
   @Input() title = '';
-  @Input() links: { label: string; path: string }[] = [];
+  @Input() links: { label: string; path: string; queryParams?: Record<string, string> }[] = [];
   /** checkin/admin-roles use position:fixed; agenda-editor's flex shell doesn't. */
   @Input() fixed = false;
   /** agenda-editor only, for its existing d-print-none behavior. */

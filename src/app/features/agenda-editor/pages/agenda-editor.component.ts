@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { AgendaStateService } from '../services/agenda-state.service';
 import { AgendaImportExportService } from '../services/agenda-import-export.service';
+import { PublishedAgendaService } from '../services/published-agenda.service';
 import { DocxService } from '../services/docx.service';
 import { MeetingFormComponent } from '../components/meeting-form/meeting-form.component';
 import { AgendaItemsComponent } from '../components/agenda-items/agenda-items.component';
@@ -27,10 +28,25 @@ export class AgendaEditorComponent {
   readonly state = inject(AgendaStateService);
   private readonly docxService = inject(DocxService);
   private readonly importExport = inject(AgendaImportExportService);
+  private readonly publishedAgenda = inject(PublishedAgendaService);
   private readonly router = inject(Router);
 
   docxBusy = false;
   linkCopied = false;
+  published = false;
+  mobilePreviewMode = false;
+
+  publishAgenda() {
+    const meetingNo = this.state.meeting().no;
+    if (!meetingNo) return;
+    this.publishedAgenda.publish(meetingNo, this.importExport.getSnapshot());
+    this.published = true;
+    setTimeout(() => (this.published = false), 2000);
+  }
+
+  toggleMobilePreview() {
+    this.mobilePreviewMode = !this.mobilePreviewMode;
+  }
 
   async copyCheckinLink() {
     const meetingNo = this.state.meeting().no;

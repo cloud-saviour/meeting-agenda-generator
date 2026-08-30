@@ -26,10 +26,11 @@ export class CheckinComponent {
   readonly state = inject(CheckinStateService);
   private readonly route = inject(ActivatedRoute);
   nameInput = '';
+  meetingId: string;
 
   constructor() {
-    const meetingId = this.route.snapshot.queryParamMap.get('meeting') ?? 'default';
-    this.state.loadMeeting(meetingId);
+    this.meetingId = this.route.snapshot.queryParamMap.get('meeting') ?? 'default';
+    this.state.loadMeeting(this.meetingId);
     this.nameInput = this.state.currentName();
   }
 

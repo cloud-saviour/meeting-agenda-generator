@@ -16,9 +16,17 @@
     <button class="btn btn-outline-light btn-sm" [disabled]="!state.meeting().no" (click)="copyCheckinLink()">
       {{ linkCopied ? '✓ Copied!' : '🔗 Share Check-in Link' }}
     </button>
+    <button class="btn btn-outline-light btn-sm" [disabled]="!state.meeting().no" (click)="publishAgenda()"
+      title="Publish this agenda so members can preview it from the check-in page">
+      {{ published ? '✓ Published' : '📤 Publish' }}
+    </button>
+    <button class="btn btn-outline-light btn-sm d-md-none" (click)="toggleMobilePreview()">
+      {{ mobilePreviewMode ? '✎ Edit Form' : '👁 Preview Agenda' }}
+    </button>
   </app-navbar>
 
-  <div class="row g-0 flex-grow-1 app-body" style="min-height:0;">
+  <div class="row g-0 flex-grow-1 app-body" style="min-height:0;"
+    [class.mobile-preview]="mobilePreviewMode" [class.mobile-form]="!mobilePreviewMode">
 
     <!-- FORM PANEL -->
     <div class="col-12 bg-white border-end overflow-auto d-print-none app-sidebar" style="min-height:0;">

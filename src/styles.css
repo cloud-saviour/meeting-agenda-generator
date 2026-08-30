@@ -81,6 +81,17 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
   .app-preview { flex: 0 0 60%; max-width: 60%; }
 }
 
+/* Mobile-only form/preview toggle — below 768px only one panel is shown at a
+   time (switched via the "Preview Agenda"/"Edit Form" button); the 40/60
+   split above already makes both visible side by side at ≥768px regardless
+   of this toggle's state, so this rule must never apply there. */
+@media (max-width: 767.98px) {
+  /* !important needed: .app-preview also carries Bootstrap's .d-flex
+     utility, which sets display:flex !important and would otherwise win. */
+  .app-body.mobile-preview .app-sidebar { display: none !important; }
+  .app-body.mobile-form    .app-preview { display: none !important; }
+}
+
 /* On print, sidebar + navbar are hidden via Bootstrap's d-print-none; these
    unlock the flex/grid layout itself (including the height clamp above) so
    the preview page can flow naturally across printed pages instead of
