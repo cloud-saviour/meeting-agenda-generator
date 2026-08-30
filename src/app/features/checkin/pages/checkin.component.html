@@ -1,5 +1,6 @@
 <app-navbar title="Meeting Check-in" [fixed]="true"
   [links]="[
+    { label: '👁 Preview Agenda', path: '/preview', queryParams: { meeting: meetingId } },
     { label: '📝 Agenda Editor', path: '/admin' },
     { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
     { label: '🏠 Home', path: '/' }

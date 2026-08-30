@@ -1,0 +1,21 @@
+<app-navbar title="Agenda Preview" [fixed]="true"
+  [links]="[
+    { label: '👥 Check-in', path: '/checkin', queryParams: { meeting: meetingId } },
+    { label: '🏠 Home', path: '/' }
+  ]">
+  <button class="btn btn-outline-light btn-sm" (click)="refresh()">
+    {{ refreshed ? '✓ Refreshed' : '🔄 Refresh' }}
+  </button>
+</app-navbar>
+
+<div style="margin-top:64px;">
+  @if (found) {
+    <div class="bg-body-secondary d-flex justify-content-center p-4">
+      <app-agenda-preview></app-agenda-preview>
+    </div>
+  } @else {
+    <div class="container text-center py-5" style="max-width:500px;">
+      <p class="text-muted">No agenda has been published for this meeting yet. Check back closer to the meeting.</p>
+    </div>
+  }
+</div>

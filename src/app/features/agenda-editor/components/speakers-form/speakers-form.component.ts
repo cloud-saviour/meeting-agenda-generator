@@ -1,6 +1,5 @@
 import { Component, inject } from '@angular/core';
 import { AgendaStateService } from '../../services/agenda-state.service';
-import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
 
 @Component({
   selector: 'app-speakers-form',
@@ -9,8 +8,6 @@ import { RoleDefinitionService } from '../../../../core/services/role-definition
 })
 export class SpeakersFormComponent {
   readonly state = inject(AgendaStateService);
-  readonly roleDefs = inject(RoleDefinitionService);
-  readonly activeRoles = this.roleDefs.activeRoles;
   get spks() { return this.state.spks(); }
   add() { this.state.addSpeaker(); }
   remove(id: number) { this.state.removeSpeaker(id); }

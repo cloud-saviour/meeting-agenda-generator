@@ -95,7 +95,7 @@
                   <td>{{ s.timeLo }}-{{ s.timeHi }} mins</td>
                   <td>{{ s.title || '—' }}</td>
                   <td>
-                    @if (resolveRole(s.roleId, s.roleVisible); as srole) { <b>{{ srole }}:</b> }
+                    @if (resolveRole(s.roleId, true); as srole) { <b>{{ srole }}:</b> }
                     {{ s.evaluator || '—' }}
                   </td>
                 </tr>
@@ -110,7 +110,7 @@
               @for (s of spks; track s.id) {
                 <tr>
                   <td>
-                    @if (resolveRole(s.roleId, s.roleVisible); as srole) { <b>{{ srole }}:</b> }
+                    @if (resolveRole(s.roleId, true); as srole) { <b>{{ srole }}:</b> }
                     {{ s.evaluator || '—' }}
                   </td>
                   <td>2–4 mins</td>

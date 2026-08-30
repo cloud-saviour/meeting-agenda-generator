@@ -295,7 +295,7 @@ function buildDataTable<T>(
 }
 
 function evaluatorCell(s: Speaker, roleLabelById: Map<string, string>): string {
-  const label = s.roleVisible !== false ? (roleLabelById.get(s.roleId ?? '') ?? '') : '';
+  const label = roleLabelById.get(s.roleId ?? '') ?? '';
   const name = s.evaluator || '';
   if (label && name) return `${label}: ${name}`;
   return label || name || '—';
