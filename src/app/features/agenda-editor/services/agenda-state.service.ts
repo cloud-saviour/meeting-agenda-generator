@@ -141,14 +141,28 @@ export class AgendaStateService {
   }
 
   updateAgItem(id: number, field: string, value: any): void {
-    this.agItems.update((items) =>
-      items.map((i) => (i.id === id ? ({ ...i, [field]: value } as AgendaItem) : i))
-    );
+    this.agItems.update((items) => {
+      const before = items.find((i) => i.id === id);
+      let updated = items.map((i) => (i.id === id ? ({ ...i, [field]: value } as AgendaItem) : i));
+      const edited = updated.find((i) => i.id === id);
+      if (edited?.type !== 'row') return updated;
+
+      if (field === 'person' && edited.roleId) {
+        updated = this.applyGroupPerson(updated, edited.roleId, value);
+      } else if (field === 'roleId' && value && before?.type === 'row' && before.roleId !== value) {
+        const groupPerson = this.findGroupPerson(updated, value, { id });
+        updated = this.applyGroupPerson(updated, value, groupPerson);
+      }
+      return updated;
+    });
   }
 
   updateDualSubItem(id: number, subIdx: 0 | 1, field: string, value: any): void {
-    this.agItems.update((items) =>
-      items.map((i) => {
+    this.agItems.update((items) => {
+      const beforeItem = items.find((i) => i.id === id);
+      const beforeSub = beforeItem?.type === 'dual' ? beforeItem.items[subIdx] : undefined;
+
+      let updated = items.map((i) => {
         if (i.id !== id || i.type !== 'dual') return i;
         const newSubs: [typeof i.items[0], typeof i.items[1]] = [
           { ...i.items[0] },
@@ -156,8 +170,73 @@ export class AgendaStateService {
         ];
         newSubs[subIdx] = { ...newSubs[subIdx], [field]: value };
         return { ...i, items: newSubs } as AgendaItem;
-      })
-    );
+      });
+      const editedItem = updated.find((i) => i.id === id);
+      const editedSub = editedItem?.type === 'dual' ? editedItem.items[subIdx] : undefined;
+      if (!editedSub) return updated;
+
+      if (field === 'person' && editedSub.roleId) {
+        updated = this.applyGroupPerson(updated, editedSub.roleId, value);
+      } else if (field === 'roleId' && value && beforeSub && beforeSub.roleId !== value) {
+        const groupPerson = this.findGroupPerson(updated, value, { id, subIdx });
+        updated = this.applyGroupPerson(updated, value, groupPerson);
+      }
+      return updated;
+    });
+  }
+
+  // ── Role/person sync helpers ─────────────────────────────────────────────
+  // The same roleId legitimately appears in multiple agenda rows (e.g.
+  // "Timekeeper (explain role)" and "Timekeeper's Report" both use `timer`).
+  // These keep every row/dual-sub-item sharing a roleId showing the same
+  // person, in sync in both directions: editing or clearing the name on any
+  // one of them propagates to the rest, and reassigning a row/sub-item's
+  // role pulls in whatever name the rest of the new group already has (or
+  // clears it, if the new group has none yet).
+
+  /**
+   * First person found for roleId elsewhere in the agenda, skipping only the
+   * specific row or dual sub-item identified by `exclude` — not its sibling
+   * sub-item, which may independently hold the same roleId and must still be
+   * considered (and never accidentally wiped by the caller treating "the
+   * whole dual container" as excluded).
+   */
+  private findGroupPerson(
+    items: AgendaItem[],
+    roleId: string,
+    exclude?: { id: number; subIdx?: 0 | 1 }
+  ): string {
+    for (const i of items) {
+      if (i.type === 'row') {
+        if (i.roleId !== roleId) continue;
+        if (exclude?.id === i.id && exclude.subIdx === undefined) continue;
+        return i.person;
+      }
+      if (i.type === 'dual') {
+        if (i.items[0].roleId === roleId && !(exclude?.id === i.id && exclude.subIdx === 0)) {
+          return i.items[0].person;
+        }
+        if (i.items[1].roleId === roleId && !(exclude?.id === i.id && exclude.subIdx === 1)) {
+          return i.items[1].person;
+        }
+      }
+    }
+    return '';
+  }
+
+  /** Sets person on every row/dual-sub-item whose roleId matches, leaving everything else untouched. */
+  private applyGroupPerson(items: AgendaItem[], roleId: string, person: string): AgendaItem[] {
+    return items.map((i) => {
+      if (i.type === 'row' && i.roleId === roleId) {
+        return i.person === person ? i : { ...i, person };
+      }
+      if (i.type === 'dual') {
+        const a = i.items[0].roleId === roleId ? { ...i.items[0], person } : i.items[0];
+        const b = i.items[1].roleId === roleId ? { ...i.items[1], person } : i.items[1];
+        return a === i.items[0] && b === i.items[1] ? i : { ...i, items: [a, b] as [typeof a, typeof b] };
+      }
+      return i;
+    });
   }
 
   moveAgItem(fromIdx: number, toIdx: number): void {
