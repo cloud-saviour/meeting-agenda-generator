@@ -3,10 +3,14 @@
   <!-- APP BAR -->
   <app-navbar title="Agora Agenda Creator" [printHidden]="true"
     [links]="[
-      { label: '👥 Meeting Check-in', path: '/checkin' },
+      { label: '👥 Meeting Check-in', path: '/checkin', queryParams: { meeting: state.meeting().no } },
+      { label: '📋 My Agendas', path: '/admin/agendas' },
       { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
       { label: '🏠 Home', path: '/' }
     ]">
+    <button class="btn btn-outline-light btn-sm" (click)="newAgenda()" title="Start a new agenda — the current one is already saved">
+      🆕 New Agenda
+    </button>
     <button class="btn btn-outline-light btn-sm" (click)="saveJSON()">&#128190; Export JSON</button>
     <button class="btn btn-outline-light btn-sm" (click)="loadJSON()">&#128193; Import JSON</button>
     <button class="btn btn-outline-light btn-sm" [disabled]="docxBusy" (click)="generateDocx()">

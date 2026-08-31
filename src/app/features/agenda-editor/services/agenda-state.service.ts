@@ -13,18 +13,9 @@ import { CommitteeRosterService } from './committee-roster.service';
 const DEFAULT_LOGO_LEFT = 'logo.png';
 const DEFAULT_LOGO_RIGHT = 'crown.png';
 
-@Injectable({ providedIn: 'root' })
-export class AgendaStateService {
-  private readonly roleDefs = inject(RoleDefinitionService);
-  private readonly committeeRoster = inject(CommitteeRosterService);
-
-  // ── Private counters ──────────────────────────────────────────────────────
-  private agId = 0;
-  private spId = 0;
-
-  // ── State signals ─────────────────────────────────────────────────────────
-  readonly meeting = signal<MeetingData>({
-    no: '160',
+function defaultMeeting(no: string): MeetingData {
+  return {
+    no,
     date: new Date().toISOString().slice(0, 10),
     arr: '18:00',
     st: '18:15',
@@ -42,7 +33,24 @@ export class AgendaStateService {
     period: 'Aug 2025 – February 2026',
     web: 'http://www.agoraspeakers.org/',
     fb: 'Agora Speakers South Africa',
-  });
+  };
+}
+
+@Injectable({ providedIn: 'root' })
+export class AgendaStateService {
+  private readonly roleDefs = inject(RoleDefinitionService);
+  private readonly committeeRoster = inject(CommitteeRosterService);
+
+  // ── Private counters ──────────────────────────────────────────────────────
+  private agId = 0;
+  private spId = 0;
+
+  // ── State signals ─────────────────────────────────────────────────────────
+  // Blank `no` on construction, deliberately — same reasoning as resetAll():
+  // with auto-save now live, a non-blank default here would let the very
+  // first page load of /admin silently overwrite a real saved agenda under
+  // whatever number was hardcoded, before the admin touches anything.
+  readonly meeting = signal<MeetingData>(defaultMeeting(''));
 
   readonly spks = signal<Speaker[]>([]);
 
@@ -275,6 +283,25 @@ export class AgendaStateService {
   resetToDefaultAgenda(): void {
     this.agId = 0;
     this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));
+  }
+
+  /**
+   * Full reset for "New Agenda" — blanks the meeting number deliberately (see
+   * SavedAgendaService/AgendaEditorComponent's auto-save guard) so the fresh
+   * agenda stays un-addressable, and doesn't overwrite any other meeting's
+   * saved copy, until the admin types a real number into the meeting-details
+   * form. `cmt` is intentionally left untouched — stays seeded from the
+   * persistent committee roster, same as construction.
+   */
+  resetAll(): void {
+    this.agId = 0;
+    this.spId = 0;
+    this.meeting.set(defaultMeeting(''));
+    this.spks.set([]);
+    this.overriddenRoles.set(new Set());
+    this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));
+    this.logoLeft.set(DEFAULT_LOGO_LEFT);
+    this.logoRight.set(DEFAULT_LOGO_RIGHT);
   }
 
   /** Replaces agenda items wholesale (e.g. from an imported snapshot) and resets the id counter. */

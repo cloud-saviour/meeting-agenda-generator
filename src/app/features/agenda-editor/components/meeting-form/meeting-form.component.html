@@ -8,7 +8,12 @@
     </div>
     <div class="col-4">
       <label class="form-label small mb-1">Meeting Date</label>
-      <input class="form-control form-control-sm" type="date" [value]="m.date" (input)="update('date', $any($event.target).value)">
+      <input class="form-control form-control-sm" type="date" [value]="m.date" [min]="todayStr"
+        [class.is-invalid]="dateError" title="Meeting date can't be in the past"
+        (input)="updateDate($any($event.target).value)">
+      @if (dateError) {
+        <div class="text-danger small mt-1">{{ dateError }}</div>
+      }
     </div>
     <div class="col-4">
       <label class="form-label small mb-1">Arrival Time</label>

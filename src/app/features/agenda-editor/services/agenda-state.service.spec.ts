@@ -304,3 +304,58 @@ describe('AgendaStateService — role/person sync across agenda items', () => {
     expect(dual.items[1].person).toBe('Alice');
   });
 });
+
+describe('AgendaStateService — resetAll', () => {
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('blanks the meeting number, deliberately, so the fresh agenda stays un-addressable', () => {
+    const { state } = makeService();
+    state.updateMeeting({ no: '160', theme: 'Something' });
+
+    state.resetAll();
+
+    expect(state.meeting().no).toBe('');
+  });
+
+  it('clears speakers and overridden roles', () => {
+    const { state } = makeService();
+    state.addSpeaker({ name: 'Alice' });
+    state.setRoleOverridden('timer', true);
+
+    state.resetAll();
+
+    expect(state.spks()).toEqual([]);
+    expect(state.overriddenRoles().size).toBe(0);
+  });
+
+  it('resets agenda items back to the default template', () => {
+    const { state } = makeService();
+    const defaultLength = state.agItems().length;
+    state.agItems.set([]);
+
+    state.resetAll();
+
+    expect(state.agItems().length).toBe(defaultLength);
+  });
+
+  it('leaves the committee roster untouched', () => {
+    const { state } = makeService();
+    state.updateCommitteeMember(0, 'name', 'Persisted Name');
+    const cmtBefore = state.cmt();
+
+    state.resetAll();
+
+    expect(state.cmt()).toEqual(cmtBefore);
+  });
+
+  it('resets logos back to their defaults', () => {
+    const { state } = makeService();
+    state.setLogo('left', 'data:custom-logo');
+
+    state.resetAll();
+
+    expect(state.logoLeft()).toBe('logo.png');
+  });
+});

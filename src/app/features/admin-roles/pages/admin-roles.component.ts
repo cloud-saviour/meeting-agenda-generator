@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+import { AgendaStateService } from '../../agenda-editor/services/agenda-state.service';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
 @Component({
@@ -11,6 +12,7 @@ import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 })
 export class AdminRolesComponent {
   readonly roleDefs = inject(RoleDefinitionService);
+  readonly state = inject(AgendaStateService);
 
   newLabel = '';
   newDescription = '';

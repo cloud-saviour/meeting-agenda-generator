@@ -10,7 +10,9 @@
 <div class="container py-4" style="max-width:760px;margin-top:64px;">
 
   <div class="card p-3 mb-3 border-start border-danger border-4">
-    <h2 class="fs-5">{{ state.meeting().theme || 'Upcoming Meeting' }}</h2>
+    <h2 class="fs-5">
+      {{ state.meeting().theme || 'Upcoming Meeting' }}{{ meetingId !== 'default' ? ' #' + meetingId : '' }}
+    </h2>
     <div class="d-flex flex-wrap gap-3 text-muted small">
       <span>Date: <b class="text-body">{{ dateStr || 'TBC' }}</b></span>
       <span>Starts: <b class="text-body">{{ state.meeting().start }}</b></span>

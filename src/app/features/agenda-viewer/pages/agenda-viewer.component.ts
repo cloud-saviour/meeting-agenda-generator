@@ -27,7 +27,8 @@ export class AgendaViewerComponent {
   refreshed = false;
 
   constructor() {
-    this.meetingId = this.route.snapshot.queryParamMap.get('meeting') ?? 'default';
+    // `||`, not `??` — an empty-but-present `?meeting=` must fall back to 'default' too.
+    this.meetingId = this.route.snapshot.queryParamMap.get('meeting') || 'default';
     this.load();
   }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { PublishedAgendaService } from './published-agenda.service';
 import { StorageService } from '../../../core/services/storage.service';
@@ -110,5 +110,71 @@ describe('PublishedAgendaService', () => {
 
     expect(() => service.loadMeeting('160')).not.toThrow();
     expect(service.current()).toBeNull();
+  });
+
+  it('entries() lists every published meeting, sorted by date ascending', () => {
+    const service = makeService();
+    service.publish('161', makeSnapshot({ no: '161', date: '2026-09-15', theme: 'Later' }));
+    service.publish('160', makeSnapshot({ no: '160', date: '2026-08-29', theme: 'Earlier' }));
+
+    expect(service.entries().map((e) => e.no)).toEqual(['160', '161']);
+  });
+
+  it('republishing the same meeting number upserts the index entry rather than duplicating', () => {
+    const service = makeService();
+    service.publish('160', makeSnapshot({ no: '160', theme: 'First' }));
+    service.publish('160', makeSnapshot({ no: '160', theme: 'Second' }));
+
+    const entries = service.entries();
+    expect(entries.length).toBe(1);
+    expect(entries[0].theme).toBe('Second');
+  });
+
+  it('nearestEntry() is null when nothing has ever been published', () => {
+    const service = makeService();
+
+    expect(service.nearestEntry()).toBeNull();
+  });
+
+  it('nearestEntry() picks the nearest upcoming (today-or-later) published meeting', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-31T12:00:00Z'));
+      const service = makeService();
+      service.publish('165', makeSnapshot({ no: '165', date: '2026-10-01', theme: 'Far Future' }));
+      service.publish('160', makeSnapshot({ no: '160', date: '2026-09-05', theme: 'Near Future' }));
+      service.publish('159', makeSnapshot({ no: '159', date: '2026-08-01', theme: 'Past' }));
+
+      expect(service.nearestEntry()?.no).toBe('160');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('nearestEntry() falls back to the most recent past meeting when nothing is upcoming', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-31T12:00:00Z'));
+      const service = makeService();
+      service.publish('158', makeSnapshot({ no: '158', date: '2026-07-01', theme: 'Older' }));
+      service.publish('159', makeSnapshot({ no: '159', date: '2026-08-01', theme: 'Most Recent Past' }));
+
+      expect(service.nearestEntry()?.no).toBe('159');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('nearestEntry() treats today\'s date as upcoming, not past', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-31T12:00:00Z'));
+      const service = makeService();
+      service.publish('160', makeSnapshot({ no: '160', date: '2026-08-31', theme: 'Today' }));
+
+      expect(service.nearestEntry()?.no).toBe('160');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
