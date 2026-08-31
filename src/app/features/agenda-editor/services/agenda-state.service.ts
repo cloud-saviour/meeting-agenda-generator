@@ -56,6 +56,11 @@ export class AgendaStateService {
 
   readonly agItems = signal<AgendaItem[]>(defaultAgenda(this.cmt(), () => ++this.agId));
 
+  // Role ids the admin has taken over from check-in (see setRoleOverridden) —
+  // excluded from future "Pull from Check-in" imports, and pushed to
+  // CheckinStateService so members can no longer claim them either.
+  readonly overriddenRoles = signal<Set<string>>(new Set());
+
   readonly logoLeft = signal<string>(DEFAULT_LOGO_LEFT);
   readonly logoRight = signal<string>(DEFAULT_LOGO_RIGHT);
 
@@ -237,6 +242,25 @@ export class AgendaStateService {
       }
       return i;
     });
+  }
+
+  // ── Check-in override ─────────────────────────────────────────────────────
+  setRoleOverridden(roleId: string, overridden: boolean): void {
+    this.overriddenRoles.update((s) => {
+      const next = new Set(s);
+      overridden ? next.add(roleId) : next.delete(roleId);
+      return next;
+    });
+  }
+
+  /** Sets person for every row/dual-sub-item sharing roleId — the public entry point for the check-in live sync. */
+  applyRolePerson(roleId: string, person: string): void {
+    this.agItems.update((items) => this.applyGroupPerson(items, roleId, person));
+  }
+
+  /** Current person for roleId (first row/dual-sub-item match, '' if none) — read counterpart to applyRolePerson. */
+  getRolePerson(roleId: string): string {
+    return this.findGroupPerson(this.agItems(), roleId);
   }
 
   moveAgItem(fromIdx: number, toIdx: number): void {

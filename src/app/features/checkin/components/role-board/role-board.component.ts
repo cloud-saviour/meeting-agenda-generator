@@ -27,6 +27,10 @@ export class RoleBoardComponent {
     return !!(r && r.uid && r.uid !== this.state.currentUid);
   }
 
+  isLocked(roleId: string): boolean {
+    return this.state.lockedRoles().includes(roleId);
+  }
+
   claim(roleId: string) {
     this.claimError = null;
     if (!this.state.currentName()) {

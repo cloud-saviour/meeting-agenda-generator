@@ -95,4 +95,6 @@ export interface AgendaSnapshot extends MeetingData {
   cmt: CommitteeMember[];
   logoLeft?: string;
   logoRight?: string;
+  /** Role ids the admin has taken over from check-in — see AgendaStateService.overriddenRoles. */
+  overriddenRoles?: string[];
 }

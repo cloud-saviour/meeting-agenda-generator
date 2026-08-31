@@ -33,4 +33,6 @@ export interface CheckinSnapshot {
   attendees: Attendee[];
   roles: Record<string, RoleClaim>;
   speakers: CheckinSpeaker[];
+  /** Role ids the organizer has taken over in the Agenda Editor — hidden from claiming here. */
+  lockedRoles: string[];
 }
