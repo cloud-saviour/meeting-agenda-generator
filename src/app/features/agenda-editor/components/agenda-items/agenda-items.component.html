@@ -57,6 +57,11 @@
               <input type="checkbox" class="form-check-input flex-shrink-0" title="Show role in printed agenda"
                 [checked]="$any(item).roleVisible"
                 (change)="update(item.id, 'roleVisible', $any($event.target).checked)">
+              @if (editMode && isCheckinRole($any(item).roleId)) {
+                <input type="checkbox" class="form-check-input flex-shrink-0" title="🔒 Lock this role from check-in claiming — admin-assigned"
+                  [checked]="isOverridden($any(item).roleId)"
+                  (change)="toggleOverride($any(item).roleId, $any($event.target).checked)">
+              }
               <input class="form-control form-control-sm" style="flex:1.5;min-width:0" type="text" [value]="$any(item).person || ''" placeholder="Person"
                 (input)="update(item.id, 'person', $any($event.target).value)">
               <input class="form-control form-control-sm text-center" style="width:52px;flex-shrink:0" type="number" [value]="$any(item).duration || 0" min="0" title="Duration (mins)"
@@ -121,6 +126,11 @@
               <input type="checkbox" class="form-check-input flex-shrink-0" title="Show role in printed agenda"
                 [checked]="$any(item).items[0].roleVisible"
                 (change)="updateDual(item.id, 0, 'roleVisible', $any($event.target).checked)">
+              @if (editMode && isCheckinRole($any(item).items[0].roleId)) {
+                <input type="checkbox" class="form-check-input flex-shrink-0" title="🔒 Lock this role from check-in claiming — admin-assigned"
+                  [checked]="isOverridden($any(item).items[0].roleId)"
+                  (change)="toggleOverride($any(item).items[0].roleId, $any($event.target).checked)">
+              }
               <input class="form-control form-control-sm" style="flex:1.5;min-width:0" type="text" [value]="$any(item).items[0].person || ''" placeholder="Person A"
                 (input)="updateDual(item.id, 0, 'person', $any($event.target).value)">
               <input class="form-control form-control-sm text-center" style="width:52px;flex-shrink:0" type="number" [value]="$any(item).durationA || 10" min="0" title="Line A duration (mins)"
@@ -155,6 +165,11 @@
               <input type="checkbox" class="form-check-input flex-shrink-0" title="Show role in printed agenda"
                 [checked]="$any(item).items[1].roleVisible"
                 (change)="updateDual(item.id, 1, 'roleVisible', $any($event.target).checked)">
+              @if (editMode && isCheckinRole($any(item).items[1].roleId)) {
+                <input type="checkbox" class="form-check-input flex-shrink-0" title="🔒 Lock this role from check-in claiming — admin-assigned"
+                  [checked]="isOverridden($any(item).items[1].roleId)"
+                  (change)="toggleOverride($any(item).items[1].roleId, $any($event.target).checked)">
+              }
               <input class="form-control form-control-sm" style="flex:1.5;min-width:0" type="text" [value]="$any(item).items[1].person || ''" placeholder="Person B"
                 (input)="updateDual(item.id, 1, 'person', $any($event.target).value)">
               <span class="text-muted small text-center" style="width:52px;flex-shrink:0">spks</span>

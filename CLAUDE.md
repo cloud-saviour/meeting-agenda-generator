@@ -79,14 +79,41 @@ Role/evaluator claims are first-come-first-served — `CheckinStateService`
 enforces "only the current claimant can release their own claim" and blocks
 self-evaluation.
 
-These two pages are linked one way: the agenda editor has a "🔗 Share
-Check-in Link" button that copies `/checkin?meeting=<no>` (using the
-agenda's own meeting number) to the clipboard — check-in data is isolated
-per meeting number (`CheckinStateService.loadMeeting()`, keyed by
-`?meeting=`), so different meetings don't share a sheet. What's still
-missing is the other direction: pushing confirmed check-in data (who's
-speaking, who claimed what) back into the agenda editor's form fields is
-planned but not built.
+These two pages are now linked both ways, via the agenda's own meeting
+number. Editor → check-in: a "🔗 Share Check-in Link" button copies
+`/checkin?meeting=<no>` to the clipboard — check-in data is isolated per
+meeting number (`CheckinStateService.loadMeeting()`, keyed by `?meeting=`),
+so different meetings don't share a sheet.
+
+Check-in → editor is automatic, not a button: `AgendaEditorComponent`
+applies the current check-in snapshot for the agenda's meeting number (a)
+on load and whenever the meeting number field changes (an `effect()` over
+a `computed(() => state.meeting().no)`, so it only fires on an actual
+number change, not on every unrelated meeting-details edit), and (b) live,
+whenever another tab of the *same browser* writes to that meeting's
+check-in `localStorage` key — via a `window.addEventListener('storage', ...)`
+listener (native `storage` events only fire in *other* tabs than the one
+that wrote, which is exactly what's needed here; matched against the key
+using the exported `checkinStorageKey()` helper from
+`checkin-state.service.ts`). Applying a snapshot (a) overwrites the
+`person` field on every agenda row/dual-sub-item whose `roleId` has a
+current check-in claim (via `AgendaStateService.applyRolePerson()`,
+reusing the same role/person group-sync mechanism agenda items already use
+internally), leaving a role's existing value untouched if check-in has no
+claim for it yet, and (b) imports any check-in speaker signup not already
+present in the Prepared Speakers list by name. The admin can mark any role
+as **overridden** (a checkbox in the Agenda Items edit panel, per role) to
+take it over entirely: an overridden role is skipped by future syncs and
+disappears from the check-in role board (`CheckinStateService.lockedRoles`/
+`setRoleLocked()` — enforced in `claimRole()`/`releaseRole()`, not just the
+UI), so members can no longer claim or release it. `AgendaStateService.overriddenRoles`
+round-trips through Export/Import JSON (`AgendaSnapshot.overriddenRoles`).
+
+**This "live" sync is same-browser-only** — there is still no cross-device
+push (a member checking in on their own phone won't reach the admin's
+laptop until that admin's `/admin` tab is reloaded/revisited) — see
+Persistence below on why, and on the planned Firestore swap that would
+make it genuinely cross-device.
 
 ## Persistence — deliberately localStorage, not Firebase (for now)
 
@@ -147,12 +174,10 @@ debug from the rendered output alone.
 2. Multi-tenant support — multiple clubs, real user accounts (Firebase Auth),
    admin-managed yearly subscriptions (manually flagged for now, modeled to
    slot in real payments later without a schema rewrite)
-3. Push confirmed check-in data (roles claimed, speakers signed up) back into
-   the agenda editor's form fields — the other half of wiring the two features
-   together. ("Share check-in link" from the editor, and per-meeting check-in
-   isolation via `?meeting=<no>`, are done — see above.)
-4. Admin console for the check-in page: reset a role, cap speaker slots,
-   lock the sheet once the meeting starts
+3. Admin console for the check-in page: reset a role, cap speaker slots,
+   lock the sheet once the meeting starts (role-locking now exists per-role
+   via the editor's override toggle — see above — but there's no bulk
+   "lock everything" or "reset this role" control yet)
 
 ## Local dev
 

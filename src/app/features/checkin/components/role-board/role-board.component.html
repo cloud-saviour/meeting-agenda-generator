@@ -6,7 +6,9 @@
   <div class="list-group list-group-flush">
     @for (def of activeRoles(); track def.id) {
       <div class="list-group-item d-flex align-items-center gap-2">
-        @if (isMine(def.id)) {
+        @if (isLocked(def.id)) {
+          <span class="badge bg-secondary-subtle text-secondary-emphasis">🔒 Assigned by organizer</span>
+        } @else if (isMine(def.id)) {
           <span class="badge bg-warning-subtle text-warning-emphasis">Yours</span>
         } @else if (isTaken(def.id)) {
           <span class="badge bg-danger-subtle text-danger-emphasis">Taken</span>
@@ -17,10 +19,12 @@
         @if (roles[def.id]?.uid) {
           <span class="text-muted small">{{ roles[def.id].name }}</span>
         }
-        @if (isMine(def.id)) {
-          <button class="btn btn-outline-secondary btn-sm" (click)="release(def.id)">Release</button>
-        } @else if (!isTaken(def.id)) {
-          <button class="btn btn-danger btn-sm" (click)="claim(def.id)">Claim</button>
+        @if (!isLocked(def.id)) {
+          @if (isMine(def.id)) {
+            <button class="btn btn-outline-secondary btn-sm" (click)="release(def.id)">Release</button>
+          } @else if (!isTaken(def.id)) {
+            <button class="btn btn-danger btn-sm" (click)="claim(def.id)">Claim</button>
+          }
         }
       </div>
     }

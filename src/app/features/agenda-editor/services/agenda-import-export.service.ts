@@ -21,6 +21,7 @@ export class AgendaImportExportService {
       cmt: JSON.parse(JSON.stringify(s.cmt())),
       logoLeft: s.logoLeft(),
       logoRight: s.logoRight(),
+      overriddenRoles: [...s.overriddenRoles()],
     } as AgendaSnapshot;
   }
 
@@ -33,7 +34,7 @@ export class AgendaImportExportService {
   }
 
   loadSnapshot(data: AgendaSnapshot): void {
-    const { agItems, spks, cmt, logoLeft, logoRight, ...meetingData } = data;
+    const { agItems, spks, cmt, logoLeft, logoRight, overriddenRoles, ...meetingData } = data;
 
     this.state.meeting.set(meetingData as MeetingData);
     this.state.setAgItemsFromSnapshot(agItems);
@@ -48,5 +49,6 @@ export class AgendaImportExportService {
     if (logoRight !== undefined) {
       this.state.logoRight.set(logoRight);
     }
+    this.state.overriddenRoles.set(new Set(overriddenRoles ?? []));
   }
 }

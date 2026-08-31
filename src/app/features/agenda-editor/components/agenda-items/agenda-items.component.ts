@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, EventEmitter, Output, inject } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
 import { AgendaStateService } from '../../services/agenda-state.service';
@@ -19,6 +19,9 @@ export class AgendaItemsComponent {
   readonly activeRoles = this.roleDefs.activeRoles;
   readonly activeCommitteeRoles = this.committeeRoleDefs.activeRoles;
   editMode = false;
+
+  /** Bubbles up to the page controller, which pushes the lock into CheckinStateService for the current meeting. */
+  @Output() roleOverrideChanged = new EventEmitter<{ roleId: string; overridden: boolean }>();
 
   get items() {
     return this.state.agItems();
@@ -60,6 +63,20 @@ export class AgendaItemsComponent {
     if (!value) return;
     this.state.updateDualSubItem(id, subIdx, 'roleId', value);
     this.state.updateDualSubItem(id, subIdx, 'customRoleLabel', null);
+  }
+
+  /** Only roles claimable at check-in can be overridden — committee/custom rows have nothing to lock there. */
+  isCheckinRole(roleId: string): boolean {
+    return this.activeRoles().some((r) => r.id === roleId);
+  }
+
+  isOverridden(roleId: string): boolean {
+    return this.state.overriddenRoles().has(roleId);
+  }
+
+  toggleOverride(roleId: string, overridden: boolean) {
+    this.state.setRoleOverridden(roleId, overridden);
+    this.roleOverrideChanged.emit({ roleId, overridden });
   }
 
   typeBadge(type: string): string {

@@ -18,6 +18,16 @@ function makeId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+/**
+ * The localStorage key a given meeting's check-in sheet lives under — exported so
+ * other features (e.g. the Agenda Editor's live check-in sync) can recognize a
+ * `storage` event as "this is my meeting's check-in data" without reaching into
+ * CheckinStateService's private state.
+ */
+export function checkinStorageKey(meetingId: string): string {
+  return meetingId === 'default' ? STORAGE_KEY : `${STORAGE_KEY}-${meetingId}`;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CheckinStateService {
   private readonly roleDefs = inject(RoleDefinitionService);
@@ -36,6 +46,7 @@ export class CheckinStateService {
   readonly attendees = computed(() => this.snapshot().attendees);
   readonly roles = computed(() => this.snapshot().roles);
   readonly speakers = computed(() => this.snapshot().speakers);
+  readonly lockedRoles = computed(() => this.snapshot().lockedRoles);
 
   readonly isCheckedIn = computed(() =>
     this.attendees().some((a) => a.uid === this.currentUid)
@@ -54,7 +65,7 @@ export class CheckinStateService {
    * keeps working untouched; any other id gets its own `${STORAGE_KEY}-<id>` key.
    */
   loadMeeting(meetingId: string): void {
-    this.currentStorageKey = meetingId === 'default' ? STORAGE_KEY : `${STORAGE_KEY}-${meetingId}`;
+    this.currentStorageKey = checkinStorageKey(meetingId);
     this.snapshot.set(this.loadSnapshot(this.currentStorageKey, meetingId));
   }
 
@@ -95,9 +106,10 @@ export class CheckinStateService {
   }
 
   // ── Roles: first-come locking ────────────────────────────────────────
-  /** Returns true if the claim succeeded, false if the role was already taken. */
+  /** Returns true if the claim succeeded, false if the role was already taken or is organizer-locked. */
   claimRole(roleKey: string): boolean {
     if (!this.currentName()) return false;
+    if (this.snapshot().lockedRoles.includes(roleKey)) return false;
     const existing = this.snapshot().roles[roleKey];
     if (existing?.uid && existing.uid !== this.currentUid) return false;
 
@@ -108,12 +120,23 @@ export class CheckinStateService {
     return true;
   }
 
-  /** A member may only release their own claim. */
+  /** A member may only release their own claim; organizer-locked roles can't be released either. */
   releaseRole(roleKey: string): void {
     this.update((s) => {
+      if (s.lockedRoles.includes(roleKey)) return s;
       const existing = s.roles[roleKey];
       if (!existing || existing.uid !== this.currentUid) return s;
       return { ...s, roles: { ...s.roles, [roleKey]: { name: '', uid: '' } } };
+    });
+  }
+
+  // ── Roles: organizer override (from the Agenda Editor) ─────────────────
+  /** Locks or unlocks a role from being claimed/released here — set by the Agenda Editor's override toggle. */
+  setRoleLocked(roleId: string, locked: boolean): void {
+    this.update((s) => {
+      const set = new Set(s.lockedRoles);
+      locked ? set.add(roleId) : set.delete(roleId);
+      return { ...s, lockedRoles: [...set] };
     });
   }
 
@@ -232,6 +255,7 @@ export class CheckinStateService {
       attendees: [],
       roles: this.emptyRoles(),
       speakers: [],
+      lockedRoles: [],
     };
   }
 
@@ -242,6 +266,7 @@ export class CheckinStateService {
       attendees: [],
       roles: {},
       speakers: [],
+      lockedRoles: [],
     };
   }
 }

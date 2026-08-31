@@ -133,6 +133,58 @@ describe('CheckinStateService', () => {
     expect(service.meeting().id).toBe('999');
   });
 
+  it('setRoleLocked() toggles a role in and out of lockedRoles()', () => {
+    const service = makeService();
+    const roleKey = Object.keys(service.roles())[0];
+
+    service.setRoleLocked(roleKey, true);
+    expect(service.lockedRoles()).toContain(roleKey);
+
+    service.setRoleLocked(roleKey, false);
+    expect(service.lockedRoles()).not.toContain(roleKey);
+  });
+
+  it('claimRole() is a no-op on a locked role, even with a checked-in name', () => {
+    const service = makeService();
+    service.checkIn('Thabo M.');
+    const roleKey = Object.keys(service.roles())[0];
+    service.setRoleLocked(roleKey, true);
+
+    expect(service.claimRole(roleKey)).toBe(false);
+    expect(service.roles()[roleKey].uid).toBe('');
+  });
+
+  it('releaseRole() is a no-op on a locked role, even for the original claimant', () => {
+    const service = makeService();
+    service.checkIn('Thabo M.');
+    const roleKey = Object.keys(service.roles())[0];
+    service.claimRole(roleKey);
+    service.setRoleLocked(roleKey, true);
+
+    service.releaseRole(roleKey);
+    expect(service.roles()[roleKey].uid).toBe(service.currentUid);
+  });
+
+  it('loads old-shaped stored JSON (no lockedRoles key) safely, defaulting to an empty array', () => {
+    const fake = new FakeStorage();
+    fake.set(
+      'agora-checkin-data-777',
+      JSON.stringify({
+        meeting: { id: '777', date: '2026-01-01', theme: '', word: '', start: '18:15', maxSpeakers: 3 },
+        attendees: [],
+        roles: {},
+        speakers: [],
+        // lockedRoles intentionally omitted — simulates data saved before this field existed
+      })
+    );
+    TestBed.configureTestingModule({ providers: [{ provide: StorageService, useValue: fake }] });
+    const service = TestBed.inject(CheckinStateService);
+
+    service.loadMeeting('777');
+
+    expect(service.lockedRoles()).toEqual([]);
+  });
+
   it('loadMeeting("default") persists to the legacy fixed storage key, unsuffixed', () => {
     const fake = new FakeStorage();
     TestBed.configureTestingModule({ providers: [{ provide: StorageService, useValue: fake }] });

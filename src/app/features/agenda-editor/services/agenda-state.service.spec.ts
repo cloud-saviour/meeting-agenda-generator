@@ -220,6 +220,46 @@ describe('AgendaStateService — role/person sync across agenda items', () => {
     expect(state.agItems()[1]).toEqual(recess);
   });
 
+  it('setRoleOverridden() toggles a roleId in and out of overriddenRoles()', () => {
+    const { state } = makeService();
+
+    state.setRoleOverridden('timer', true);
+    expect(state.overriddenRoles().has('timer')).toBe(true);
+
+    state.setRoleOverridden('timer', false);
+    expect(state.overriddenRoles().has('timer')).toBe(false);
+  });
+
+  it('applyRolePerson() propagates to every row/dual-sub-item sharing that roleId, same as updateAgItem', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'timer'), rowItem(2, 'timer'), dualItem(3, 'timer', '', 'grammarian', '')]);
+
+    state.applyRolePerson('timer', 'Naledi K.');
+
+    const items = state.agItems();
+    expect((items[0] as any).person).toBe('Naledi K.');
+    expect((items[1] as any).person).toBe('Naledi K.');
+    expect((items[2] as any).items[0].person).toBe('Naledi K.');
+    expect((items[2] as any).items[1].person).toBe('');
+  });
+
+  it('getRolePerson() reflects whatever applyRolePerson last synced for that roleId', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'timer', ''), rowItem(2, 'timer', '')]);
+
+    expect(state.getRolePerson('timer')).toBe('');
+
+    state.applyRolePerson('timer', 'Naledi K.');
+    expect(state.getRolePerson('timer')).toBe('Naledi K.');
+  });
+
+  it('getRolePerson() returns an empty string when no item has that roleId', () => {
+    const { state } = makeService();
+    state.agItems.set([rowItem(1, 'timer', 'Naledi K.')]);
+
+    expect(state.getRolePerson('grammarian')).toBe('');
+  });
+
   it('propagates through updateDualSubItem the same way as updateAgItem', () => {
     const { state } = makeService();
     state.agItems.set([rowItem(1, 'timer'), dualItem(2, 'timer', '', 'grammarian', '')]);
