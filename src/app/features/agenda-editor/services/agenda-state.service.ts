@@ -1,4 +1,4 @@
-import { Injectable, inject, signal, computed } from '@angular/core';
+import { Injectable, inject, signal, computed, effect, untracked } from '@angular/core';
 import {
   AgendaItem,
   CommitteeMember,
@@ -91,6 +91,37 @@ export class AgendaStateService {
       : 'draft';
     return `Agora Agenda - Meeting ${d.no || '?'} - ${datePart}`;
   });
+
+  // Guards the one-time catch-up seed below — set on its first (and only) run.
+  private hasSeededFromCommitteeRoster = false;
+
+  constructor() {
+    // committeeRoster.all() is read synchronously above (meeting/cmt/agItems
+    // field initializers), but CommitteeRosterService is Firestore-backed —
+    // its real data arrives asynchronously even on the very first read, so
+    // those synchronous reads may have seeded from its pre-load placeholder.
+    // This effect catches up exactly once, the moment `ready()` flips true —
+    // NOT the moment `all()` first changes, since `all()`'s placeholder value
+    // is itself a defined, non-empty-looking array (7 blank slots), so the
+    // effect's own first (pre-Firestore) run would otherwise consume it and
+    // set the guard before real data ever arrives. After the real seed,
+    // `cmt` is the admin's independently-editable working copy, same as ever
+    // (see the `cmt` field comment above).
+    effect(() => {
+      const ready = this.committeeRoster.ready();
+      const roster = this.committeeRoster.all();
+      untracked(() => {
+        if (!ready || this.hasSeededFromCommitteeRoster) return;
+        this.hasSeededFromCommitteeRoster = true;
+        this.cmt.set(JSON.parse(JSON.stringify(roster)));
+        this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));
+        const vpEducation = roster.find((m) => m.roleId === 'vpEducation');
+        if (vpEducation?.name && !this.meeting().vpe) {
+          this.meeting.update((m) => ({ ...m, vpe: vpEducation.name }));
+        }
+      });
+    });
+  }
 
   // ── Meeting methods ───────────────────────────────────────────────────────
   updateMeeting(patch: Partial<MeetingData>): void {

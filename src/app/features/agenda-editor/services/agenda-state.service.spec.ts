@@ -24,11 +24,35 @@ class FakeStorage {
 // needing RoleDefinitionService's real Firestore dependency in this suite.
 const fakeRoleDefinitionService = { activeRoles: () => [] } as unknown as RoleDefinitionService;
 
+// CommitteeRosterService is Firestore-backed and its real data arrives
+// asynchronously even on the first read — this suite needs cmt/agItems/meeting
+// seeded synchronously at construction (as they always have been), so a plain
+// in-memory fake stands in, exactly like RoleDefinitionService's fake above.
+class FakeCommitteeRosterService {
+  private roster: CommitteeMember[] = Array.from({ length: 7 }, () => ({
+    roleId: '',
+    name: '',
+    email: '',
+    phone: '',
+  }));
+  all(): CommitteeMember[] {
+    return this.roster;
+  }
+  ready(): boolean {
+    return true;
+  }
+  replaceAll(members: CommitteeMember[]): Promise<void> {
+    this.roster = JSON.parse(JSON.stringify(members));
+    return Promise.resolve();
+  }
+}
+
 function makeService(): { state: AgendaStateService; roster: CommitteeRosterService } {
   TestBed.configureTestingModule({
     providers: [
       { provide: StorageService, useClass: FakeStorage },
       { provide: RoleDefinitionService, useValue: fakeRoleDefinitionService },
+      { provide: CommitteeRosterService, useClass: FakeCommitteeRosterService },
     ],
   });
   return {

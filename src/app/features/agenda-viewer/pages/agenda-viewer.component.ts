@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { PublishedAgendaService } from '../../agenda-editor/services/published-agenda.service';
 import { AgendaImportExportService } from '../../agenda-editor/services/agenda-import-export.service';
@@ -29,23 +29,25 @@ export class AgendaViewerComponent {
   constructor() {
     // `||`, not `??` — an empty-but-present `?meeting=` must fall back to 'default' too.
     this.meetingId = this.route.snapshot.queryParamMap.get('meeting') || 'default';
-    this.load();
+    this.publishedAgenda.loadMeeting(this.meetingId);
+
+    // Reactive, not a one-time synchronous read — current() only gets its
+    // real value once Firestore's onSnapshot delivers, and updates live from
+    // then on too (e.g. if the admin re-publishes while this page is open).
+    effect(() => {
+      const snapshot = this.publishedAgenda.current();
+      if (snapshot) {
+        this.importExport.loadSnapshot(snapshot);
+        this.found = true;
+      } else {
+        this.found = false;
+      }
+    });
   }
 
+  /** Data is already live via Firestore — this just reassures the viewer nothing's stale. */
   refresh() {
-    this.load();
     this.refreshed = true;
     setTimeout(() => (this.refreshed = false), 2000);
-  }
-
-  private load() {
-    this.publishedAgenda.loadMeeting(this.meetingId);
-    const snapshot = this.publishedAgenda.current();
-    if (snapshot) {
-      this.importExport.loadSnapshot(snapshot);
-      this.found = true;
-    } else {
-      this.found = false;
-    }
   }
 }
