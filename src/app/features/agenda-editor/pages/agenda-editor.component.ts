@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { AgendaStateService } from '../services/agenda-state.service';
 import { AgendaImportExportService } from '../services/agenda-import-export.service';
 import { PublishedAgendaService } from '../services/published-agenda.service';
+import { SavedAgendaService } from '../services/saved-agenda.service';
 import { CheckinStateService, checkinStorageKey } from '../../checkin/services/checkin-state.service';
 import { DocxService } from '../services/docx.service';
 import { MeetingFormComponent } from '../components/meeting-form/meeting-form.component';
@@ -30,6 +31,7 @@ export class AgendaEditorComponent implements OnDestroy {
   private readonly docxService = inject(DocxService);
   private readonly importExport = inject(AgendaImportExportService);
   private readonly publishedAgenda = inject(PublishedAgendaService);
+  private readonly savedAgendas = inject(SavedAgendaService);
   private readonly checkinState = inject(CheckinStateService);
   private readonly router = inject(Router);
 
@@ -58,6 +60,10 @@ export class AgendaEditorComponent implements OnDestroy {
   // the admin has since typed in by hand.
   private readonly lastSyncedPersonByRole = new Map<string, string>();
 
+  // Last serialized snapshot JSON actually written per meeting number — lets
+  // the auto-save effect below skip a no-op re-save (see its comment).
+  private readonly lastSavedJsonByNo = new Map<string, string>();
+
   constructor() {
     // A dedicated computed so the effect only re-runs when the meeting NUMBER
     // string actually changes — `state.meeting()` is one combined signal for
@@ -80,10 +86,53 @@ export class AgendaEditorComponent implements OnDestroy {
       });
     });
     window.addEventListener('storage', this.onCheckinStorageChange);
+
+    // Push meeting details (theme/date/word/start) into check-in's own
+    // CheckinMeeting record, so the header members see at /checkin reflects
+    // the real agenda instead of check-in's own separate, otherwise-never-set
+    // defaults. One-way (agenda is the source of truth) — nothing reads these
+    // fields back from check-in. Tracks the whole `meeting()` signal, same as
+    // the auto-save effect below, for the same reason: simplicity over
+    // narrowly scoping four fields, since loadMeeting()+updateMeeting() is
+    // cheap enough that re-running on an unrelated field edit is harmless.
+    effect(() => {
+      const m = this.state.meeting();
+      if (!m.no) return;
+      this.checkinState.loadMeeting(m.no);
+      this.checkinState.updateMeeting({ date: m.date, theme: m.theme, word: m.word, start: m.st });
+    });
+
+    // Auto-save: the mirror image of the check-in-sync effect above — this one
+    // SHOULD react to every edit, so no untracked() wrapping. getSnapshot()
+    // reads every relevant signal (meeting, agItems, spks, cmt, logos,
+    // overriddenRoles), so this naturally re-saves on any change anywhere in
+    // the agenda. SavedAgendaService never touches AgendaStateService's own
+    // signals, so there's no self-trigger risk.
+    //
+    // Skips the write entirely when the serialized snapshot is byte-identical
+    // to what was last saved for that meeting number — otherwise merely
+    // opening an already-saved agenda (loadSnapshot sets every signal, this
+    // effect's first run would re-save the same content) bumps `updatedAt`
+    // and reorders the "last edited" list even though nothing changed. Keyed
+    // per meeting number, not globally, so switching between agendas doesn't
+    // false-positive against a different agenda's last-saved content.
+    effect(() => {
+      const snapshot = this.importExport.getSnapshot();
+      if (!snapshot.no) return;
+      const json = JSON.stringify(snapshot);
+      if (this.lastSavedJsonByNo.get(snapshot.no) === json) return;
+      this.lastSavedJsonByNo.set(snapshot.no, json);
+      this.savedAgendas.save(snapshot);
+    });
   }
 
   ngOnDestroy() {
     window.removeEventListener('storage', this.onCheckinStorageChange);
+  }
+
+  /** Nothing to confirm — the previous agenda (if any) is already auto-saved under its own meeting number. */
+  newAgenda() {
+    this.state.resetAll();
   }
 
   publishAgenda() {

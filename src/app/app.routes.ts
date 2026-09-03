@@ -10,6 +10,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/agenda-editor/pages/agenda-editor.component').then((m) => m.AgendaEditorComponent),
   },
   {
+    path: 'admin/agendas',
+    loadComponent: () => import('./features/admin-agendas/pages/admin-agendas.component').then((m) => m.AdminAgendasComponent),
+  },
+  {
     path: 'admin/manage-roles',
     loadComponent: () => import('./features/admin-roles-hub/pages/admin-roles-hub.component').then((m) => m.AdminRolesHubComponent),
   },

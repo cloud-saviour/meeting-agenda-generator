@@ -1,7 +1,7 @@
 <app-navbar title="Manage Meeting Roles" [fixed]="true"
   [links]="[
     { label: '📝 Agenda Editor', path: '/admin' },
-    { label: '👥 Check-in', path: '/checkin' },
+    { label: '👥 Check-in', path: '/checkin', queryParams: { meeting: state.meeting().no } },
     { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
     { label: '🏠 Home', path: '/' }
   ]">

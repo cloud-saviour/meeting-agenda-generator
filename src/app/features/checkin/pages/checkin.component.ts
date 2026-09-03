@@ -29,7 +29,9 @@ export class CheckinComponent {
   meetingId: string;
 
   constructor() {
-    this.meetingId = this.route.snapshot.queryParamMap.get('meeting') ?? 'default';
+    // `||`, not `??` — an empty-but-present `?meeting=` (e.g. a nav link built
+    // from a blank meeting number) must fall back to 'default' too, not resolve to ''.
+    this.meetingId = this.route.snapshot.queryParamMap.get('meeting') || 'default';
     this.state.loadMeeting(this.meetingId);
     this.nameInput = this.state.currentName();
   }

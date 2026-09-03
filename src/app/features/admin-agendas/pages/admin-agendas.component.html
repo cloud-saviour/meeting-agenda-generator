@@ -1,0 +1,38 @@
+<app-navbar title="My Agendas" [fixed]="true"
+  [links]="[
+    { label: '📝 Agenda Editor', path: '/admin' },
+    { label: '👥 Check-in', path: '/checkin', queryParams: { meeting: state.meeting().no } },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:760px;margin-top:64px;">
+
+  <div class="card p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h3 class="section-title mb-0">Saved Agendas ({{ entries().length }})</h3>
+      <button class="btn btn-danger btn-sm" (click)="createNew()">+ New Agenda</button>
+    </div>
+
+    @if (entries().length === 0) {
+      <p class="text-muted small mb-0">No agendas saved yet — edits in the Agenda Editor save here automatically once a meeting number is set.</p>
+    } @else {
+      <div class="list-group list-group-flush">
+        @for (e of entries(); track e.no) {
+          <div class="list-group-item d-flex align-items-center gap-2">
+            <span class="badge bg-secondary" style="min-width:52px;">No. {{ e.no }}</span>
+            <span class="flex-grow-1 small">
+              <span class="fw-semibold">{{ e.theme || 'Untitled meeting' }}</span>
+              <span class="text-muted"> — {{ e.date || 'no date set' }}</span>
+              <br>
+              <span class="text-muted">Last edited {{ formatUpdatedAt(e.updatedAt) }}</span>
+            </span>
+            <button class="btn btn-outline-secondary btn-sm" (click)="open(e.no)">Open</button>
+            <button class="btn btn-outline-danger btn-sm" (click)="remove(e.no)">Delete</button>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+</div>
