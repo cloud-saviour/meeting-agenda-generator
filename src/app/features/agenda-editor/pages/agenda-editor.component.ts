@@ -55,6 +55,10 @@ export class AgendaEditorComponent {
   // are no longer free the way an in-memory/localStorage write was.
   private meetingSyncTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Debounce timer for the auto-save effect below — same reasoning, now that
+  // SavedAgendaService writes to Firestore instead of localStorage.
+  private agendaSaveTimer: ReturnType<typeof setTimeout> | undefined;
+
   constructor() {
     // A dedicated computed so the effect only re-runs when the meeting NUMBER
     // string actually changes — `state.meeting()` is one combined signal for
@@ -127,13 +131,18 @@ export class AgendaEditorComponent {
     // and reorders the "last edited" list even though nothing changed. Keyed
     // per meeting number, not globally, so switching between agendas doesn't
     // false-positive against a different agenda's last-saved content.
+    // Debounced, same reasoning as the meeting-sync effect above — this is
+    // now a real Firestore write per call, not a free in-memory one.
     effect(() => {
       const snapshot = this.importExport.getSnapshot();
       if (!snapshot.no) return;
       const json = JSON.stringify(snapshot);
       if (this.lastSavedJsonByNo.get(snapshot.no) === json) return;
-      this.lastSavedJsonByNo.set(snapshot.no, json);
-      this.savedAgendas.save(snapshot);
+      clearTimeout(this.agendaSaveTimer);
+      this.agendaSaveTimer = setTimeout(() => {
+        this.lastSavedJsonByNo.set(snapshot.no, json);
+        this.savedAgendas.save(snapshot);
+      }, 500);
     });
   }
 

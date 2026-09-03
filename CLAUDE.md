@@ -18,9 +18,9 @@ browser, it's a formatted page, not plain markdown.
 - `docx` npm package for Word export, `file-saver` for downloads
 - `@angular/cdk` drag-drop for agenda item reordering
 - Firestore (via the `firebase` npm package, modular SDK) for check-in,
-  role-definition, published-agenda, and committee-roster state;
-  `localStorage` for everything else — see Persistence below for exactly
-  which services use which and why
+  role-definition, published-agenda, committee-roster, and saved-agenda
+  state; `localStorage` for everything else — see Persistence below for
+  exactly which services use which and why
 
 ## Structure
 
@@ -53,9 +53,9 @@ src/app/
                         agenda-import-export.service.ts, docx.service.ts
                         (DocxService — all DOCX generation logic),
                         saved-agenda.service.ts (SavedAgendaService — the
-                        agenda library, see below), default-agenda.ts,
-                        published-agenda.service.ts (PublishedAgendaService —
-                        Firestore-backed, see Persistence below),
+                        agenda library, Firestore-backed, see below),
+                        default-agenda.ts, published-agenda.service.ts
+                        (PublishedAgendaService — also Firestore-backed),
                         committee-roster.service.ts (CommitteeRosterService —
                         also Firestore-backed), committee-role-definition.service.ts
       models/          agenda.models.ts
@@ -100,27 +100,35 @@ src/app/
 **Agenda editor** (`/admin`) — single-user authoring tool. Build an agenda, preview
 it as a live A4 page, export to DOCX or print. Live state is `AgendaStateService`
 (in memory), but every edit is **auto-saved** to a per-meeting-number library —
-`SavedAgendaService` (`agenda-editor/services/saved-agenda.service.ts`)
-persists a full `AgendaSnapshot` (via the existing `AgendaImportExportService.getSnapshot()`,
-the same serialization Export/Import JSON already uses) to `localStorage`
-under `agora-agenda-draft-<no>`, plus a small hand-maintained index
-(`agora-agenda-index`) for the "📋 My Agendas" list at `/admin/agendas`
-(`admin-agendas/pages/admin-agendas.component.ts`) — `StorageService` has no
-key-enumeration API, so the index exists specifically to avoid needing one,
-the same way a future Firestore collection would be listed via a query
-instead. Auto-save is driven by an untracked-free `effect()` in
-`AgendaEditorComponent`'s constructor that calls `getSnapshot()` directly —
-since that reads every relevant signal, the effect naturally re-runs on any
-edit anywhere in the agenda, with no manual dependency list and no debounce.
-A blank meeting number is never saved (`SavedAgendaService.save()` no-ops),
-which is also why "🆕 New Agenda" (`AgendaStateService.resetAll()`) blanks
+`SavedAgendaService` (`agenda-editor/services/saved-agenda.service.ts`,
+Firestore-backed) persists a full `AgendaSnapshot` (via the existing
+`AgendaImportExportService.getSnapshot()`, the same serialization
+Export/Import JSON already uses) to one document per meeting number at
+`savedAgendas/{meetingId}`. No hand-maintained index needed for the
+"📋 My Agendas" list at `/admin/agendas`
+(`admin-agendas/pages/admin-agendas.component.ts`) — unlike the old
+`localStorage` version (`StorageService` has no key-enumeration API, which
+is why that index existed at all), `entries()` is derived live from
+`onSnapshot()` on the whole collection, same as `PublishedAgendaService`/
+`RoleDefinitionService`. Auto-save is driven by an untracked-free `effect()`
+in `AgendaEditorComponent`'s constructor that calls `getSnapshot()`
+directly — since that reads every relevant signal, the effect naturally
+re-runs on any edit anywhere in the agenda, with no manual dependency list
+— but is now **debounced** (500ms), since a Firestore write per keystroke
+is a real network call, not the free in-memory write it used to be. A blank
+meeting number is never saved (`SavedAgendaService.save()` no-ops), which
+is also why "🆕 New Agenda" (`AgendaStateService.resetAll()`) blanks
 `meeting.no` rather than reusing a default — it keeps a fresh agenda
 un-addressable, and safe from colliding with another saved meeting, until
 the admin types a real number into the existing Meeting Details field.
 "New"/"Open" never need an unsaved-changes warning, since whatever was open
 is already persisted under its own meeting number the moment it had one.
-This was a deliberate choice, not a Firestore-first one — see Persistence
-below for why this stayed on `localStorage`.
+`SavedAgendaService.load(no)` is a one-time `getDoc()`, not a live
+subscription — `AdminAgendasComponent.open()` is `async` and `await`s it —
+opening a draft hydrates the editor once, it doesn't keep watching
+Firestore afterward (the live-editing session is `AgendaStateService`'s own
+in-memory state from then on, same as ever). See Persistence below for why
+this migrated despite being a genuinely single-admin workload.
 
 **Check-in page** (`/checkin`) — meant to be a *shared* sheet multiple members
 check simultaneously before a meeting: check in, claim one of 6 standard roles
@@ -214,9 +222,10 @@ model and what's still emulator-only.
   keys, so they must never change.
 - `PublishedAgendaService` — one document per meeting at
   `publishedAgendas/{meetingId}`, holding the full published `AgendaSnapshot`
-  plus `publishedAt`. Migrated specifically because, unlike `SavedAgendaService`
-  below, this service's entire purpose is being read on a *different device*
-  than the one that published it (`/preview`, reached from check-in's
+  plus `publishedAt`. Migrated specifically because — unlike `SavedAgendaService`,
+  a genuinely single-admin workload — this service's entire purpose is being
+  read on a *different device* than the one that published it (`/preview`,
+  reached from check-in's
   "Preview Agenda" link) — on `localStorage` that literally couldn't work
   cross-device, the same gap check-in had before its own migration. No
   separate index collection needed the way the old `localStorage` version
@@ -234,18 +243,31 @@ model and what's still emulator-only.
   `AgendaStateService.updateCommitteeMember`'s own comment on addressing by
   array position, not `roleId`), and `replaceAll()` already treated the whole
   roster as one atomic unit before the migration, so one document matches
-  the existing access pattern exactly.
+  the existing access pattern exactly. Also normalizes any stored roster
+  shorter than 7 slots back up to 7 on every load, padding with blanks —
+  needed because the app itself never removes a slot, but the Firestore
+  document can still end up short some other way (an admin manually deleting
+  one array element via the Emulator UI, which happened in practice —
+  without this, that slot and the ability to re-enter anyone into it would
+  be gone for good).
+- `SavedAgendaService` — one document per meeting at `savedAgendas/{meetingId}`,
+  the "My Agendas" draft library. Migrated for cross-device admin convenience
+  (start on your laptop, finish on your phone), not to fix a correctness bug
+  the way check-in/published-agenda were — this is a genuinely single-admin
+  workload, migrated anyway once the pattern was well-established. `load()`
+  is a one-time `getDoc()`, not a live subscription (see the Agenda editor
+  section above); the auto-save effect that calls `save()` is debounced for
+  the same reason as check-in's meeting-fields push.
 
 **Still `localStorage` (deliberately, not a migration backlog item):**
-`SavedAgendaService` (the agenda draft library) and `StorageService`'s one
-remaining direct consumer beyond it — `CheckinStateService`'s own per-browser
-identity (`agora-checkin-uid`/`agora-checkin-name`, unrelated to the
-Firestore-backed meeting data it now writes) — stay on `localStorage`. Both
-are single-admin, one-browser-at-a-time concerns (or, for check-in identity,
-deliberately *not* meant to sync across devices — there's no Firebase Auth
-in this app, so "who you are" is still just a random id your browser
-remembers), not the concurrent-multi-device problem Firestore was brought
-in to solve.
+`StorageService`'s one remaining direct consumer — `CheckinStateService`'s
+own per-browser identity (`agora-checkin-uid`/`agora-checkin-name`,
+unrelated to the Firestore-backed meeting data it now writes) — stays on
+`localStorage`. This is deliberately *not* meant to sync across devices:
+there's no Firebase Auth in this app, so "who you are" is still just a
+random id your browser remembers, not an account. This is the only thing
+left that isn't a candidate for Firestore migration at all — everything
+else that was localStorage-based in this app has now migrated.
 
 **A real gotcha hit migrating `CommitteeRosterService`, worth knowing before
 migrating anything else that follows this same shape:** `AgendaStateService`
@@ -291,9 +313,9 @@ to commit.
 localStorage-to-firestore-migration skills, a hand-rolled mock can't
 faithfully reproduce Firestore's optimistic-concurrency retry behavior, so
 transactional logic is tested against the real Local Emulator Suite, never
-a mock. Each of the five Firestore-backed services (`CheckinStateService`,
+a mock. Each of the six Firestore-backed services (`CheckinStateService`,
 `RoleDefinitionService`, `CommitteeRoleDefinitionService`,
-`PublishedAgendaService`, `CommitteeRosterService`) has a
+`PublishedAgendaService`, `CommitteeRosterService`, `SavedAgendaService`) has a
 `*.emulator.spec.ts` sibling (using `@firebase/rules-unit-testing`'s
 `initializeTestEnvironment()`, each with its own project id distinct from
 the dev project so running tests never wipes data you're interactively

@@ -22,8 +22,8 @@ export class AdminAgendasComponent {
 
   readonly entries = this.savedAgendas.entries;
 
-  open(no: string) {
-    const snapshot = this.savedAgendas.load(no);
+  async open(no: string) {
+    const snapshot = await this.savedAgendas.load(no);
     if (!snapshot) return;
     this.importExport.loadSnapshot(snapshot);
     this.router.navigate(['/admin']);
