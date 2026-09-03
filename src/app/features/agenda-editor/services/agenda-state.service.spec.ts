@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { AgendaStateService } from './agenda-state.service';
 import { CommitteeRosterService } from './committee-roster.service';
 import { StorageService } from '../../../core/services/storage.service';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { AgendaItem, CommitteeMember } from '../models/agenda.models';
 
 class FakeStorage {
@@ -18,9 +19,17 @@ class FakeStorage {
   }
 }
 
+// AgendaStateService only ever calls roleDefs.activeRoles() (to default a new
+// agenda item's role) — nothing here exercises that path, so a stub avoids
+// needing RoleDefinitionService's real Firestore dependency in this suite.
+const fakeRoleDefinitionService = { activeRoles: () => [] } as unknown as RoleDefinitionService;
+
 function makeService(): { state: AgendaStateService; roster: CommitteeRosterService } {
   TestBed.configureTestingModule({
-    providers: [{ provide: StorageService, useClass: FakeStorage }],
+    providers: [
+      { provide: StorageService, useClass: FakeStorage },
+      { provide: RoleDefinitionService, useValue: fakeRoleDefinitionService },
+    ],
   });
   return {
     state: TestBed.inject(AgendaStateService),

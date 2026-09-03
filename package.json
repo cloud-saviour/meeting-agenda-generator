@@ -7,7 +7,10 @@
     "serve:mobile": "ng serve --host 0.0.0.0 --ssl",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:emulator": "ng run meeting-agenda-generator:test-emulator",
+    "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit=./.emulator-data",
+    "seed:roles": "node scripts/seed-role-definitions.mjs"
   },
   "prettier": {
     "printWidth": 100,
@@ -34,6 +37,7 @@
     "bootstrap": "^5.3.8",
     "docx": "^9.7.1",
     "file-saver": "^2.0.5",
+    "firebase": "^12.18.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.15.0"
@@ -42,6 +46,7 @@
     "@angular/build": "^20.3.3",
     "@angular/cli": "^20.3.3",
     "@angular/compiler-cli": "^20.3.0",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/file-saver": "^2.0.7",
     "jsdom": "^30.0.1",
     "typescript": "~5.9.2",

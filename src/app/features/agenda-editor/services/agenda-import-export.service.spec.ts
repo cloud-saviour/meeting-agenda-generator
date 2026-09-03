@@ -2,13 +2,21 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { AgendaImportExportService } from './agenda-import-export.service';
 import { AgendaStateService } from './agenda-state.service';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+
+// AgendaStateService only ever calls roleDefs.activeRoles() (to default a new
+// agenda item's role) — nothing here exercises that path, so a stub avoids
+// needing RoleDefinitionService's real Firestore dependency in this suite.
+const fakeRoleDefinitionService = { activeRoles: () => [] } as unknown as RoleDefinitionService;
 
 describe('AgendaImportExportService', () => {
   let importExport: AgendaImportExportService;
   let state: AgendaStateService;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    TestBed.configureTestingModule({
+      providers: [{ provide: RoleDefinitionService, useValue: fakeRoleDefinitionService }],
+    });
     importExport = TestBed.inject(AgendaImportExportService);
     state = TestBed.inject(AgendaStateService);
   });

@@ -1,81 +1,82 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { collection, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { RoleDefinition } from '../models/role-definition.models';
-import { StorageService } from './storage.service';
+import { FIRESTORE } from '../firebase/firestore.provider';
 
-const STORAGE_KEY = 'agora-role-definitions';
+const COLLECTION = 'roleDefinitions';
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-function seedRoles(): RoleDefinition[] {
-  return [
-    { id: 'toastmaster',        label: 'Evening Chairman',         order: 0, active: true },
-    { id: 'generalEvaluator',   label: 'Meeting Evaluator',        order: 1, active: true },
-    { id: 'grammarian',         label: 'Grammarian',               order: 2, active: true },
-    { id: 'timer',              label: 'Timekeeper',               order: 3, active: true },
-    { id: 'ahCounter',          label: 'Filler Word Counter',      order: 4, active: true },
-    { id: 'evaluationChairman', label: 'Evaluation Chairman',      order: 5, active: true },
-    { id: 'impromptuMaster',    label: 'Impromptu Master',         order: 6, active: true },
-    { id: 'evaluator',          label: 'Evaluator',                order: 7, active: true },
-  ];
-}
-
+/**
+ * Meeting role titles (Evening Chairman, Grammarian, etc.) — claimed live by
+ * members via check-in. The full role list lives in Firestore's
+ * `roleDefinitions` collection; there is no hardcoded fallback, so a fresh
+ * environment needs `npm run seed:roles` (see scripts/seed-role-definitions.mjs)
+ * before this collection has anything in it.
+ */
 @Injectable({ providedIn: 'root' })
-export class RoleDefinitionService {
-  // Declared before `definitions` so it's assigned before the field initializer below runs.
-  private readonly storage = inject(StorageService);
+export class RoleDefinitionService implements OnDestroy {
+  private readonly firestore = inject(FIRESTORE);
+  private readonly zone = inject(NgZone);
 
-  private readonly definitions = signal<RoleDefinition[]>(this.load());
+  private readonly definitions = signal<RoleDefinition[]>([]);
+  private readonly unsubscribe: () => void;
 
   readonly all = computed(() => [...this.definitions()].sort((a, b) => a.order - b.order));
   readonly activeRoles = computed(() => this.all().filter((r) => r.active));
 
-  create(label: string, description?: string): RoleDefinition {
+  constructor() {
+    this.unsubscribe = onSnapshot(
+      collection(this.firestore, COLLECTION),
+      (snap) =>
+        this.zone.run(() => {
+          this.definitions.set(
+            snap.docs.map((d) => ({ id: d.id, ...d.data() }) as RoleDefinition)
+          );
+        }),
+      (err) => this.zone.run(() => console.error('roleDefinitions snapshot listener failed', err))
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.unsubscribe();
+  }
+
+  async create(label: string, description?: string): Promise<RoleDefinition> {
     const trimmed = label.trim();
     const maxOrder = this.definitions().reduce((max, r) => Math.max(max, r.order), -1);
     const role: RoleDefinition = {
       id: makeId(),
       label: trimmed,
-      description: description?.trim() || undefined,
       order: maxOrder + 1,
       active: true,
+      ...(description?.trim() ? { description: description.trim() } : {}),
     };
-    this.mutate((defs) => [...defs, role]);
+    const { id, ...data } = role;
+    await setDoc(doc(this.firestore, COLLECTION, id), data).catch((err) => {
+      console.error('roleDefinitions create failed', err);
+      throw err;
+    });
     return role;
   }
 
-  update(id: string, patch: Partial<Pick<RoleDefinition, 'label' | 'description'>>): void {
-    this.mutate((defs) =>
-      defs.map((r) => (r.id === id ? { ...r, ...patch } : r))
+  async update(id: string, patch: Partial<Pick<RoleDefinition, 'label' | 'description'>>): Promise<void> {
+    await updateDoc(doc(this.firestore, COLLECTION, id), patch).catch((err) =>
+      console.error('roleDefinitions update failed', err)
     );
   }
 
-  archive(id: string): void {
-    this.mutate((defs) => defs.map((r) => (r.id === id ? { ...r, active: false } : r)));
+  async archive(id: string): Promise<void> {
+    await updateDoc(doc(this.firestore, COLLECTION, id), { active: false }).catch((err) =>
+      console.error('roleDefinitions archive failed', err)
+    );
   }
 
-  restore(id: string): void {
-    this.mutate((defs) => defs.map((r) => (r.id === id ? { ...r, active: true } : r)));
-  }
-
-  private mutate(fn: (defs: RoleDefinition[]) => RoleDefinition[]): void {
-    this.definitions.update(fn);
-    this.persist();
-  }
-
-  private persist(): void {
-    this.storage.set(STORAGE_KEY, JSON.stringify(this.definitions()));
-  }
-
-  private load(): RoleDefinition[] {
-    try {
-      const raw = this.storage.get(STORAGE_KEY);
-      if (!raw) return seedRoles();
-      const parsed = JSON.parse(raw) as RoleDefinition[];
-      return Array.isArray(parsed) && parsed.length ? parsed : seedRoles();
-    } catch {
-      return seedRoles();
-    }
+  async restore(id: string): Promise<void> {
+    await updateDoc(doc(this.firestore, COLLECTION, id), { active: true }).catch((err) =>
+      console.error('roleDefinitions restore failed', err)
+    );
   }
 }
