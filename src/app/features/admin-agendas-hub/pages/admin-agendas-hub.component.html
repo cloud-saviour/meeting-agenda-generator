@@ -1,0 +1,31 @@
+<app-navbar title="Manage Agendas" [fixed]="true"
+  [links]="[
+    { label: '📝 Agenda Editor', path: '/admin' },
+    { label: '👥 Check-in', path: '/checkin', queryParams: { meeting: state.meeting().no } },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="d-flex flex-column align-items-center" style="margin-top:96px;">
+  <div class="row row-cols-1 row-cols-md-2 g-4 px-3" style="max-width:640px;width:100%;">
+
+    <div class="col">
+      <div class="card h-100 text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#128221;</div>
+        <h2 class="fs-6 fw-bold">Agenda Editor</h2>
+        <p class="text-muted small mb-0">Build a new agenda or continue editing the current one</p>
+        <a routerLink="/admin" class="stretched-link" aria-label="Open Agenda Editor"></a>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card h-100 text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#128203;</div>
+        <h2 class="fs-6 fw-bold">My Agendas</h2>
+        <p class="text-muted small mb-0">Open, review, or delete a previously saved agenda</p>
+        <a routerLink="/admin/agendas" class="stretched-link" aria-label="Open My Agendas"></a>
+      </div>
+    </div>
+
+  </div>
+</div>

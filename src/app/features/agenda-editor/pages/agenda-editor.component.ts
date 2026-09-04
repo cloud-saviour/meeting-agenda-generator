@@ -1,5 +1,5 @@
 import { Component, computed, effect, inject, untracked } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AgendaStateService } from '../services/agenda-state.service';
 import { AgendaImportExportService } from '../services/agenda-import-export.service';
 import { PublishedAgendaService } from '../services/published-agenda.service';
@@ -17,6 +17,7 @@ import { NavbarComponent } from '../../../layout/navbar/navbar.component';
   selector: 'app-agenda-editor',
   standalone: true,
   imports: [
+    RouterLink,
     NavbarComponent,
     MeetingFormComponent,
     AgendaItemsComponent,
