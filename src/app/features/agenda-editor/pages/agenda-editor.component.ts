@@ -1,10 +1,10 @@
-import { Component, OnDestroy, computed, effect, inject, untracked } from '@angular/core';
+import { Component, computed, effect, inject, untracked } from '@angular/core';
 import { Router } from '@angular/router';
 import { AgendaStateService } from '../services/agenda-state.service';
 import { AgendaImportExportService } from '../services/agenda-import-export.service';
 import { PublishedAgendaService } from '../services/published-agenda.service';
 import { SavedAgendaService } from '../services/saved-agenda.service';
-import { CheckinStateService, checkinStorageKey } from '../../checkin/services/checkin-state.service';
+import { CheckinStateService } from '../../checkin/services/checkin-state.service';
 import { DocxService } from '../services/docx.service';
 import { MeetingFormComponent } from '../components/meeting-form/meeting-form.component';
 import { AgendaItemsComponent } from '../components/agenda-items/agenda-items.component';
@@ -26,7 +26,7 @@ import { NavbarComponent } from '../../../layout/navbar/navbar.component';
   ],
   templateUrl: './agenda-editor.component.html',
 })
-export class AgendaEditorComponent implements OnDestroy {
+export class AgendaEditorComponent {
   readonly state = inject(AgendaStateService);
   private readonly docxService = inject(DocxService);
   private readonly importExport = inject(AgendaImportExportService);
@@ -40,19 +40,6 @@ export class AgendaEditorComponent implements OnDestroy {
   published = false;
   mobilePreviewMode = false;
 
-  // Live check-in sync: re-applies check-in roles/speakers whenever the meeting
-  // number changes (including on first load) and whenever check-in data for
-  // that meeting changes in ANOTHER tab of this browser (localStorage's
-  // `storage` event never fires in the tab that made the write, only in other
-  // tabs sharing the origin — there's no cross-device push without the planned
-  // Firestore backend, see CLAUDE.md's Persistence section).
-  private readonly onCheckinStorageChange = (event: StorageEvent) => {
-    const meetingNo = this.state.meeting().no;
-    if (!meetingNo || event.key !== checkinStorageKey(meetingNo)) return;
-    this.checkinState.loadMeeting(meetingNo);
-    this.applyCheckinSnapshot();
-  };
-
   // Tracks, per roleId, the last name this component itself synced in from a
   // check-in claim — lets a release be told apart from "never claimed" (both
   // look like an empty claim otherwise), and lets a release clear the agenda
@@ -64,6 +51,14 @@ export class AgendaEditorComponent implements OnDestroy {
   // the auto-save effect below skip a no-op re-save (see its comment).
   private readonly lastSavedJsonByNo = new Map<string, string>();
 
+  // Debounce timer for the meeting-fields push effect below — Firestore writes
+  // are no longer free the way an in-memory/localStorage write was.
+  private meetingSyncTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Debounce timer for the auto-save effect below — same reasoning, now that
+  // SavedAgendaService writes to Firestore instead of localStorage.
+  private agendaSaveTimer: ReturnType<typeof setTimeout> | undefined;
+
   constructor() {
     // A dedicated computed so the effect only re-runs when the meeting NUMBER
     // string actually changes — `state.meeting()` is one combined signal for
@@ -73,33 +68,53 @@ export class AgendaEditorComponent implements OnDestroy {
     const meetingNo = computed(() => this.state.meeting().no);
 
     effect(() => {
-      // Only `meetingNo()` should drive this effect — everything
-      // `applyCheckinSnapshot()` reads/writes (spks, overriddenRoles,
-      // checkinState's signals) must stay untracked, or the effect would
-      // re-trigger itself every time it (or anything else) edits agenda
-      // speakers/roles, including ordinary manual admin edits.
+      // Only `meetingNo()` should drive this effect — loadMeeting() just
+      // subscribes; applying the data itself happens in the reactive re-sync
+      // effect below, so it also fires on live updates, not just the initial load.
       const no = meetingNo();
       untracked(() => {
         if (!no) return;
         this.checkinState.loadMeeting(no);
+      });
+    });
+
+    // Live check-in sync: re-applies check-in roles/speakers every time
+    // checkinState's own signals change — which happens on the initial load
+    // AND every time Firestore's live listener delivers a claim/signup made
+    // from ANY device, not just another tab of this browser. Replaces the old
+    // localStorage `storage`-event listener outright; this is strictly better
+    // since it's real cross-device sync (see CLAUDE.md's Persistence section).
+    effect(() => {
+      // Only these two should drive this effect — everything
+      // `applyCheckinSnapshot()` reads/writes (spks, overriddenRoles,
+      // AgendaStateService's signals) must stay untracked, or the effect
+      // would re-trigger itself on every edit it makes, including ordinary
+      // manual admin edits.
+      this.checkinState.roles();
+      this.checkinState.speakers();
+      untracked(() => {
+        if (!this.state.meeting().no) return;
         this.applyCheckinSnapshot();
       });
     });
-    window.addEventListener('storage', this.onCheckinStorageChange);
 
     // Push meeting details (theme/date/word/start) into check-in's own
     // CheckinMeeting record, so the header members see at /checkin reflects
     // the real agenda instead of check-in's own separate, otherwise-never-set
     // defaults. One-way (agenda is the source of truth) — nothing reads these
-    // fields back from check-in. Tracks the whole `meeting()` signal, same as
-    // the auto-save effect below, for the same reason: simplicity over
-    // narrowly scoping four fields, since loadMeeting()+updateMeeting() is
-    // cheap enough that re-running on an unrelated field edit is harmless.
+    // fields back from check-in. Tracks the whole `meeting()` signal for the
+    // same reason as the auto-save effect below: simplicity over narrowly
+    // scoping four fields. Debounced, unlike before: this is now a real
+    // Firestore write per call, not a free in-memory one, so it shouldn't
+    // fire on every keystroke.
     effect(() => {
       const m = this.state.meeting();
       if (!m.no) return;
-      this.checkinState.loadMeeting(m.no);
-      this.checkinState.updateMeeting({ date: m.date, theme: m.theme, word: m.word, start: m.st });
+      clearTimeout(this.meetingSyncTimer);
+      this.meetingSyncTimer = setTimeout(() => {
+        this.checkinState.loadMeeting(m.no);
+        this.checkinState.updateMeeting({ date: m.date, theme: m.theme, word: m.word, start: m.st });
+      }, 500);
     });
 
     // Auto-save: the mirror image of the check-in-sync effect above — this one
@@ -116,18 +131,19 @@ export class AgendaEditorComponent implements OnDestroy {
     // and reorders the "last edited" list even though nothing changed. Keyed
     // per meeting number, not globally, so switching between agendas doesn't
     // false-positive against a different agenda's last-saved content.
+    // Debounced, same reasoning as the meeting-sync effect above — this is
+    // now a real Firestore write per call, not a free in-memory one.
     effect(() => {
       const snapshot = this.importExport.getSnapshot();
       if (!snapshot.no) return;
       const json = JSON.stringify(snapshot);
       if (this.lastSavedJsonByNo.get(snapshot.no) === json) return;
-      this.lastSavedJsonByNo.set(snapshot.no, json);
-      this.savedAgendas.save(snapshot);
+      clearTimeout(this.agendaSaveTimer);
+      this.agendaSaveTimer = setTimeout(() => {
+        this.lastSavedJsonByNo.set(snapshot.no, json);
+        this.savedAgendas.save(snapshot);
+      }, 500);
     });
-  }
-
-  ngOnDestroy() {
-    window.removeEventListener('storage', this.onCheckinStorageChange);
   }
 
   /** Nothing to confirm — the previous agenda (if any) is already auto-saved under its own meeting number. */

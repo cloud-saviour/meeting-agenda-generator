@@ -1,13 +1,9 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { collection, deleteDoc, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { AgendaSnapshot } from '../models/agenda.models';
-import { StorageService } from '../../../core/services/storage.service';
+import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 
-const DRAFT_PREFIX = 'agora-agenda-draft';
-const INDEX_KEY = 'agora-agenda-index';
-
-function draftKey(no: string): string {
-  return `${DRAFT_PREFIX}-${no}`;
-}
+const COLLECTION = 'savedAgendas';
 
 export interface SavedAgendaEntry {
   no: string;
@@ -16,65 +12,75 @@ export interface SavedAgendaEntry {
   updatedAt: string;
 }
 
+interface SavedAgendaDoc extends AgendaSnapshot {
+  updatedAt: string;
+}
+
 /**
- * The admin's library of saved agendas — one full AgendaSnapshot per meeting
- * number, plus a small hand-maintained index (StorageService can't enumerate
- * keys) so the "My Agendas" list doesn't need to scan localStorage. Shaped
- * the same way CheckinStateService/PublishedAgendaService are (save/load by
- * a plain id, a listing signal) so it could swap to a Firestore collection
- * later without changing callers — see CLAUDE.md's Persistence section.
+ * The admin's library of saved agendas — one document per meeting number at
+ * `savedAgendas/{meetingId}`, holding the full `AgendaSnapshot` plus
+ * `updatedAt`. Single-admin, one-browser-at-a-time workload (unlike
+ * PublishedAgendaService or CheckinStateService) — migrated anyway for
+ * cross-device convenience, not to fix a correctness bug. No separate index
+ * collection needed — `entries()` is derived from a live `onSnapshot()` on
+ * the whole collection, same as PublishedAgendaService/RoleDefinitionService.
  */
 @Injectable({ providedIn: 'root' })
-export class SavedAgendaService {
-  private readonly storage = inject(StorageService);
-  private readonly index = signal<SavedAgendaEntry[]>(this.loadIndex());
+export class SavedAgendaService implements OnDestroy {
+  private readonly firestore = inject(FIRESTORE);
+  private readonly zone = inject(NgZone);
+
+  private readonly allEntries = signal<SavedAgendaEntry[]>([]);
+  private readonly unsubscribe: () => void;
 
   /** Saved agendas, most recently edited first. */
   readonly entries = computed(() =>
-    [...this.index()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    [...this.allEntries()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   );
 
-  /** No-ops when snapshot.no is blank — a saved agenda must have a real meeting number. */
-  save(snapshot: AgendaSnapshot): void {
-    if (!snapshot.no) return;
-    this.storage.set(draftKey(snapshot.no), JSON.stringify(snapshot));
-
-    const entry: SavedAgendaEntry = {
-      no: snapshot.no,
-      date: snapshot.date,
-      theme: snapshot.theme,
-      updatedAt: new Date().toISOString(),
-    };
-    this.index.update((list) => [...list.filter((e) => e.no !== snapshot.no), entry]);
-    this.persistIndex();
+  constructor() {
+    this.unsubscribe = onSnapshot(
+      collection(this.firestore, COLLECTION),
+      (snap) =>
+        this.zone.run(() => {
+          this.allEntries.set(
+            snap.docs.map((d) => {
+              const data = d.data() as SavedAgendaDoc;
+              return { no: d.id, date: data.date, theme: data.theme, updatedAt: data.updatedAt };
+            })
+          );
+        }),
+      (err) => this.zone.run(() => console.error('savedAgendas index listener failed', err))
+    );
   }
 
-  load(no: string): AgendaSnapshot | null {
-    const raw = this.storage.get(draftKey(no));
-    if (!raw) return null;
+  ngOnDestroy(): void {
+    this.unsubscribe();
+  }
+
+  /** No-ops when snapshot.no is blank — a saved agenda must have a real meeting number. */
+  save(snapshot: AgendaSnapshot): Promise<void> {
+    if (!snapshot.no) return Promise.resolve();
+    const payload: SavedAgendaDoc = { ...snapshot, updatedAt: new Date().toISOString() };
+    return setDoc(doc(this.firestore, COLLECTION, snapshot.no), payload).catch((err) =>
+      console.error('savedAgendas save failed', err)
+    );
+  }
+
+  /** One-time read, not a live subscription — opening a draft hydrates the editor once, it doesn't stay watching Firestore afterward. */
+  async load(no: string): Promise<AgendaSnapshot | null> {
     try {
-      return JSON.parse(raw) as AgendaSnapshot;
-    } catch {
+      const snap = await getDoc(doc(this.firestore, COLLECTION, no));
+      return snap.exists() ? (snap.data() as AgendaSnapshot) : null;
+    } catch (err) {
+      console.error('savedAgendas load failed', err);
       return null;
     }
   }
 
-  delete(no: string): void {
-    this.storage.remove(draftKey(no));
-    this.index.update((list) => list.filter((e) => e.no !== no));
-    this.persistIndex();
-  }
-
-  private loadIndex(): SavedAgendaEntry[] {
-    try {
-      const raw = this.storage.get(INDEX_KEY);
-      return raw ? (JSON.parse(raw) as SavedAgendaEntry[]) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private persistIndex(): void {
-    this.storage.set(INDEX_KEY, JSON.stringify(this.index()));
+  delete(no: string): Promise<void> {
+    return deleteDoc(doc(this.firestore, COLLECTION, no)).catch((err) =>
+      console.error('savedAgendas delete failed', err)
+    );
   }
 }

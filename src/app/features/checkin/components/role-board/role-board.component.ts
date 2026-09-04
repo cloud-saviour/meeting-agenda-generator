@@ -31,13 +31,13 @@ export class RoleBoardComponent {
     return this.state.lockedRoles().includes(roleId);
   }
 
-  claim(roleId: string) {
+  async claim(roleId: string) {
     this.claimError = null;
     if (!this.state.currentName()) {
       this.claimError = 'Check in with your name first.';
       return;
     }
-    const ok = this.state.claimRole(roleId);
+    const ok = await this.state.claimRole(roleId);
     if (!ok) {
       const owner = this.roles[roleId]?.name || 'someone else';
       this.claimError = `Just taken by ${owner}.`;

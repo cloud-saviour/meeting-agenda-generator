@@ -1,4 +1,4 @@
-import { Injectable, inject, signal, computed } from '@angular/core';
+import { Injectable, inject, signal, computed, effect, untracked } from '@angular/core';
 import {
   AgendaItem,
   CommitteeMember,
@@ -13,7 +13,11 @@ import { CommitteeRosterService } from './committee-roster.service';
 const DEFAULT_LOGO_LEFT = 'logo.png';
 const DEFAULT_LOGO_RIGHT = 'crown.png';
 
-function defaultMeeting(no: string): MeetingData {
+/** `vpe` ("Mission Contact VPE name") is seeded from the committee roster's
+ * VP Education member, same as default-agenda.ts seeds agenda item rows —
+ * a one-time default the admin can still freely retype, not a live sync. */
+function defaultMeeting(no: string, cmt: CommitteeMember[]): MeetingData {
+  const vpEducation = cmt.find((m) => m.roleId === 'vpEducation');
   return {
     no,
     date: new Date().toISOString().slice(0, 10),
@@ -26,7 +30,7 @@ function defaultMeeting(no: string): MeetingData {
     addr: '378 Queen\'s Cres, Lynnwood, Pretoria, 0001',
     mission:
       'Agora empowers you to become a brilliant communicator and a confident leader who will actively build a better world.',
-    vpe: '',
+    vpe: vpEducation?.name || '',
     hotSeat: '',
     reserve: '',
     apologies: '',
@@ -50,7 +54,9 @@ export class AgendaStateService {
   // with auto-save now live, a non-blank default here would let the very
   // first page load of /admin silently overwrite a real saved agenda under
   // whatever number was hardcoded, before the admin touches anything.
-  readonly meeting = signal<MeetingData>(defaultMeeting(''));
+  // Uses committeeRoster.all() directly, not this.cmt() — `cmt` is declared
+  // below and wouldn't be initialized yet at this point in construction.
+  readonly meeting = signal<MeetingData>(defaultMeeting('', this.committeeRoster.all()));
 
   readonly spks = signal<Speaker[]>([]);
 
@@ -85,6 +91,37 @@ export class AgendaStateService {
       : 'draft';
     return `Agora Agenda - Meeting ${d.no || '?'} - ${datePart}`;
   });
+
+  // Guards the one-time catch-up seed below — set on its first (and only) run.
+  private hasSeededFromCommitteeRoster = false;
+
+  constructor() {
+    // committeeRoster.all() is read synchronously above (meeting/cmt/agItems
+    // field initializers), but CommitteeRosterService is Firestore-backed —
+    // its real data arrives asynchronously even on the very first read, so
+    // those synchronous reads may have seeded from its pre-load placeholder.
+    // This effect catches up exactly once, the moment `ready()` flips true —
+    // NOT the moment `all()` first changes, since `all()`'s placeholder value
+    // is itself a defined, non-empty-looking array (7 blank slots), so the
+    // effect's own first (pre-Firestore) run would otherwise consume it and
+    // set the guard before real data ever arrives. After the real seed,
+    // `cmt` is the admin's independently-editable working copy, same as ever
+    // (see the `cmt` field comment above).
+    effect(() => {
+      const ready = this.committeeRoster.ready();
+      const roster = this.committeeRoster.all();
+      untracked(() => {
+        if (!ready || this.hasSeededFromCommitteeRoster) return;
+        this.hasSeededFromCommitteeRoster = true;
+        this.cmt.set(JSON.parse(JSON.stringify(roster)));
+        this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));
+        const vpEducation = roster.find((m) => m.roleId === 'vpEducation');
+        if (vpEducation?.name && !this.meeting().vpe) {
+          this.meeting.update((m) => ({ ...m, vpe: vpEducation.name }));
+        }
+      });
+    });
+  }
 
   // ── Meeting methods ───────────────────────────────────────────────────────
   updateMeeting(patch: Partial<MeetingData>): void {
@@ -296,7 +333,7 @@ export class AgendaStateService {
   resetAll(): void {
     this.agId = 0;
     this.spId = 0;
-    this.meeting.set(defaultMeeting(''));
+    this.meeting.set(defaultMeeting('', this.cmt()));
     this.spks.set([]);
     this.overriddenRoles.set(new Set());
     this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));

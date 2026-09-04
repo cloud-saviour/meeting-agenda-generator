@@ -1,46 +1,32 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
-import {
-  Attendee,
-  CheckinMeeting,
-  CheckinSnapshot,
-  CheckinSpeaker,
-  RoleClaim,
-} from '../models/checkin.models';
-import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { deleteDoc, doc, onSnapshot, runTransaction } from 'firebase/firestore';
+import { Attendee, CheckinMeeting, CheckinSnapshot, CheckinSpeaker } from '../models/checkin.models';
 import { StorageService } from '../../../core/services/storage.service';
 import { APP_LOCALE } from '../../../core/utils/locale';
+import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 
-const STORAGE_KEY = 'agora-checkin-data';
 const UID_KEY = 'agora-checkin-uid';
 const NAME_KEY = 'agora-checkin-name';
+const CHECKINS_COLLECTION = 'checkins';
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-/**
- * The localStorage key a given meeting's check-in sheet lives under — exported so
- * other features (e.g. the Agenda Editor's live check-in sync) can recognize a
- * `storage` event as "this is my meeting's check-in data" without reaching into
- * CheckinStateService's private state.
- */
-export function checkinStorageKey(meetingId: string): string {
-  return meetingId === 'default' ? STORAGE_KEY : `${STORAGE_KEY}-${meetingId}`;
-}
-
 @Injectable({ providedIn: 'root' })
-export class CheckinStateService {
-  private readonly roleDefs = inject(RoleDefinitionService);
+export class CheckinStateService implements OnDestroy {
   private readonly storage = inject(StorageService);
+  private readonly firestore = inject(FIRESTORE);
+  private readonly zone = inject(NgZone);
 
   // ── Local identity (per-browser, persists across visits) ────────────────
   readonly currentUid: string;
   readonly currentName = signal<string>('');
 
-  // ── Shared meeting state (Phase 1: localStorage; Phase 2: Firebase) ─────
+  // ── Shared meeting state (Firestore-backed, kept live via onSnapshot) ───
   private readonly snapshot = signal<CheckinSnapshot>(this.emptySnapshotPlaceholder());
-  /** Which localStorage key persist()/loadSnapshot() target — set by loadMeeting(). */
-  private currentStorageKey: string = STORAGE_KEY;
+  private currentMeetingId: string | null = null;
+  private unsubscribeSnapshot: (() => void) | undefined;
 
   readonly meeting = computed(() => this.snapshot().meeting);
   readonly attendees = computed(() => this.snapshot().attendees);
@@ -55,18 +41,36 @@ export class CheckinStateService {
   constructor() {
     this.currentUid = this.loadOrCreateUid();
     this.currentName.set(this.storage.get(NAME_KEY) || '');
-    this.snapshot.set(this.loadSnapshot(this.currentStorageKey, 'default'));
+  }
+
+  ngOnDestroy(): void {
+    this.unsubscribeSnapshot?.();
   }
 
   /**
    * Switches to a specific meeting's check-in sheet, isolated from every other
-   * meeting id. 'default' (the fallback when a URL has no ?meeting= param) uses
-   * the original fixed storage key unsuffixed, so pre-existing bookmarked data
-   * keeps working untouched; any other id gets its own `${STORAGE_KEY}-<id>` key.
+   * meeting id, and subscribes to it live — claims/signups made on any device
+   * show up here without a reload. Idempotent: calling this again with the
+   * same meetingId (e.g. from an effect that re-fires on every unrelated form
+   * edit) is a cheap no-op rather than tearing down and rebuilding the listener.
    */
   loadMeeting(meetingId: string): void {
-    this.currentStorageKey = checkinStorageKey(meetingId);
-    this.snapshot.set(this.loadSnapshot(this.currentStorageKey, meetingId));
+    if (meetingId === this.currentMeetingId) return;
+    this.unsubscribeSnapshot?.();
+    this.currentMeetingId = meetingId;
+
+    const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
+    this.unsubscribeSnapshot = onSnapshot(
+      ref,
+      (snap) =>
+        this.zone.run(() => {
+          const data = snap.exists()
+            ? (snap.data() as CheckinSnapshot)
+            : this.defaultSnapshot(meetingId);
+          this.snapshot.set(data);
+        }),
+      (err) => this.zone.run(() => console.error('checkin snapshot listener failed', err))
+    );
   }
 
   // ── Identity ──────────────────────────────────────────────────────────
@@ -80,169 +84,206 @@ export class CheckinStateService {
   }
 
   // ── Attendance ────────────────────────────────────────────────────────
-  checkIn(name: string): void {
+  checkIn(name: string): Promise<void> {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed) return Promise.resolve();
     this.currentName.set(trimmed);
     this.storage.set(NAME_KEY, trimmed);
 
-    this.update((s) => {
+    return this.mutate((s) => {
       const already = s.attendees.some((a) => a.uid === this.currentUid);
       if (already) {
-        return {
+        const next = {
           ...s,
           attendees: s.attendees.map((a) =>
             a.uid === this.currentUid ? { ...a, name: trimmed } : a
           ),
         };
+        return { next, result: undefined };
       }
       const attendee: Attendee = {
         uid: this.currentUid,
         name: trimmed,
         joinedAt: new Date().toLocaleTimeString(APP_LOCALE, { hour: '2-digit', minute: '2-digit' }),
       };
-      return { ...s, attendees: [...s.attendees, attendee] };
-    });
+      const next = { ...s, attendees: [...s.attendees, attendee] };
+      return { next, result: undefined };
+    }).then(() => undefined);
   }
 
   // ── Roles: first-come locking ────────────────────────────────────────
   /** Returns true if the claim succeeded, false if the role was already taken or is organizer-locked. */
-  claimRole(roleKey: string): boolean {
-    if (!this.currentName()) return false;
-    if (this.snapshot().lockedRoles.includes(roleKey)) return false;
-    const existing = this.snapshot().roles[roleKey];
-    if (existing?.uid && existing.uid !== this.currentUid) return false;
+  claimRole(roleKey: string): Promise<boolean> {
+    if (!this.currentName()) return Promise.resolve(false);
 
-    this.update((s) => ({
-      ...s,
-      roles: { ...s.roles, [roleKey]: { name: this.currentName(), uid: this.currentUid } },
-    }));
-    return true;
+    return this.mutate((s) => {
+      if (s.lockedRoles.includes(roleKey)) return { next: s, result: false };
+      const existing = s.roles[roleKey];
+      if (existing?.uid && existing.uid !== this.currentUid) return { next: s, result: false };
+
+      const next = {
+        ...s,
+        roles: { ...s.roles, [roleKey]: { name: this.currentName(), uid: this.currentUid } },
+      };
+      return { next, result: true };
+    }).then((result) => result ?? false);
   }
 
   /** A member may only release their own claim; organizer-locked roles can't be released either. */
-  releaseRole(roleKey: string): void {
-    this.update((s) => {
-      if (s.lockedRoles.includes(roleKey)) return s;
+  releaseRole(roleKey: string): Promise<void> {
+    return this.mutate((s) => {
+      if (s.lockedRoles.includes(roleKey)) return { next: s, result: undefined };
       const existing = s.roles[roleKey];
-      if (!existing || existing.uid !== this.currentUid) return s;
-      return { ...s, roles: { ...s.roles, [roleKey]: { name: '', uid: '' } } };
-    });
+      if (!existing || existing.uid !== this.currentUid) return { next: s, result: undefined };
+      const next = { ...s, roles: { ...s.roles, [roleKey]: { name: '', uid: '' } } };
+      return { next, result: undefined };
+    }).then(() => undefined);
   }
 
   // ── Roles: organizer override (from the Agenda Editor) ─────────────────
   /** Locks or unlocks a role from being claimed/released here — set by the Agenda Editor's override toggle. */
-  setRoleLocked(roleId: string, locked: boolean): void {
-    this.update((s) => {
+  setRoleLocked(roleId: string, locked: boolean): Promise<void> {
+    return this.mutate((s) => {
       const set = new Set(s.lockedRoles);
       locked ? set.add(roleId) : set.delete(roleId);
-      return { ...s, lockedRoles: [...set] };
-    });
+      const next = { ...s, lockedRoles: [...set] };
+      return { next, result: undefined };
+    }).then(() => undefined);
   }
 
   // ── Speakers ──────────────────────────────────────────────────────────
-  addSpeakerSignup(data: { title: string; level: string; timePref: string }): boolean {
-    if (!this.currentName()) return false;
-    const s0 = this.snapshot();
-    if (s0.speakers.length >= s0.meeting.maxSpeakers) return false;
-    if (s0.speakers.some((sp) => sp.uid === this.currentUid)) return false;
+  addSpeakerSignup(data: { title: string; level: string; timePref: string }): Promise<boolean> {
+    if (!this.currentName()) return Promise.resolve(false);
 
-    const speaker: CheckinSpeaker = {
-      id: makeId(),
-      name: this.currentName(),
-      uid: this.currentUid,
-      title: data.title.trim(),
-      level: data.level.trim(),
-      timePref: data.timePref,
-      evaluator: null,
-    };
-    this.update((s) => ({ ...s, speakers: [...s.speakers, speaker] }));
-    return true;
+    return this.mutate((s) => {
+      if (s.speakers.length >= s.meeting.maxSpeakers) return { next: s, result: false };
+      if (s.speakers.some((sp) => sp.uid === this.currentUid)) return { next: s, result: false };
+
+      const speaker: CheckinSpeaker = {
+        id: makeId(),
+        name: this.currentName(),
+        uid: this.currentUid,
+        title: data.title.trim(),
+        level: data.level.trim(),
+        timePref: data.timePref,
+        evaluator: null,
+      };
+      const next = { ...s, speakers: [...s.speakers, speaker] };
+      return { next, result: true };
+    }).then((result) => result ?? false);
   }
 
-  removeSpeakerSignup(id: string): void {
-    this.update((s) => {
+  removeSpeakerSignup(id: string): Promise<void> {
+    return this.mutate((s) => {
       const sp = s.speakers.find((x) => x.id === id);
-      if (!sp || sp.uid !== this.currentUid) return s;
-      return { ...s, speakers: s.speakers.filter((x) => x.id !== id) };
-    });
+      if (!sp || sp.uid !== this.currentUid) return { next: s, result: undefined };
+      const next = { ...s, speakers: s.speakers.filter((x) => x.id !== id) };
+      return { next, result: undefined };
+    }).then(() => undefined);
   }
 
   // ── Evaluators: one evaluation slot per speaker, one claim per member ──
-  claimEvaluatorSlot(speakerId: string): boolean {
-    if (!this.currentName()) return false;
-    const s0 = this.snapshot();
-    if (s0.speakers.some((sp) => sp.evaluator?.uid === this.currentUid)) return false;
+  claimEvaluatorSlot(speakerId: string): Promise<boolean> {
+    if (!this.currentName()) return Promise.resolve(false);
 
-    const target = s0.speakers.find((sp) => sp.id === speakerId);
-    if (!target || target.evaluator?.uid || target.uid === this.currentUid) return false;
+    return this.mutate((s) => {
+      if (s.speakers.some((sp) => sp.evaluator?.uid === this.currentUid)) {
+        return { next: s, result: false };
+      }
+      const target = s.speakers.find((sp) => sp.id === speakerId);
+      if (!target || target.evaluator?.uid || target.uid === this.currentUid) {
+        return { next: s, result: false };
+      }
 
-    this.update((s) => ({
-      ...s,
-      speakers: s.speakers.map((sp) =>
-        sp.id === speakerId ? { ...sp, evaluator: { name: this.currentName(), uid: this.currentUid } } : sp
-      ),
-    }));
-    return true;
+      const next = {
+        ...s,
+        speakers: s.speakers.map((sp) =>
+          sp.id === speakerId
+            ? { ...sp, evaluator: { name: this.currentName(), uid: this.currentUid } }
+            : sp
+        ),
+      };
+      return { next, result: true };
+    }).then((result) => result ?? false);
   }
 
-  releaseEvaluatorSlot(speakerId: string): void {
-    this.update((s) => ({
-      ...s,
-      speakers: s.speakers.map((sp) => {
-        if (sp.id !== speakerId) return sp;
-        if (!sp.evaluator || sp.evaluator.uid !== this.currentUid) return sp;
-        return { ...sp, evaluator: null };
-      }),
-    }));
+  releaseEvaluatorSlot(speakerId: string): Promise<void> {
+    return this.mutate((s) => {
+      const next = {
+        ...s,
+        speakers: s.speakers.map((sp) => {
+          if (sp.id !== speakerId) return sp;
+          if (!sp.evaluator || sp.evaluator.uid !== this.currentUid) return sp;
+          return { ...sp, evaluator: null };
+        }),
+      };
+      return { next, result: undefined };
+    }).then(() => undefined);
   }
 
   // ── Meeting config (admin) ──────────────────────────────────────────────
-  updateMeeting(patch: Partial<CheckinMeeting>): void {
-    this.update((s) => ({ ...s, meeting: { ...s.meeting, ...patch } }));
+  updateMeeting(patch: Partial<CheckinMeeting>): Promise<void> {
+    return this.mutate((s) => {
+      const next = { ...s, meeting: { ...s.meeting, ...patch } };
+      return { next, result: undefined };
+    }).then(() => undefined);
   }
 
-  resetAll(): void {
-    this.snapshot.set(this.defaultSnapshot(this.snapshot().meeting.id));
-    this.persist();
-  }
-
-  // ── Persistence (Phase 1: localStorage) ─────────────────────────────────
-  private update(fn: (s: CheckinSnapshot) => CheckinSnapshot): void {
-    this.snapshot.update(fn);
-    this.persist();
-  }
-
-  private persist(): void {
-    this.storage.set(this.currentStorageKey, JSON.stringify(this.snapshot()));
-  }
-
-  private loadSnapshot(key: string, meetingId: string): CheckinSnapshot {
-    try {
-      const raw = this.storage.get(key);
-      if (!raw) return this.defaultSnapshot(meetingId);
-      const parsed = JSON.parse(raw) as CheckinSnapshot;
-      // Backfill any role ids added (or missing) since the data was last saved
-      const roles = { ...this.emptyRoles(), ...parsed.roles };
-      return { ...this.defaultSnapshot(meetingId), ...parsed, roles };
-    } catch {
-      return this.defaultSnapshot(meetingId);
-    }
+  resetAll(): Promise<void> {
+    if (!this.currentMeetingId) return Promise.resolve();
+    const ref = doc(this.firestore, CHECKINS_COLLECTION, this.currentMeetingId);
+    return runTransaction(this.firestore, async (tx) => {
+      tx.set(ref, this.defaultSnapshot(this.currentMeetingId!));
+    }).catch((err) => console.error('checkin resetAll failed', err));
   }
 
   /**
-   * Sourced from roleDefs.all() rather than activeRoles() — an archived-but-claimed
-   * role keeps its slot in the snapshot data even though it won't render on the board.
+   * Deletes a meeting's check-in document outright — distinct from
+   * `resetAll()`, which only clears the *currently loaded* meeting back to
+   * defaults. Callers don't need this meeting loaded first (e.g. deleting a
+   * saved agenda from the "My Agendas" list operates on a meeting number
+   * that was never opened in this browser session).
    */
-  private emptyRoles(): Record<string, RoleClaim> {
-    const roles: Record<string, RoleClaim> = {};
-    for (const def of this.roleDefs.all()) {
-      roles[def.id] = { name: '', uid: '' };
-    }
-    return roles;
+  deleteMeeting(meetingId: string): Promise<void> {
+    const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
+    return deleteDoc(ref).catch((err) => console.error('checkin deleteMeeting failed', err));
   }
 
-  private defaultSnapshot(meetingId: string = 'default'): CheckinSnapshot {
+  // ── Persistence (Firestore transactions) ─────────────────────────────────
+  /**
+   * Every mutator routes through here. `mutate` must be pure — Firestore
+   * retries it on write contention — and is given the full current snapshot
+   * so it can make an atomic read-decide-write decision in one transaction.
+   * A role id absent from `roles` is treated the same as one present with an
+   * empty claim everywhere it's read (see `claimRole`/`releaseRole` above and
+   * the components' template lookups), so nothing here needs to know the
+   * full set of role definitions — that's RoleDefinitionService's concern.
+   * Errors are logged and swallowed (no toast/banner system exists yet in
+   * this app) so `Promise<void>`-returning callers don't need to change
+   * their existing fire-and-forget call sites.
+   */
+  private mutate<T>(
+    fn: (s: CheckinSnapshot) => { next: CheckinSnapshot; result: T }
+  ): Promise<T | undefined> {
+    if (!this.currentMeetingId) return Promise.resolve(undefined);
+    const meetingId = this.currentMeetingId;
+    const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
+
+    return runTransaction(this.firestore, async (tx) => {
+      const snap = await tx.get(ref);
+      const current = snap.exists()
+        ? (snap.data() as CheckinSnapshot)
+        : this.defaultSnapshot(meetingId);
+      const { next, result } = fn(current);
+      tx.set(ref, next);
+      return result;
+    }).catch((err) => {
+      console.error('checkin transaction failed', err);
+      return undefined;
+    });
+  }
+
+  private defaultSnapshot(meetingId: string): CheckinSnapshot {
     return {
       meeting: {
         id: meetingId,
@@ -253,13 +294,13 @@ export class CheckinStateService {
         maxSpeakers: 3,
       },
       attendees: [],
-      roles: this.emptyRoles(),
+      roles: {},
       speakers: [],
       lockedRoles: [],
     };
   }
 
-  /** Cheap placeholder for the snapshot field initializer; real data loads in the constructor. */
+  /** Cheap placeholder for the snapshot field initializer; real data arrives via loadMeeting()'s listener. */
   private emptySnapshotPlaceholder(): CheckinSnapshot {
     return {
       meeting: { id: 'default', date: '', theme: '', word: '', start: '18:15', maxSpeakers: 3 },

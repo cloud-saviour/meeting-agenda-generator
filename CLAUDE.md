@@ -17,7 +17,10 @@ browser, it's a formatted page, not plain markdown.
   see `src/styles.css` for the brand-color theme-variable overrides
 - `docx` npm package for Word export, `file-saver` for downloads
 - `@angular/cdk` drag-drop for agenda item reordering
-- No backend yet — all state is client-side (see Persistence below)
+- Firestore (via the `firebase` npm package, modular SDK) for check-in,
+  role-definition, published-agenda, committee-roster, and saved-agenda
+  state; `localStorage` for everything else — see Persistence below for
+  exactly which services use which and why
 
 ## Structure
 
@@ -29,8 +32,11 @@ chrome.
 ```
 src/app/
   core/
-    services/   storage.service.ts, role-definition.service.ts (+ specs)
+    services/   storage.service.ts, role-definition.service.ts (Firestore-
+                backed — see Persistence below) (+ specs)
     models/     role-definition.models.ts
+    firebase/   firestore.provider.ts — FIRESTORE injection token +
+                provideAppFirestore(), reads src/environments/environment.ts
     utils/      locale.ts (APP_LOCALE)
 
   layout/
@@ -47,7 +53,11 @@ src/app/
                         agenda-import-export.service.ts, docx.service.ts
                         (DocxService — all DOCX generation logic),
                         saved-agenda.service.ts (SavedAgendaService — the
-                        agenda library, see below), default-agenda.ts
+                        agenda library, Firestore-backed, see below),
+                        default-agenda.ts, published-agenda.service.ts
+                        (PublishedAgendaService — also Firestore-backed),
+                        committee-roster.service.ts (CommitteeRosterService —
+                        also Firestore-backed), committee-role-definition.service.ts
       models/          agenda.models.ts
       utils/           agenda-timeline.ts
 
@@ -90,27 +100,35 @@ src/app/
 **Agenda editor** (`/admin`) — single-user authoring tool. Build an agenda, preview
 it as a live A4 page, export to DOCX or print. Live state is `AgendaStateService`
 (in memory), but every edit is **auto-saved** to a per-meeting-number library —
-`SavedAgendaService` (`agenda-editor/services/saved-agenda.service.ts`)
-persists a full `AgendaSnapshot` (via the existing `AgendaImportExportService.getSnapshot()`,
-the same serialization Export/Import JSON already uses) to `localStorage`
-under `agora-agenda-draft-<no>`, plus a small hand-maintained index
-(`agora-agenda-index`) for the "📋 My Agendas" list at `/admin/agendas`
-(`admin-agendas/pages/admin-agendas.component.ts`) — `StorageService` has no
-key-enumeration API, so the index exists specifically to avoid needing one,
-the same way a future Firestore collection would be listed via a query
-instead. Auto-save is driven by an untracked-free `effect()` in
-`AgendaEditorComponent`'s constructor that calls `getSnapshot()` directly —
-since that reads every relevant signal, the effect naturally re-runs on any
-edit anywhere in the agenda, with no manual dependency list and no debounce.
-A blank meeting number is never saved (`SavedAgendaService.save()` no-ops),
-which is also why "🆕 New Agenda" (`AgendaStateService.resetAll()`) blanks
+`SavedAgendaService` (`agenda-editor/services/saved-agenda.service.ts`,
+Firestore-backed) persists a full `AgendaSnapshot` (via the existing
+`AgendaImportExportService.getSnapshot()`, the same serialization
+Export/Import JSON already uses) to one document per meeting number at
+`savedAgendas/{meetingId}`. No hand-maintained index needed for the
+"📋 My Agendas" list at `/admin/agendas`
+(`admin-agendas/pages/admin-agendas.component.ts`) — unlike the old
+`localStorage` version (`StorageService` has no key-enumeration API, which
+is why that index existed at all), `entries()` is derived live from
+`onSnapshot()` on the whole collection, same as `PublishedAgendaService`/
+`RoleDefinitionService`. Auto-save is driven by an untracked-free `effect()`
+in `AgendaEditorComponent`'s constructor that calls `getSnapshot()`
+directly — since that reads every relevant signal, the effect naturally
+re-runs on any edit anywhere in the agenda, with no manual dependency list
+— but is now **debounced** (500ms), since a Firestore write per keystroke
+is a real network call, not the free in-memory write it used to be. A blank
+meeting number is never saved (`SavedAgendaService.save()` no-ops), which
+is also why "🆕 New Agenda" (`AgendaStateService.resetAll()`) blanks
 `meeting.no` rather than reusing a default — it keeps a fresh agenda
 un-addressable, and safe from colliding with another saved meeting, until
 the admin types a real number into the existing Meeting Details field.
 "New"/"Open" never need an unsaved-changes warning, since whatever was open
 is already persisted under its own meeting number the moment it had one.
-This was a deliberate choice, not a Firestore-first one — see Persistence
-below for why this stayed on `localStorage`.
+`SavedAgendaService.load(no)` is a one-time `getDoc()`, not a live
+subscription — `AdminAgendasComponent.open()` is `async` and `await`s it —
+opening a draft hydrates the editor once, it doesn't keep watching
+Firestore afterward (the live-editing session is `AgendaStateService`'s own
+in-memory state from then on, same as ever). See Persistence below for why
+this migrated despite being a genuinely single-admin workload.
 
 **Check-in page** (`/checkin`) — meant to be a *shared* sheet multiple members
 check simultaneously before a meeting: check in, claim one of 6 standard roles
@@ -135,81 +153,185 @@ regardless of what the admin set. One-way only — check-in's `maxSpeakers`
 and nothing else agenda-side ever reads from `CheckinMeeting` back.
 
 Check-in → editor is automatic, not a button: `AgendaEditorComponent`
-applies the current check-in snapshot for the agenda's meeting number (a)
-on load and whenever the meeting number field changes (an `effect()` over
-a `computed(() => state.meeting().no)`, so it only fires on an actual
-number change, not on every unrelated meeting-details edit), and (b) live,
-whenever another tab of the *same browser* writes to that meeting's
-check-in `localStorage` key — via a `window.addEventListener('storage', ...)`
-listener (native `storage` events only fire in *other* tabs than the one
-that wrote, which is exactly what's needed here; matched against the key
-using the exported `checkinStorageKey()` helper from
-`checkin-state.service.ts`). Applying a snapshot (a) overwrites the
-`person` field on every agenda row/dual-sub-item whose `roleId` has a
-current check-in claim (via `AgendaStateService.applyRolePerson()`,
-reusing the same role/person group-sync mechanism agenda items already use
-internally), leaving a role's existing value untouched if check-in has no
-claim for it yet, and (b) imports any check-in speaker signup not already
-present in the Prepared Speakers list by name. The admin can mark any role
-as **overridden** (a checkbox in the Agenda Items edit panel, per role) to
-take it over entirely: an overridden role is skipped by future syncs and
-disappears from the check-in role board (`CheckinStateService.lockedRoles`/
+calls `checkinState.loadMeeting(no)` (a) on load and whenever the meeting
+number field changes (an `effect()` over a `computed(() => state.meeting().no)`,
+so it only fires on an actual number change, not on every unrelated
+meeting-details edit), which subscribes to that meeting's `checkins/{no}`
+Firestore document. A separate `effect()` depends on
+`checkinState.roles()`/`checkinState.speakers()` directly and re-applies
+the snapshot every time either changes — which happens on that initial
+load AND every time Firestore's live listener delivers a claim/signup made
+from **any device**, not just another tab of the same browser. Applying a
+snapshot overwrites the `person` field on every agenda row/dual-sub-item
+whose `roleId` has a current check-in claim (via
+`AgendaStateService.applyRolePerson()`, reusing the same role/person
+group-sync mechanism agenda items already use internally), leaving a
+role's existing value untouched if check-in has no claim for it yet, and
+imports any check-in speaker signup not already present in the Prepared
+Speakers list by name. The admin can mark any role as **overridden** (a
+checkbox in the Agenda Items edit panel, per role) to take it over
+entirely: an overridden role is skipped by future syncs and disappears
+from the check-in role board (`CheckinStateService.lockedRoles`/
 `setRoleLocked()` — enforced in `claimRole()`/`releaseRole()`, not just the
 UI), so members can no longer claim or release it. `AgendaStateService.overriddenRoles`
 round-trips through Export/Import JSON (`AgendaSnapshot.overriddenRoles`).
 
-**This "live" sync is same-browser-only** — there is still no cross-device
-push (a member checking in on their own phone won't reach the admin's
-laptop until that admin's `/admin` tab is reloaded/revisited) — see
-Persistence below on why, and on the planned Firestore swap that would
-make it genuinely cross-device.
+**This sync is genuinely cross-device now** — a member checking in on their
+own phone reaches the admin's laptop live, no reload needed, because both
+sides are Firestore `onSnapshot()` listeners on the same document rather
+than a browser-local `storage` event. See Persistence below for the data
+model and what's still emulator-only.
 
-## Persistence — deliberately localStorage, not Firebase (for now)
+## Persistence — Firestore for shared/live state, localStorage for the rest
 
-`CheckinStateService` persists to `localStorage` under `agora-checkin-*` keys.
-This was a **deliberate stand-in**, not step one of a Firebase rollout — it let
-the check-in feature (role-locking logic, speaker cap, self-eval blocking) get
-built and verified without needing a Firebase project, credentials, or network
-access.
+**Firestore-backed (emulator-only — no real Firebase project exists yet):**
 
-**The real limitation this creates:** state is per-browser. Two people on two
-devices each see their own independent copy of the check-in sheet — there is
-no live sync between them. This is fine for local development and demoing the
-UI/logic, but the check-in page's entire purpose (a shared sheet people check
-in real time before a meeting) doesn't actually work across devices yet.
+- `CheckinStateService` — one document per meeting at `checkins/{meetingId}`,
+  holding the full `CheckinSnapshot` (meeting/attendees/roles/speakers/lockedRoles)
+  as nested fields. `loadMeeting(id)` subscribes via `onSnapshot()`
+  (idempotent — calling it again with the same id is a cheap no-op, since
+  `AgendaEditorComponent`'s meeting-sync effect calls it on every
+  meeting-details edit, not just when the number changes). Every mutator
+  (`checkIn()`, `claimRole()`, `releaseRole()`, `addSpeakerSignup()`,
+  `claimEvaluatorSlot()`, `releaseEvaluatorSlot()`, `updateMeeting()`,
+  `setRoleLocked()`, `resetAll()`) runs inside `runTransaction()` via a
+  shared private `mutate()` helper — read-decide-write in one atomic
+  round-trip, so two people claiming the same role at the same instant
+  can't both win. This is why `claimRole()`/`addSpeakerSignup()`/
+  `claimEvaluatorSlot()` return `Promise<boolean>` now instead of a
+  synchronous `boolean` — the 3 call sites that use the result
+  (`role-board`/`speaker-signup`/`evaluator-slots` components) `await` it.
+  A role id absent from the `roles` map means the same thing as one present
+  with an empty claim everywhere it's read — the service doesn't need to
+  know the full set of role definitions, so it has **no dependency on
+  `RoleDefinitionService`**.
+- `RoleDefinitionService` (meeting roles) and `CommitteeRoleDefinitionService`
+  (committee/governance titles) — one Firestore document per role, at
+  `roleDefinitions/{roleId}` and `committeeRoleDefinitions/{roleId}`
+  respectively, kept live via `onSnapshot()` on the whole collection.
+  **No hardcoded fallback list exists in either service anymore** — a fresh
+  environment (or a wiped emulator) needs `npm run seed:roles`
+  (`scripts/seed-role-definitions.mjs`) to populate this club's standard
+  8 meeting roles / 7 committee roles before either admin page or the
+  check-in role board shows anything. The script is idempotent — it skips
+  any collection that already has documents, so re-running it never
+  clobbers roles you've since edited or archived via the admin UI. Role ids
+  (`toastmaster`, `president`, etc.) are used as literal Firestore document
+  IDs, not auto-generated — `default-agenda.ts`, `docx.service.ts`, and
+  `agenda-preview.component.ts` all reference these exact strings as stable
+  keys, so they must never change.
+- `PublishedAgendaService` — one document per meeting at
+  `publishedAgendas/{meetingId}`, holding the full published `AgendaSnapshot`
+  plus `publishedAt`. Migrated specifically because — unlike `SavedAgendaService`,
+  a genuinely single-admin workload — this service's entire purpose is being
+  read on a *different device* than the one that published it (`/preview`,
+  reached from check-in's
+  "Preview Agenda" link) — on `localStorage` that literally couldn't work
+  cross-device, the same gap check-in had before its own migration. No
+  separate index collection needed the way the old `localStorage` version
+  needed a hand-rolled one (`agora-agenda-published-index`) — Firestore's
+  `onSnapshot()` on the whole collection *is* "enumerate the keys," for
+  free, which is exactly what `entries()`/`nearestEntry()` are built on.
+  `AgendaViewerComponent` reflects this reactively (an `effect()` over
+  `current()`, not a one-time synchronous read), so it also updates live if
+  the admin re-publishes while someone's viewing — its "🔄 Refresh" button
+  is now just a reassurance affordance, not a real refetch.
+- `CommitteeRosterService` — a **single** document at `committeeRoster/current`
+  holding the whole roster array, not one-per-role like `RoleDefinitionService`.
+  This is deliberate: `roleId` isn't a unique key on a committee slot (several
+  slots legitimately share the same blank `roleId` until assigned — see
+  `AgendaStateService.updateCommitteeMember`'s own comment on addressing by
+  array position, not `roleId`), and `replaceAll()` already treated the whole
+  roster as one atomic unit before the migration, so one document matches
+  the existing access pattern exactly. Also normalizes any stored roster
+  shorter than 7 slots back up to 7 on every load, padding with blanks —
+  needed because the app itself never removes a slot, but the Firestore
+  document can still end up short some other way (an admin manually deleting
+  one array element via the Emulator UI, which happened in practice —
+  without this, that slot and the ability to re-enter anyone into it would
+  be gone for good).
+- `SavedAgendaService` — one document per meeting at `savedAgendas/{meetingId}`,
+  the "My Agendas" draft library. Migrated for cross-device admin convenience
+  (start on your laptop, finish on your phone), not to fix a correctness bug
+  the way check-in/published-agenda were — this is a genuinely single-admin
+  workload, migrated anyway once the pattern was well-established. `load()`
+  is a one-time `getDoc()`, not a live subscription (see the Agenda editor
+  section above); the auto-save effect that calls `save()` is debounced for
+  the same reason as check-in's meeting-fields push.
 
-**The planned fix** is Firestore, chosen over a custom MongoDB/Spring Boot/
-Render/Auth0 stack specifically because:
-- `runTransaction()` gives atomic check-and-set for role claims for free —
-  no hand-rolled locking logic needed
-- `onSnapshot()` / `docData()` gives live cross-device sync for free — no
-  WebSocket server to build
-- No server to deploy or keep warm (Render's free tier cold-starts after
-  15 min idle, which is a bad fit for "everyone opens the link 10 minutes
-  before the meeting")
+**Still `localStorage` (deliberately, not a migration backlog item):**
+`StorageService`'s one remaining direct consumer — `CheckinStateService`'s
+own per-browser identity (`agora-checkin-uid`/`agora-checkin-name`,
+unrelated to the Firestore-backed meeting data it now writes) — stays on
+`localStorage`. This is deliberately *not* meant to sync across devices:
+there's no Firebase Auth in this app, so "who you are" is still just a
+random id your browser remembers, not an account. This is the only thing
+left that isn't a candidate for Firestore migration at all — everything
+else that was localStorage-based in this app has now migrated.
 
-**Why the agenda library (`SavedAgendaService`) stayed on `localStorage`
-too**, even though it was added after Firestore was already the documented
-plan: its rationale above is specific to `CheckinStateService`'s
-*concurrent, multi-device* editing problem — atomic claim-and-set,
-live cross-device sync. Saving/listing/reopening agendas is a single-admin,
-one-browser-at-a-time workload, the same shape `AgendaStateService` already
-has — it doesn't have that problem, so it didn't need to be the reason to
-stand up Firebase project/emulator/Auth infrastructure that doesn't exist
-in this repo yet. Its public API (`save()`/`load()`/`delete()`/`entries()`)
-is still shaped the same deliberate way, so it can swap internals to a
-Firestore collection later without changing callers, exactly like
-`CheckinStateService` is meant to.
+**A real gotcha hit migrating `CommitteeRosterService`, worth knowing before
+migrating anything else that follows this same shape:** `AgendaStateService`
+copies `committeeRoster.all()` into its own `cmt`/`agItems`/`meeting.vpe`
+*once*, synchronously, at construction — but Firestore data always arrives
+asynchronously, even on the very first read. A naive "seed once when real
+data arrives" `effect()` guard is not enough, because the pre-load
+placeholder value (`all()`'s default before Firestore delivers anything) is
+itself a defined, normal-looking array — indistinguishable by content from
+"Firestore confirmed there's genuinely nothing here." The effect's *own*
+first invocation runs against that placeholder before Firestore's listener
+has delivered anything, consumes it, sets the guard, and permanently locks
+out the real data that arrives moments later. This was caught by hard-reloading
+in the browser and inspecting live component state (`ng.getComponent(el)`)
+— not by the test suite, which passed throughout with a synchronous fake
+that never exercised the timing gap at all. The fix:
+`CommitteeRosterService` exposes a separate `ready` signal, set `true` only
+inside the `onSnapshot()` callback, and the consuming effect gates on
+`ready()`, not on `all()` changing. Any future one-time-copy-at-construction
+consumer of a Firestore-backed signal needs the same `ready()` pattern —
+don't assume "the signal changed" means "real data arrived."
 
-When implementing that swap: `CheckinStateService`'s public method signatures
-(`checkIn()`, `claimRole()`, `releaseRole()`, `addSpeakerSignup()`,
-`claimEvaluatorSlot()`, etc.) should stay the same — only the bodies change
-from `localStorage` reads/writes to Firestore SDK calls. No component should
-need to change. Testing the swapped-in transaction logic requires either the
-Firebase Local Emulator Suite (`firebase emulators:start`, fully offline after
-one-time `firebase init`) or a real project — a hand-rolled mock can't
+**Why emulator-only, not a real project:** no `firebase login`, no real
+Firebase/GCP project, no billing — `.firebaserc` uses project id
+`meeting-agenda-generator` purely as a label the local emulator answers to.
+`src/environments/environment.ts` and `environment.production.ts` currently
+hold **identical** values (same project id, `useFirestoreEmulator: true`,
+`127.0.0.1:8080`) — wired via `angular.json`'s `production` build
+configuration `fileReplacements`, so when a real project eventually exists,
+only `environment.production.ts`'s values need to change, no code changes.
+`src/app/core/firebase/firestore.provider.ts`'s `provideAppFirestore()`
+reads `environment.useFirestoreEmulator` to decide whether to call
+`connectFirestoreEmulator()` — the environments split is the source of
+truth, not `isDevMode()`.
+
+**Emulator data persists across restarts**: `npm run emulators` passes
+`--import=./.emulator-data --export-on-exit=./.emulator-data`, so stopping
+and restarting the emulator doesn't lose your seeded roles or check-in
+data. `.emulator-data/` is gitignored — it's local dev state, not something
+to commit.
+
+**Testing the Firestore-backed services**: per the role-locking-pattern and
+localStorage-to-firestore-migration skills, a hand-rolled mock can't
 faithfully reproduce Firestore's optimistic-concurrency retry behavior, so
-don't try to unit-test the locking logic without one of those two.
+transactional logic is tested against the real Local Emulator Suite, never
+a mock. Each of the six Firestore-backed services (`CheckinStateService`,
+`RoleDefinitionService`, `CommitteeRoleDefinitionService`,
+`PublishedAgendaService`, `CommitteeRosterService`, `SavedAgendaService`) has a
+`*.emulator.spec.ts` sibling (using `@firebase/rules-unit-testing`'s
+`initializeTestEnvironment()`, each with its own project id distinct from
+the dev project so running tests never wipes data you're interactively
+poking at) — run via `npm run test:emulator` with the emulator already
+running. These are excluded from the default `npm test`/`ng test` run
+(`angular.json`'s `test` target `exclude`s `**/*.emulator.spec.ts`, and is
+pinned to the `development` build configuration specifically so it can
+never accidentally pick up real production Firestore credentials once
+`environment.production.ts` has them). Their plain `*.spec.ts` files only
+cover what never touches Firestore — e.g. `CheckinStateService`'s
+`loadOrCreateUid()` localStorage persistence — and, for services now
+consumed by `AgendaStateService` (`RoleDefinitionService`,
+`CommitteeRosterService`), `agenda-state.service.spec.ts` and
+`agenda-import-export.service.spec.ts` provide plain synchronous fakes
+rather than the real Firestore-backed service, since neither suite is
+testing Firestore behavior itself.
 
 ## Naming
 
@@ -232,7 +354,10 @@ debug from the rendered output alone.
 
 ## Known gaps / next planned work
 
-1. Swap `CheckinStateService` from localStorage to Firestore (see above)
+1. Stand up a real Firebase project when ready to actually deploy —
+   currently emulator-only (see Persistence above); this needs `firebase
+   login`, project creation, and real (non-`allow if true`) security rules,
+   since there's no Auth yet to scope writes to a specific user.
 2. Multi-tenant support — multiple clubs, real user accounts (Firebase Auth),
    admin-managed yearly subscriptions (manually flagged for now, modeled to
    slot in real payments later without a schema rewrite)
@@ -243,10 +368,18 @@ debug from the rendered output alone.
 
 ## Local dev
 
+Two processes, both from the repo root:
+
 ```bash
 npm install
-ng serve --port 4300
+npm run emulators   # terminal 1 — Firestore emulator (127.0.0.1:8080), UI at :4000
+npm start           # terminal 2 — ng serve on :4300
 ```
+
+First time only (or after wiping `.emulator-data/`): `npm run seed:roles`
+to populate the standard meeting/committee role lists — see Persistence
+above. `npm start` already points at the emulator by default (no flags
+needed), since `environment.ts` is what plain `ng serve` uses.
 
 Routes: `http://localhost:4300/` (home tile picker),
 `http://localhost:4300/admin` (agenda editor),

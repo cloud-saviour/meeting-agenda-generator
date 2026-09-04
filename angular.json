@@ -47,7 +47,13 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.production.ts"
+                }
+              ]
             },
             "development": {
               "optimization": false,
@@ -77,7 +83,18 @@
           "options": {
             "tsConfig": "tsconfig.spec.json",
             "runner": "vitest",
-            "buildTarget": "meeting-agenda-generator:build"
+            "buildTarget": "meeting-agenda-generator:build:development",
+            "exclude": ["**/*.emulator.spec.ts"]
+          }
+        },
+        "test-emulator": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "tsconfig.spec.json",
+            "runner": "vitest",
+            "buildTarget": "meeting-agenda-generator:build:development",
+            "include": ["**/*.emulator.spec.ts"],
+            "watch": false
           }
         }
       }

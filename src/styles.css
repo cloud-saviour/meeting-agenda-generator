@@ -84,8 +84,21 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
 /* Mobile-only form/preview toggle — below 768px only one panel is shown at a
    time (switched via the "Preview Agenda"/"Edit Form" button); the 40/60
    split above already makes both visible side by side at ≥768px regardless
-   of this toggle's state, so this rule must never apply there. */
-@media (max-width: 767.98px) {
+   of this toggle's state, so this rule must never apply there.
+   `screen and` is required, not just the width check: this rule checks
+   *width* only, and print's layout pass can satisfy `max-width: 767.98px`
+   independently of actual paper size (it was the real cause of a "print
+   shows a fully blank page" bug — `mobilePreviewMode` defaults to false, so
+   `.app-body` carries `.mobile-form`, and without `screen and` this rule set
+   `.app-preview { display: none !important; }` during print). `visibility`
+   can't undo `display:none`, and a plain `.app-preview { display: block }`
+   in the print block below can't outrank this selector's higher specificity
+   (.app-body.mobile-form .app-preview = 3 classes) even with matching
+   !important — specificity is compared before source order for competing
+   !important rules. Scoping this to `screen` is the actual fix: a
+   mobile-only toggle should never be a print concern regardless of any
+   width coincidence, not something to out-specify. */
+@media screen and (max-width: 767.98px) {
   /* !important needed: .app-preview also carries Bootstrap's .d-flex
      utility, which sets display:flex !important and would otherwise win. */
   .app-body.mobile-preview .app-sidebar { display: none !important; }
@@ -95,9 +108,21 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
 /* On print, sidebar + navbar are hidden via Bootstrap's d-print-none; these
    unlock the flex/grid layout itself (including the height clamp above) so
    the preview page can flow naturally across printed pages instead of
-   staying clipped inside its on-screen scroll container. */
+   staying clipped inside its on-screen scroll container.
+   !important is required on every property here: .app-shell carries
+   Bootstrap's .d-flex/.vh-100 utilities (display/height, both !important)
+   and .app-preview carries .d-flex/.overflow-auto (display/overflow, also
+   !important) — without matching !important here, these overrides are
+   silently defeated by Bootstrap's own. */
 @media print {
-  .app-shell { display: block; height: auto; }
-  .app-body  { display: block; }
-  .app-preview { overflow: visible; padding: 0; background: #fff; display: block; height: auto; }
+  .app-shell { display: block !important; height: auto !important; }
+  .app-body  { display: block !important; }
+  .app-preview {
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+    display: block !important;
+    height: auto !important;
+    max-width: none !important;
+  }
 }
