@@ -37,6 +37,23 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
   --bs-btn-disabled-border-color: var(--red);
   --bs-btn-focus-shadow-rgb: 206, 60, 23;
 }
+/* Word-blue button, for the DOCX export action — matches Microsoft Word's
+   own brand color rather than the club's red, so the action reads as
+   "produces a Word document" at a glance. */
+.btn-word {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: #2B579A;
+  --bs-btn-border-color: #2B579A;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: #1e3f73;
+  --bs-btn-hover-border-color: #1e3f73;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: #1e3f73;
+  --bs-btn-active-border-color: #1e3f73;
+  --bs-btn-disabled-bg: #2B579A;
+  --bs-btn-disabled-border-color: #2B579A;
+  --bs-btn-focus-shadow-rgb: 43, 87, 154;
+}
 .bg-danger-subtle { background-color: #f8ded5 !important; }
 .text-danger-emphasis { color: #7a2510 !important; }
 .alert-danger {
