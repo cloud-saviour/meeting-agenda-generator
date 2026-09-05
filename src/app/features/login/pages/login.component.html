@@ -1,4 +1,13 @@
-<div class="d-flex flex-column align-items-center justify-content-center vh-100 bg-body-secondary">
+<app-navbar title="Admin Sign In" [fixed]="true"
+  [links]="[
+    { label: '👁 Preview Agenda', path: '/preview' },
+    { label: '📝 Agenda Editor', path: '/admin' },
+    { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="d-flex flex-column align-items-center justify-content-center bg-body-secondary" style="min-height:100vh; padding-top:64px;">
   <div class="card p-4 shadow-sm" style="max-width:360px;width:100%;">
     <div class="text-center mb-3">
       <img src="logo.png" alt="Agora" height="48" class="mb-2">
