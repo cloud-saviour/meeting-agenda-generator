@@ -1,5 +1,12 @@
 import { Injectable, NgZone, inject, signal } from '@angular/core';
-import { Auth, User, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import {
+  Auth,
+  User,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
 import { AUTH } from '../firebase/auth.provider';
 
 /**
@@ -34,5 +41,9 @@ export class AuthService {
 
   signOut(): Promise<void> {
     return signOut(this.auth);
+  }
+
+  resetPassword(email: string): Promise<void> {
+    return sendPasswordResetEmail(this.auth, email);
   }
 }

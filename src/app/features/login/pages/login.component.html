@@ -14,23 +14,44 @@
       <h1 class="fs-6 fw-bold mb-0">Admin Sign In</h1>
     </div>
 
-    <div class="mb-2">
-      <label class="form-label small mb-1">Email</label>
-      <input class="form-control form-control-sm" type="email" [(ngModel)]="email" name="email"
-        (keydown.enter)="submit()" autocomplete="username">
-    </div>
-    <div class="mb-3">
-      <label class="form-label small mb-1">Password</label>
-      <input class="form-control form-control-sm" type="password" [(ngModel)]="password" name="password"
-        (keydown.enter)="submit()" autocomplete="current-password">
-    </div>
+    @if (mode === 'signIn') {
+      <div class="mb-2">
+        <label class="form-label small mb-1">Email</label>
+        <input class="form-control form-control-sm" type="email" [(ngModel)]="email" name="email"
+          (keydown.enter)="submit()" autocomplete="username">
+      </div>
+      <div class="mb-3">
+        <label class="form-label small mb-1">Password</label>
+        <input class="form-control form-control-sm" type="password" [(ngModel)]="password" name="password"
+          (keydown.enter)="submit()" autocomplete="current-password">
+      </div>
 
-    @if (error) {
-      <div class="alert alert-danger py-1 px-2 small mb-3">{{ error }}</div>
+      @if (error) {
+        <div class="alert alert-danger py-1 px-2 small mb-3">{{ error }}</div>
+      }
+
+      <button class="btn btn-danger btn-sm w-100 mb-2" [disabled]="busy" (click)="submit()">
+        {{ busy ? 'Signing in…' : 'Sign In' }}
+      </button>
+      <button class="btn btn-link btn-sm w-100" (click)="showReset()">Forgot password?</button>
+    } @else {
+      <div class="mb-3">
+        <label class="form-label small mb-1">Email</label>
+        <input class="form-control form-control-sm" type="email" [(ngModel)]="resetEmail" name="resetEmail"
+          (keydown.enter)="sendReset()" autocomplete="username">
+      </div>
+
+      @if (resetMessage) {
+        <div class="alert alert-success py-1 px-2 small mb-3">{{ resetMessage }}</div>
+      }
+      @if (resetError) {
+        <div class="alert alert-danger py-1 px-2 small mb-3">{{ resetError }}</div>
+      }
+
+      <button class="btn btn-danger btn-sm w-100 mb-2" [disabled]="resetBusy" (click)="sendReset()">
+        {{ resetBusy ? 'Sending…' : 'Send Reset Link' }}
+      </button>
+      <button class="btn btn-link btn-sm w-100" (click)="showSignIn()">← Back to Sign In</button>
     }
-
-    <button class="btn btn-danger btn-sm w-100" [disabled]="busy" (click)="submit()">
-      {{ busy ? 'Signing in…' : 'Sign In' }}
-    </button>
   </div>
 </div>
