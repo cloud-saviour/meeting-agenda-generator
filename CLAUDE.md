@@ -21,6 +21,8 @@ browser, it's a formatted page, not plain markdown.
   role-definition, published-agenda, committee-roster, and saved-agenda
   state; `localStorage` for everything else — see Persistence below for
   exactly which services use which and why
+- Firebase Auth (same `firebase` package, emulator-only) gates every
+  `/admin*` route behind email/password sign-in — see Authentication below
 
 ## Structure
 
@@ -36,13 +38,23 @@ src/app/
                 backed — see Persistence below) (+ specs)
     models/     role-definition.models.ts
     firebase/   firestore.provider.ts — FIRESTORE injection token +
-                provideAppFirestore(), reads src/environments/environment.ts
+                provideAppFirestore(); auth.provider.ts — AUTH injection
+                token + provideAppAuth(), same getOrCreateApp()-shares-one-
+                FirebaseApp pattern as firestore.provider.ts. Both read
+                src/environments/environment.ts
+    auth/       auth.service.ts (AuthService — currentUser/ready signals,
+                signIn()/signOut()), auth.guard.ts (authGuard — CanActivateFn
+                gating every /admin* route) — see Authentication below
     utils/      locale.ts (APP_LOCALE)
 
   layout/
     navbar/     NavbarComponent — shared nav bar used by agenda-editor,
-                checkin, and admin-roles (title/links/action-buttons via
-                @Input + <ng-content>); home has no navbar
+                checkin, admin-roles, and every admin hub page (title/links/
+                action-buttons via @Input + <ng-content>); injects
+                AuthService directly (not via @Input) to conditionally show
+                a Sign Out button whenever currentUser() is set — this means
+                it can render on /checkin or /preview too, for an admin who
+                happens to have those open while signed in. Home has no navbar
 
   features/
     agenda-editor/    Route "/admin" — the agenda-building tool
@@ -61,29 +73,51 @@ src/app/
       models/          agenda.models.ts
       utils/           agenda-timeline.ts
 
-    admin-agendas/    Route "/admin/agendas" — "My Agendas" library:
+    admin-agendas/    Route "/admin/agendas" (guarded) — "My Agendas" library:
                       list/open/delete saved agendas, "+ New Agenda"
       pages/           admin-agendas.component.ts
 
-    checkin/          Route "/checkin" — member-facing check-in page
+    admin-agendas-hub/  Route "/admin/manage-agendas" (guarded) — Home's
+                      "Manage Agendas" tile lands here first: a 2-tile choice
+                      between "Agenda Editor" (/admin) and "My Agendas"
+                      (/admin/agendas). Mirrors admin-roles-hub below exactly.
+      pages/           admin-agendas-hub.component.ts
+
+    admin-roles-hub/  Route "/admin/manage-roles" (guarded) — Home's
+                      "Manage Roles" tile lands here first: a 2-tile choice
+                      between "Manage Meeting Roles" (/admin/roles) and
+                      "Manage Committee Roles" (/admin/committee-roles)
+      pages/           admin-roles-hub.component.ts
+
+    checkin/          Route "/checkin" — member-facing check-in page, no
+                      auth guard — stays fully anonymous by design, see
+                      Authentication below
       pages/           checkin.component.ts
       components/      attendance-list, role-board, speaker-signup,
                         evaluator-slots
       services/        checkin-state.service.ts (CheckinStateService)
       models/          checkin.models.ts
 
-    admin-roles/      Route "/admin/roles" — manage role definitions
+    admin-roles/      Route "/admin/roles" (guarded) — manage role definitions
       pages/           admin-roles.component.ts
 
-    home/             Route "/" — tile picker linking to the 3 pages above.
-                      Its "Meeting Check-in" tile is the one non-admin,
-                      no-session entry point into check-in, so it can't rely
-                      on AgendaStateService (nothing's been loaded yet) — it
-                      links to PublishedAgendaService.nearestEntry() instead
-                      (nearest upcoming published meeting by date, or the
-                      most recent past one if none is upcoming, or a bare
-                      `/checkin` — the 'default' bucket — if nothing's ever
-                      been published). Every other check-in link in the app
+    login/            Route "/login", the only route the auth guard doesn't
+                      protect — email/password sign-in form. On success,
+                      navigates to ?returnUrl= (defaulting to "/") — see
+                      Authentication below
+      pages/           login.component.ts
+
+    home/             Route "/" — tile picker: "Manage Agendas"
+                      (→ admin-agendas-hub), "Meeting Check-in", "Manage
+                      Roles" (→ admin-roles-hub). Its "Meeting Check-in" tile
+                      is the one non-admin, no-session entry point into
+                      check-in, so it can't rely on AgendaStateService
+                      (nothing's been loaded yet) — it links to
+                      PublishedAgendaService.nearestEntry() instead (nearest
+                      upcoming published meeting by date, or the most recent
+                      past one if none is upcoming, or a bare `/checkin` —
+                      the 'default' bucket — if nothing's ever been
+                      published). Every other check-in link in the app
                       (editor navbar, admin-roles/-hub/-agendas navbars) DOES
                       have an admin session, so those pass
                       `queryParams: { meeting: state.meeting().no } }`
@@ -264,10 +298,12 @@ model and what's still emulator-only.
 own per-browser identity (`agora-checkin-uid`/`agora-checkin-name`,
 unrelated to the Firestore-backed meeting data it now writes) — stays on
 `localStorage`. This is deliberately *not* meant to sync across devices:
-there's no Firebase Auth in this app, so "who you are" is still just a
-random id your browser remembers, not an account. This is the only thing
-left that isn't a candidate for Firestore migration at all — everything
-else that was localStorage-based in this app has now migrated.
+Firebase Auth now exists in this app (see Authentication below), but only
+for the admin side — check-in is deliberately kept outside that system, so
+"who you are" at check-in is still just a random id your browser remembers,
+not an account. This is the only thing left that isn't a candidate for
+Firestore migration at all — everything else that was localStorage-based in
+this app has now migrated.
 
 **A real gotcha hit migrating `CommitteeRosterService`, worth knowing before
 migrating anything else that follows this same shape:** `AgendaStateService`
@@ -333,6 +369,90 @@ consumed by `AgendaStateService` (`RoleDefinitionService`,
 rather than the real Firestore-backed service, since neither suite is
 testing Firestore behavior itself.
 
+## Authentication — admin-only Firebase Auth
+
+Every `/admin*` route (6 total: `admin`, `admin/agendas`, `admin/manage-agendas`,
+`admin/manage-roles`, `admin/roles`, `admin/committee-roles`) is gated by
+`authGuard` (`core/auth/auth.guard.ts`) in `app.routes.ts`. `/checkin` and
+`/preview` are deliberately **not** guarded — check-in stays exactly as it
+always has been: anonymous, name-based, no account, first-come-first-served
+claims (`CheckinStateService`'s local/spoofable `uid` is completely
+untouched by this feature). This is a permanent split, not a stepping stone
+toward member accounts — see Known gaps below for that separate, later item.
+
+**Admin model: any signed-in Firebase user is an admin.** There is no public
+sign-up page anywhere in the app — accounts are provisioned manually, via
+`npm run seed:admin` (`scripts/seed-admin-user.mjs`, idempotent, same
+convention as `seed-role-definitions.mjs`) against the local emulator, or via
+the Firebase Console once a real project exists. Since nobody can
+self-register, "authenticated" and "admin" are equivalent at this club's
+scale — `firestore.rules`' `isAdmin()` helper is just `request.auth != null`.
+If the admin set ever needs finer-grained roles, that helper is the one
+place to change, to a lookup against an `admins/{uid}` allowlist collection
+instead.
+
+**`AuthService`** (`core/auth/auth.service.ts`) exposes `currentUser`
+(a `User | null` signal, via `onAuthStateChanged` wrapped in `NgZone.run()`,
+same pattern as every Firestore listener in this app) and `ready` (`false`
+until that listener's first callback fires). `ready` matters because
+`onAuthStateChanged` is async — on a cold page load, `currentUser()` briefly
+reads `null` even for an already-signed-in admin while Firebase restores the
+cached session. **`authGuard` waits for `ready()` before deciding** —
+without this, a hard refresh on any admin page would flash-redirect a
+signed-in admin to `/login` before the session resolved.
+
+**Firestore rules are now per-collection, not a single blanket `allow read,
+write: if true`** (`firestore.rules`):
+- `checkins/**` — untouched, fully open (see above).
+- `roleDefinitions`, `committeeRoleDefinitions`, `committeeRoster`,
+  `publishedAgendas` — **public read, admin-only write**. All four are
+  public-read for a non-obvious reason worth remembering before tightening
+  any of them further: every migrated Firestore-backed service subscribes
+  via `onSnapshot()` **eagerly in its constructor**, so a collection is
+  exposed to whoever the *service* is transitively injected by, not just
+  whoever the *page* visibly renders. `AgendaPreviewComponent` (used on the
+  public `/preview`) injects `AgendaStateService`, which itself injects
+  `CommitteeRosterService` — so `/preview` fires a live `committeeRoster`
+  read on load even though nothing in `/preview`'s own template displays
+  roster data directly. `RoleDefinitionService` is the same story via
+  `RoleBoardComponent` on `/checkin`. Making any of these four admin-only
+  would break the corresponding public page with a silent permission-denied,
+  not a build error — trace real injection chains before ever tightening a
+  rule here, don't assume from what a page's template shows.
+- `savedAgendas` — **admin-only for both read and write**. Confirmed safe
+  because `SavedAgendaService` is only ever injected by `AgendaEditorComponent`
+  and `AdminAgendasComponent`, both already behind the guard — nothing on
+  `/preview` or `/checkin` transitively touches it.
+
+**Test impact**: the 5 `*.emulator.spec.ts` files for the
+public-read-admin-write and admin-only collections
+(`role-definition`, `committee-role-definition`, `committee-roster`,
+`published-agenda`, `saved-agenda`) each embed their own `FIRESTORE_RULES`
+string (they don't load the real `firestore.rules` file — the unit-test
+builder bundles for the browser, so `node:fs` can't read it at runtime) —
+these were updated to the real per-collection rule and switched from
+`testEnv.unauthenticatedContext()` to `testEnv.authenticatedContext('test-admin-uid')`
+for their write-path assertions. `checkin-state.service.emulator.spec.ts` is
+untouched, since `checkins` rules didn't change.
+
+**Emulator-only, same as Firestore** — `firebase.json` now also configures
+an `auth` emulator (port 9099, alongside Firestore's 8080), and both
+`environment.ts`/`environment.production.ts` carry matching
+`useAuthEmulator`/`authEmulatorHost`/`authEmulatorPort` fields plus a real
+gotcha worth knowing: **Firebase Auth's SDK requires an `apiKey` to be
+present in the app config even against the emulator** (Firestore's SDK has
+no such check, which is why this wasn't caught until Auth was added) —
+`environment.firebase.apiKey` is a clearly-commented placeholder string,
+never sent anywhere real, since `connectAuthEmulator()` redirects all Auth
+traffic locally regardless of its value.
+
+**Production bundle budget was raised** (`angular.json`, initial budget
+500kB→600kB warning, 1MB→1.2MB error) — the Auth SDK adds real weight to the
+eagerly-loaded bundle (`provideAppAuth()` lives in `app.config.ts`, which
+`bootstrapApplication` always loads eagerly, unlike the lazy-loaded route
+components). This is a legitimate cost of the feature, not a regression to
+route around.
+
 ## Naming
 
 The check-in feature is named "check-in" everywhere — route (`/checkin`),
@@ -355,12 +475,17 @@ debug from the rendered output alone.
 ## Known gaps / next planned work
 
 1. Stand up a real Firebase project when ready to actually deploy —
-   currently emulator-only (see Persistence above); this needs `firebase
-   login`, project creation, and real (non-`allow if true`) security rules,
-   since there's no Auth yet to scope writes to a specific user.
-2. Multi-tenant support — multiple clubs, real user accounts (Firebase Auth),
-   admin-managed yearly subscriptions (manually flagged for now, modeled to
-   slot in real payments later without a schema rewrite)
+   currently emulator-only (see Persistence and Authentication above); this
+   needs `firebase login` and project creation. Security rules are already
+   scoped per-collection with real admin-write enforcement (see
+   Authentication above) — what's still missing is just a real project to
+   point them at, and manually creating real admin accounts via the Firebase
+   Console (the local `seed:admin` script only works against the emulator).
+2. Multi-tenant support — multiple clubs, real **member-facing** accounts
+   (today's Firebase Auth is admin-only — see Authentication above; check-in
+   is still anonymous by design, not just not-yet-migrated), admin-managed
+   yearly subscriptions (manually flagged for now, modeled to slot in real
+   payments later without a schema rewrite)
 3. Admin console for the check-in page: reset a role, cap speaker slots,
    lock the sheet once the meeting starts (role-locking now exists per-role
    via the editor's override toggle — see above — but there's no bulk
@@ -372,19 +497,25 @@ Two processes, both from the repo root:
 
 ```bash
 npm install
-npm run emulators   # terminal 1 — Firestore emulator (127.0.0.1:8080), UI at :4000
+npm run emulators   # terminal 1 — Firestore (127.0.0.1:8080) + Auth (127.0.0.1:9099) emulators, UI at :4000
 npm start           # terminal 2 — ng serve on :4300
 ```
 
 First time only (or after wiping `.emulator-data/`): `npm run seed:roles`
-to populate the standard meeting/committee role lists — see Persistence
-above. `npm start` already points at the emulator by default (no flags
-needed), since `environment.ts` is what plain `ng serve` uses.
+to populate the standard meeting/committee role lists (see Persistence
+above), and `npm run seed:admin` to create a local admin account
+(`admin@example.com` / `password123`, see Authentication above) so you can
+actually reach any `/admin*` route. `npm start` already points at the
+emulator by default (no flags needed), since `environment.ts` is what plain
+`ng serve` uses.
 
 Routes: `http://localhost:4300/` (home tile picker),
+`http://localhost:4300/login` (admin sign-in — every route below except
+`/checkin` and `/preview` redirects here first if you're not signed in),
 `http://localhost:4300/admin` (agenda editor),
 `http://localhost:4300/admin/agendas` (My Agendas — list/open/delete saved agendas),
-`http://localhost:4300/checkin` (check-in page),
-`http://localhost:4300/preview` (read-only published-agenda view), and
+`http://localhost:4300/admin/manage-agendas` (hub: Agenda Editor / My Agendas),
+`http://localhost:4300/checkin` (check-in page, no sign-in needed),
+`http://localhost:4300/preview` (read-only published-agenda view, no sign-in needed), and
 `http://localhost:4300/admin/roles` / `/admin/committee-roles` / `/admin/manage-roles`
 (manage role definitions).

@@ -9,5 +9,8 @@
     @for (link of links; track link.path) {
       <a class="btn btn-outline-light btn-sm" [routerLink]="link.path" [queryParams]="link.queryParams">{{ link.label }}</a>
     }
+    @if (currentUser()) {
+      <button class="btn btn-outline-light btn-sm" (click)="signOut()">🚪 Sign Out</button>
+    }
   </div>
 </nav>

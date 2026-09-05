@@ -1,0 +1,27 @@
+<div class="d-flex flex-column align-items-center justify-content-center vh-100 bg-body-secondary">
+  <div class="card p-4 shadow-sm" style="max-width:360px;width:100%;">
+    <div class="text-center mb-3">
+      <img src="logo.png" alt="Agora" height="48" class="mb-2">
+      <h1 class="fs-6 fw-bold mb-0">Admin Sign In</h1>
+    </div>
+
+    <div class="mb-2">
+      <label class="form-label small mb-1">Email</label>
+      <input class="form-control form-control-sm" type="email" [(ngModel)]="email" name="email"
+        (keydown.enter)="submit()" autocomplete="username">
+    </div>
+    <div class="mb-3">
+      <label class="form-label small mb-1">Password</label>
+      <input class="form-control form-control-sm" type="password" [(ngModel)]="password" name="password"
+        (keydown.enter)="submit()" autocomplete="current-password">
+    </div>
+
+    @if (error) {
+      <div class="alert alert-danger py-1 px-2 small mb-3">{{ error }}</div>
+    }
+
+    <button class="btn btn-danger btn-sm w-100" [disabled]="busy" (click)="submit()">
+      {{ busy ? 'Signing in…' : 'Sign In' }}
+    </button>
+  </div>
+</div>

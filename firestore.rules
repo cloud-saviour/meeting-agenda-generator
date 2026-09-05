@@ -1,11 +1,45 @@
 rules_version = '2';
 
-// Local emulator only — no real Firebase project exists yet.
-// Open rules are fine here since nothing is ever deployed with this project id.
+// Emulator-only for now (a real Firebase project is a separate future step —
+// see CLAUDE.md "Known gaps"). Admin model: any authenticated user is an
+// admin. Accounts are provisioned manually (no public sign-up), so
+// "authenticated" and "admin" are equivalent at this scale. If the admin set
+// ever needs finer-grained roles, replace isAdmin() with a lookup against an
+// admins/{uid} allowlist collection instead.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+    function isAdmin() {
+      return request.auth != null;
+    }
+
+    // Check-in board: fully public, anonymous, first-come-first-served.
+    // Unrelated to auth by design — do not gate this.
+    match /checkins/{meetingId} {
       allow read, write: if true;
+    }
+
+    // Public read (check-in role board + /preview both need these
+    // unauthenticated); only the admin UI writes.
+    match /roleDefinitions/{roleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /committeeRoleDefinitions/{roleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /committeeRoster/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /publishedAgendas/{meetingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin's private drafts — nobody else ever reads or writes these.
+    match /savedAgendas/{meetingId} {
+      allow read, write: if isAdmin();
     }
   }
 }

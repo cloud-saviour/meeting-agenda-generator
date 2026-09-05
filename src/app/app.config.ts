@@ -2,6 +2,7 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZoneChang
 import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { provideAppFirestore } from './core/firebase/firestore.provider';
+import { provideAppAuth } from './core/firebase/auth.provider';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -9,5 +10,6 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
     provideAppFirestore(),
+    provideAppAuth(),
   ]
 };

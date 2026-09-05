@@ -19,8 +19,9 @@ const FIRESTORE_RULES = `
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    match /publishedAgendas/{meetingId} {
+      allow read: if true;
+      allow write: if request.auth != null;
     }
   }
 }
@@ -71,7 +72,7 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
       projectId: 'meeting-agenda-generator-published-test',
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
-    firestore = testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
+    firestore = testEnv.authenticatedContext('test-admin-uid').firestore() as unknown as Firestore;
 
     TestBed.configureTestingModule({});
     parentInjector = TestBed.inject(Injector);
