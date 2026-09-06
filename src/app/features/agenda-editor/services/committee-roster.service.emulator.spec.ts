@@ -13,13 +13,21 @@ import { CommitteeMember } from '../models/agenda.models';
  * `committeeRoster/current` holding the whole roster array (not one doc per
  * role, since roleId isn't a unique key here — see the service's own doc
  * comment). Run via `npm run test:emulator` with the emulator already running.
+ *
+ * isAdmin() requires the `admin` custom claim, not just an authenticated uid
+ * (see firestore.rules) — authenticatedContext()'s second argument simulates
+ * that claim directly, no Firestore fixture document needed.
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+    match /committeeRoster/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }
@@ -44,7 +52,7 @@ describe('CommitteeRosterService (Firestore emulator)', () => {
       projectId: 'meeting-agenda-generator-roster-test',
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
-    firestore = testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
+    firestore = testEnv.authenticatedContext('test-admin-uid', { admin: true }).firestore() as unknown as Firestore;
 
     TestBed.configureTestingModule({});
     parentInjector = TestBed.inject(Injector);

@@ -12,13 +12,21 @@ import { FIRESTORE } from '../../../core/firebase/firestore.provider';
  * role list lives entirely in Firestore's `committeeRoleDefinitions`
  * collection (seeded via scripts/seed-role-definitions.mjs, not hardcoded in
  * the app). Run via `npm run test:emulator` with the emulator already running.
+ *
+ * isAdmin() requires the `admin` custom claim, not just an authenticated uid
+ * (see firestore.rules) — authenticatedContext()'s second argument simulates
+ * that claim directly, no Firestore fixture document needed.
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+    match /committeeRoleDefinitions/{roleId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }
@@ -43,7 +51,7 @@ describe('CommitteeRoleDefinitionService (Firestore emulator)', () => {
       projectId: 'meeting-agenda-generator-committee-roles-test',
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
-    firestore = testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
+    firestore = testEnv.authenticatedContext('test-admin-uid', { admin: true }).firestore() as unknown as Firestore;
 
     TestBed.configureTestingModule({});
     parentInjector = TestBed.inject(Injector);
