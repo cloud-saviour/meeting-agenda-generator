@@ -12,14 +12,21 @@ import { FIRESTORE } from '../firebase/firestore.provider';
  * lives entirely in Firestore's `roleDefinitions` collection (seeded via
  * scripts/seed-role-definitions.mjs, not hardcoded in the app). Run via
  * `npm run test:emulator` with the emulator already running.
+ *
+ * isAdmin() requires the `admin` custom claim, not just an authenticated uid
+ * (see firestore.rules) — authenticatedContext()'s second argument simulates
+ * that claim directly, no Firestore fixture document needed.
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
     match /roleDefinitions/{roleId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
   }
 }
@@ -44,7 +51,7 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
       projectId: 'meeting-agenda-generator-roles-test',
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
-    firestore = testEnv.authenticatedContext('test-admin-uid').firestore() as unknown as Firestore;
+    firestore = testEnv.authenticatedContext('test-admin-uid', { admin: true }).firestore() as unknown as Firestore;
 
     TestBed.configureTestingModule({});
     parentInjector = TestBed.inject(Injector);
@@ -123,5 +130,23 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
 
     await waitFor(() => service.all()[0]?.label === 'New Label');
     expect(service.all()[0].description).toBe('New description');
+  });
+
+  it('rejects writes from an authenticated uid with no admin custom claim — signed in alone is not enough', async () => {
+    const nonAdminFirestore = testEnv
+      .authenticatedContext('random-signed-up-uid')
+      .firestore() as unknown as Firestore;
+    const child = Injector.create({
+      parent: parentInjector,
+      providers: [
+        RoleDefinitionService,
+        { provide: FIRESTORE, useValue: nonAdminFirestore },
+        { provide: NgZone, useValue: TestBed.inject(NgZone) },
+      ],
+    });
+    const service = child.get(RoleDefinitionService);
+    createdServices.push(service);
+
+    await expect(service.create('Should Be Rejected')).rejects.toThrow();
   });
 });

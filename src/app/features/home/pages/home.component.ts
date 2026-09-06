@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { PublishedAgendaService } from '../../agenda-editor/services/published-agenda.service';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -17,5 +17,5 @@ export class HomeComponent {
   readonly nextMeeting = this.publishedAgenda.nearestEntry;
 
   /** Gates the admin tiles (Manage Agendas / Manage Roles) vs. a single Sign In tile. */
-  readonly isSignedIn = computed(() => !!this.auth.currentUser());
+  readonly isAdmin = this.auth.isAdmin;
 }

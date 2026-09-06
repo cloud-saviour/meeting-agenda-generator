@@ -1,33 +1,47 @@
 // One-time dev bootstrap: creates a known local admin account in the Auth
-// emulator for development/testing. Run with `npm run seed:admin` against a
-// running emulator (`npm run emulators`). Safe to re-run — the Auth emulator
-// returns auth/email-already-in-use for an existing account, which this
-// script treats as success rather than an error.
+// emulator, with the `admin` custom claim firestore.rules' isAdmin() checks,
+// for development/testing. Run with `npm run seed:admin` against a running
+// emulator (`npm run emulators`). Safe to re-run — idempotent on both the
+// Auth account and the claim.
+//
+// Uses firebase-admin, not the client SDK used elsewhere in scripts/ —
+// setCustomUserClaims() is an Admin-SDK-only operation, unavailable to any
+// client for the obvious reason that a client must never be able to grant
+// itself admin access. Pointing the Admin SDK at the emulators (via the env
+// vars below) needs no real service-account credentials — this is the
+// standard way to use firebase-admin for local emulator-only tooling.
 
-import { initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } from 'firebase/auth';
+import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 
 const EMAIL = 'admin@example.com';
 const PASSWORD = 'password123'; // local emulator only — never a real credential
 
 async function main() {
-  // apiKey is a placeholder — Firebase Auth's SDK requires one to be present
-  // even against the emulator, but connectAuthEmulator() below redirects all
-  // Auth traffic locally regardless of its value.
-  const app = initializeApp({ projectId: 'meeting-agenda-generator', apiKey: 'emulator-placeholder-api-key' });
+  const app = initializeApp({ projectId: 'meeting-agenda-generator' });
   const auth = getAuth(app);
-  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
 
+  let uid;
   try {
-    await createUserWithEmailAndPassword(auth, EMAIL, PASSWORD);
+    const user = await auth.createUser({ email: EMAIL, password: PASSWORD });
+    uid = user.uid;
     console.log(`Created admin account: ${EMAIL} / ${PASSWORD}`);
   } catch (err) {
-    if (err.code === 'auth/email-already-in-use') {
+    if (err.code === 'auth/email-already-exists') {
+      uid = (await auth.getUserByEmail(EMAIL)).uid;
       console.log(`Admin account already exists: ${EMAIL} / ${PASSWORD}`);
     } else {
       throw err;
     }
   }
+
+  await auth.setCustomUserClaims(uid, { admin: true });
+  console.log(`Ensured the 'admin' custom claim is set for ${uid}.`);
+  console.log(`If this account is already signed in anywhere, it must sign out and back in to pick up the claim.`);
+
   process.exit(0);
 }
 

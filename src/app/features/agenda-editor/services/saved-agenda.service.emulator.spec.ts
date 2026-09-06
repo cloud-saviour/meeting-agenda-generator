@@ -14,13 +14,20 @@ import { AgendaSnapshot } from '../models/agenda.models';
  * correctness bug (unlike CheckinStateService/PublishedAgendaService) — it's
  * a genuinely single-admin workload. Run via `npm run test:emulator` with
  * the emulator already running.
+ *
+ * isAdmin() requires the `admin` custom claim, not just an authenticated uid
+ * (see firestore.rules) — authenticatedContext()'s second argument simulates
+ * that claim directly, no Firestore fixture document needed.
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
     match /savedAgendas/{meetingId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAdmin();
     }
   }
 }
@@ -71,7 +78,7 @@ describe('SavedAgendaService (Firestore emulator)', () => {
       projectId: 'meeting-agenda-generator-saved-test',
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
-    firestore = testEnv.authenticatedContext('test-admin-uid').firestore() as unknown as Firestore;
+    firestore = testEnv.authenticatedContext('test-admin-uid', { admin: true }).firestore() as unknown as Firestore;
 
     TestBed.configureTestingModule({});
     parentInjector = TestBed.inject(Injector);

@@ -1,15 +1,20 @@
 rules_version = '2';
 
 // Emulator-only for now (a real Firebase project is a separate future step —
-// see CLAUDE.md "Known gaps"). Admin model: any authenticated user is an
-// admin. Accounts are provisioned manually (no public sign-up), so
-// "authenticated" and "admin" are equivalent at this scale. If the admin set
-// ever needs finer-grained roles, replace isAdmin() with a lookup against an
-// admins/{uid} allowlist collection instead.
+// see CLAUDE.md "Known gaps"). Admin model: signed-in AND carrying the
+// `admin` custom claim, set via scripts/seed-admin-user.mjs's
+// auth.setCustomUserClaims() (Console/Admin SDK in a real deployment).
+// Being signed in alone is not enough — a Firebase Web API key is public by
+// design (it ships in the JS bundle), so this app having no sign-up *page*
+// doesn't stop someone from calling createUserWithEmailAndPassword()
+// directly against a real project. A custom claim, unlike a Firestore
+// allowlist doc, is also readable by the client itself (via
+// getIdTokenResult()) — see AuthService.isAdmin — so the app can show
+// correct admin-only UI, not just correctly reject the underlying writes.
 service cloud.firestore {
   match /databases/{database}/documents {
     function isAdmin() {
-      return request.auth != null;
+      return request.auth != null && request.auth.token.admin == true;
     }
 
     // Check-in board: fully public, anonymous, first-come-first-served.
