@@ -5,16 +5,16 @@
 // has documents, so it never clobbers roles you've since edited via the
 // admin UI. This is the only place these role lists exist now; the app
 // itself has no hardcoded fallback.
+//
+// Uses firebase-admin, not the client SDK — firestore.rules requires
+// isAdmin() to write these collections (see scripts/seed-admin-user.mjs),
+// and the Admin SDK bypasses security rules by design, same reasoning as
+// that script.
 
-import { initializeApp } from 'firebase/app';
-import {
-  getFirestore,
-  connectFirestoreEmulator,
-  collection,
-  getDocs,
-  doc,
-  setDoc,
-} from 'firebase/firestore';
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+
+process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
 
 const MEETING_ROLES = [
   { id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true },
@@ -38,15 +38,15 @@ const COMMITTEE_ROLES = [
 ];
 
 async function seedCollection(firestore, collectionName, roles) {
-  const ref = collection(firestore, collectionName);
-  const existing = await getDocs(ref);
+  const ref = firestore.collection(collectionName);
+  const existing = await ref.get();
   if (!existing.empty) {
     console.log(`Skipping "${collectionName}" — already has ${existing.size} document(s).`);
     return;
   }
   for (const role of roles) {
     const { id, ...data } = role;
-    await setDoc(doc(ref, id), data);
+    await ref.doc(id).set(data);
   }
   console.log(`Seeded "${collectionName}" with ${roles.length} role(s).`);
 }
@@ -54,7 +54,6 @@ async function seedCollection(firestore, collectionName, roles) {
 async function main() {
   const app = initializeApp({ projectId: 'meeting-agenda-generator' });
   const firestore = getFirestore(app);
-  connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
 
   await seedCollection(firestore, 'roleDefinitions', MEETING_ROLES);
   await seedCollection(firestore, 'committeeRoleDefinitions', COMMITTEE_ROLES);
