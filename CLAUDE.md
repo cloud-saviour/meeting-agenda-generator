@@ -42,9 +42,10 @@ src/app/
                 token + provideAppAuth(), same getOrCreateApp()-shares-one-
                 FirebaseApp pattern as firestore.provider.ts. Both read
                 src/environments/environment.ts
-    auth/       auth.service.ts (AuthService — currentUser/ready signals,
-                signIn()/signOut()), auth.guard.ts (authGuard — CanActivateFn
-                gating every /admin* route) — see Authentication below
+    auth/       auth.service.ts (AuthService — currentUser/isAdmin/ready
+                signals, signIn()/signOut()/resetPassword()), auth.guard.ts
+                (authGuard — CanActivateFn gating every /admin* route on
+                isAdmin(), not just currentUser()) — see Authentication below
     utils/      locale.ts (APP_LOCALE)
 
   layout/
@@ -54,7 +55,10 @@ src/app/
                 AuthService directly (not via @Input) to conditionally show
                 a Sign Out button whenever currentUser() is set — this means
                 it can render on /checkin or /preview too, for an admin who
-                happens to have those open while signed in. Home has no navbar
+                happens to have those open while signed in. Deliberately
+                gated on currentUser(), not isAdmin() — Sign Out should still
+                appear for a signed-in-but-non-admin account, since they need
+                a way out too. Home has no navbar
 
   features/
     agenda-editor/    Route "/admin" — the agenda-building tool
@@ -107,9 +111,17 @@ src/app/
                       Authentication below
       pages/           login.component.ts
 
-    home/             Route "/" — tile picker: "Manage Agendas"
-                      (→ admin-agendas-hub), "Meeting Check-in", "Manage
-                      Roles" (→ admin-roles-hub). Its "Meeting Check-in" tile
+    home/             Route "/" — tile picker. Signed in as an admin:
+                      "Manage Agendas" (→ admin-agendas-hub), "Meeting
+                      Check-in", "Manage Roles" (→ admin-roles-hub). Not
+                      signed in, or signed in without the admin claim: the
+                      two admin tiles collapse into a single "Sign In" tile
+                      (→ /login) next to "Meeting Check-in" — gated on
+                      `AuthService.isAdmin`, not just currentUser(), so a
+                      real Firebase account without the admin claim still
+                      sees "Sign In", not the admin tiles (see Authentication
+                      below for why that distinction matters). Its "Meeting
+                      Check-in" tile
                       is the one non-admin, no-session entry point into
                       check-in, so it can't rely on AgendaStateService
                       (nothing's been loaded yet) — it links to
@@ -380,26 +392,52 @@ claims (`CheckinStateService`'s local/spoofable `uid` is completely
 untouched by this feature). This is a permanent split, not a stepping stone
 toward member accounts — see Known gaps below for that separate, later item.
 
-**Admin model: any signed-in Firebase user is an admin.** There is no public
-sign-up page anywhere in the app — accounts are provisioned manually, via
-`npm run seed:admin` (`scripts/seed-admin-user.mjs`, idempotent, same
-convention as `seed-role-definitions.mjs`) against the local emulator, or via
-the Firebase Console once a real project exists. Since nobody can
-self-register, "authenticated" and "admin" are equivalent at this club's
-scale — `firestore.rules`' `isAdmin()` helper is just `request.auth != null`.
-If the admin set ever needs finer-grained roles, that helper is the one
-place to change, to a lookup against an `admins/{uid}` allowlist collection
-instead.
+**Admin model: signed in AND carrying the `admin` custom claim** — being a
+signed-in Firebase user is *not* by itself enough (this was an earlier,
+simpler version of the rule that got tightened after review — see the
+git history around `firestore.rules` if you want the full reasoning). There
+is no public sign-up page anywhere in the app — accounts are provisioned
+manually, via `npm run seed:admin` (`scripts/seed-admin-user.mjs`) against
+the local emulator, or via the Firebase Console + a privileged script once a
+real project exists (see the Known gaps note below — the Console alone
+can't set a custom claim). The script uses `firebase-admin`
+(`auth.setCustomUserClaims(uid, { admin: true })`), not the client SDK used
+elsewhere in `scripts/` — setting a custom claim is an Admin-SDK-only
+operation, unavailable to any client for the obvious reason that a client
+must never be able to grant itself admin access. `firestore.rules`'
+`isAdmin()` helper reads the claim directly: `request.auth.token.admin ==
+true`.
+
+**Why a custom claim, not a Firestore `admins/{uid}` allowlist doc** (the
+very first version of this fix): a Firestore doc can be locked down for
+every *write*, but the moment you also lock it down for every *read* (which
+you must — the whole point is that nobody, including the admin themselves,
+should be able to read or spoof it from the client), the client has no way
+to ask "am I an admin?" for its own UI. `HomeComponent` hit this directly —
+it could correctly reject a non-admin's actual writes, but had no way to
+know not to *show* them the admin tiles in the first place. A custom claim
+is part of the signed-in user's own ID token, so `AuthService` can read it
+via `getIdTokenResult()` — same security guarantee (still Admin-SDK-only to
+set), but now also legitimately readable client-side. **One nuance**: a
+claim only appears in a *freshly issued* ID token — changing it while a user
+is already signed in doesn't retroactively update their current session;
+they need to sign out and back in (or the SDK's periodic silent refresh) to
+see it.
 
 **`AuthService`** (`core/auth/auth.service.ts`) exposes `currentUser`
-(a `User | null` signal, via `onAuthStateChanged` wrapped in `NgZone.run()`,
-same pattern as every Firestore listener in this app) and `ready` (`false`
-until that listener's first callback fires). `ready` matters because
-`onAuthStateChanged` is async — on a cold page load, `currentUser()` briefly
-reads `null` even for an already-signed-in admin while Firebase restores the
-cached session. **`authGuard` waits for `ready()` before deciding** —
-without this, a hard refresh on any admin page would flash-redirect a
-signed-in admin to `/login` before the session resolved.
+(`User | null`), `isAdmin` (`boolean`, derived from the claim — see above),
+and `ready` (`false` until the first `onAuthStateChanged` callback fires) —
+all signals, set together in one `NgZone.run()` per auth-state change
+(`onAuthStateChanged`'s callback is `async` specifically to `await
+user.getIdTokenResult()` before that batched write). `ready` matters because
+this whole sequence is async — on a cold page load, `isAdmin()` briefly
+reads `false` even for an already-signed-in admin while Firebase restores
+the cached session. **`authGuard` waits for `ready()`, then checks
+`isAdmin()`, not just `currentUser()`** — without the `ready()` wait, a hard
+refresh on any admin page would flash-redirect a signed-in admin to
+`/login`; without checking `isAdmin()` specifically, a signed-in account
+without the claim could still reach an admin page and only fail once it hit
+an actual Firestore read/write, instead of being redirected immediately.
 
 **Firestore rules are now per-collection, not a single blanket `allow read,
 write: if true`** (`firestore.rules`):
@@ -430,10 +468,20 @@ public-read-admin-write and admin-only collections
 `published-agenda`, `saved-agenda`) each embed their own `FIRESTORE_RULES`
 string (they don't load the real `firestore.rules` file — the unit-test
 builder bundles for the browser, so `node:fs` can't read it at runtime) —
-these were updated to the real per-collection rule and switched from
-`testEnv.unauthenticatedContext()` to `testEnv.authenticatedContext('test-admin-uid')`
-for their write-path assertions. `checkin-state.service.emulator.spec.ts` is
-untouched, since `checkins` rules didn't change.
+these mirror the real per-collection rules and use
+`testEnv.authenticatedContext('test-admin-uid', { admin: true })` for their
+write-path assertions. `@firebase/rules-unit-testing`'s
+`authenticatedContext(uid, tokenOptions)` accepts arbitrary token claims
+directly as its second argument, which is what makes this simple — no
+Firestore fixture document or `withSecurityRulesDisabled()` needed (an
+earlier version of this test setup, back when admin status lived in a
+Firestore doc, did need exactly that; switching to a claim removed it).
+`role-definition.service.emulator.spec.ts` additionally has the actual
+regression test for the security property itself:
+`testEnv.authenticatedContext('random-signed-up-uid')` with *no* claim must
+be rejected on write — being signed in is not enough.
+`checkin-state.service.emulator.spec.ts` is untouched, since `checkins`
+rules didn't change.
 
 **Emulator-only, same as Firestore** — `firebase.json` now also configures
 an `auth` emulator (port 9099, alongside Firestore's 8080), and both
@@ -479,8 +527,14 @@ debug from the rendered output alone.
    needs `firebase login` and project creation. Security rules are already
    scoped per-collection with real admin-write enforcement (see
    Authentication above) — what's still missing is just a real project to
-   point them at, and manually creating real admin accounts via the Firebase
-   Console (the local `seed:admin` script only works against the emulator).
+   point them at. **Provisioning a production admin is one step harder than
+   it was under the old Firestore-doc allowlist**: creating the Firebase Auth
+   account is still a Console action, but the Console has no UI for setting
+   a custom claim — that step needs `scripts/seed-admin-user.mjs` (or
+   equivalent) run with real service-account credentials instead of pointed
+   at the emulator, since `setCustomUserClaims()` is Admin-SDK-only.
+   (`.emulator-data/` and the local `seed:admin` script cover dev/testing
+   only.)
 2. Multi-tenant support — multiple clubs, real **member-facing** accounts
    (today's Firebase Auth is admin-only — see Authentication above; check-in
    is still anonymous by design, not just not-yet-migrated), admin-managed
@@ -504,9 +558,11 @@ npm start           # terminal 2 — ng serve on :4300
 First time only (or after wiping `.emulator-data/`): `npm run seed:roles`
 to populate the standard meeting/committee role lists (see Persistence
 above), and `npm run seed:admin` to create a local admin account
-(`admin@example.com` / `password123`, see Authentication above) so you can
-actually reach any `/admin*` route. `npm start` already points at the
-emulator by default (no flags needed), since `environment.ts` is what plain
+(`admin@example.com` / `password123`) with the `admin` custom claim set
+(see Authentication above) so you can actually reach any `/admin*` route —
+safe to re-run any time (e.g. after wiping `.emulator-data/`, or just to
+confirm the claim is still set). `npm start` already points at the emulator
+by default (no flags needed), since `environment.ts` is what plain
 `ng serve` uses.
 
 Routes: `http://localhost:4300/` (home tile picker),
