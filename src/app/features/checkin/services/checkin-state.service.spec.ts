@@ -65,17 +65,47 @@ describe('CheckinStateService', () => {
     expect(service.currentUid).toBe('member-uid');
   });
 
-  it('seeds currentName from the signed-in account\'s displayName only while it is still blank', () => {
+  it('seeds currentName from the signed-in account\'s displayName on construction', () => {
     const service = createService({ uid: 'member-uid', displayName: 'Ada Lovelace', email: 'ada@example.com' });
     TestBed.tick();
     expect(service.currentName()).toBe('Ada Lovelace');
   });
 
-  it('does not overwrite a name already set this session', () => {
+  it('does not overwrite a name already set this session, as long as the identity has not changed', () => {
     const service = createService({ uid: 'member-uid', displayName: 'Ada Lovelace', email: 'ada@example.com' });
     service.currentName.set('Typed Name');
     TestBed.tick();
     expect(service.currentName()).toBe('Typed Name');
+  });
+
+  it('clears and re-seeds currentName when the resolved identity actually changes — no leaking a name across identities', async () => {
+    const auth = fakeAuthService(); // starts anonymous
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: FIRESTORE, useValue: unusedFirestoreStub },
+        { provide: AuthService, useValue: auth },
+        { provide: CheckinContactsService, useValue: noopContacts },
+      ],
+    });
+    const service = TestBed.inject(CheckinStateService);
+
+    await service.checkIn('Jane Anonymous', 'jane@example.com');
+    expect(service.currentName()).toBe('Jane Anonymous');
+
+    // Same browser tab, someone now signs in as admin — simulates the real
+    // bug: CheckinStateService is a `providedIn: 'root'` singleton, so this
+    // is the SAME service instance the anonymous check-in used above.
+    auth.currentUser.set({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' } as User);
+    TestBed.tick();
+
+    expect(service.currentUid).toBe('admin-uid');
+    expect(service.currentName()).toBe('Admin'); // not the leftover "Jane Anonymous"
+
+    // Signing back out must not leak "Admin" forward to the next anonymous visitor either.
+    auth.currentUser.set(null);
+    TestBed.tick();
+
+    expect(service.currentName()).toBe('');
   });
 
   it('checkIn() derives the SAME uid for an anonymous visitor from the SAME email, even across separate instances', async () => {

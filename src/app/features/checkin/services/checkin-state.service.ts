@@ -46,6 +46,9 @@ export class CheckinStateService implements OnDestroy {
     return this.uidSource();
   }
   readonly currentName = signal<string>('');
+  /** `undefined` (distinct from the real "signed out" value `null`) so the very first
+   *  identity-change effect run below always seeds/clears, even on a cold, signed-out load. */
+  private lastUid: string | null | undefined = undefined;
 
   // ── Shared meeting state (Firestore-backed, kept live via onSnapshot) ───
   private readonly snapshot = signal<CheckinSnapshot>(this.emptySnapshotPlaceholder());
@@ -63,28 +66,38 @@ export class CheckinStateService implements OnDestroy {
   );
 
   constructor() {
-    this.seedNameFromDisplayName(this.auth.currentUser());
-
-    // CheckinComponent reads currentName() once into a plain field at
-    // construction (not a reactive template binding), so the synchronous
-    // seed above covers the common case — already signed in when /checkin
-    // is first visited. This effect only helps the rarer case where auth
-    // state resolves later (e.g. a cached session restoring after
-    // CheckinStateService already constructed) for any *other* consumer
-    // that reads currentName() reactively.
-    effect(() => this.seedNameFromDisplayName(this.auth.currentUser()));
+    // CheckinStateService is a `providedIn: 'root'` singleton — it outlives
+    // any single /checkin visit, so `currentName`/`emailIdentity` must be
+    // *reset* whenever the resolved identity actually changes (anonymous →
+    // signed in, one account → another, or signed in → anonymous again),
+    // not just seeded once while blank. Without this, whatever the previous
+    // identity typed (or, for an anonymous visitor, their derived
+    // email-hash uid) leaks forward into the next identity that uses this
+    // same browser tab — e.g. checking in anonymously as "Jane", then
+    // signing in as admin and going back to /checkin, would still show
+    // "Jane" instead of the admin's own name. `lastUid` is compared by
+    // value (uid string, or null when signed out) so this only fires on a
+    // genuine identity change, not on every unrelated auth-signal update.
+    //
+    // The synchronous call below (same as the old seed-once code it
+    // replaces) matters for the common case: CheckinComponent reads
+    // currentName() once into a plain field at its own construction, so
+    // this must already be settled before that happens, not wait for the
+    // effect's first (deferred) flush. The effect that follows exists only
+    // to catch *subsequent* identity changes during this service's
+    // lifetime — by the time it first runs, `syncIdentity` is a no-op
+    // (lastUid already matches), since nothing has changed since the
+    // synchronous call.
+    this.syncIdentity(this.auth.currentUser());
+    effect(() => this.syncIdentity(this.auth.currentUser()));
   }
 
-  /**
-   * Seeds the name field from a signed-in member's Auth displayName, but
-   * only while it's still blank — never overwrites a name the person has
-   * already typed this session (there's no localStorage anymore to check
-   * instead, so "already typed" is just "currentName() is non-empty").
-   */
-  private seedNameFromDisplayName(user: { displayName: string | null } | null): void {
-    if (user?.displayName && !this.currentName()) {
-      this.currentName.set(user.displayName);
-    }
+  private syncIdentity(user: { uid: string; displayName: string | null } | null): void {
+    const uid = user?.uid ?? null;
+    if (uid === this.lastUid) return;
+    this.lastUid = uid;
+    this.currentName.set(user?.displayName ?? '');
+    this.emailIdentity.set(null);
   }
 
   ngOnDestroy(): void {
