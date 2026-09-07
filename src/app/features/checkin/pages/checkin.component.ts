@@ -64,6 +64,22 @@ export class CheckinComponent {
     });
   }
 
+  /**
+   * Locks the name field only once nameInput demonstrably IS the signed-in
+   * account's own name (matches their Auth displayName exactly) — not just
+   * "someone is signed in and the field happens to be non-empty". Guards
+   * against a real bug: nameInput is seeded from per-browser localStorage
+   * (agora-checkin-name), which can be stale leftover from a DIFFERENT
+   * account that previously used this same browser (e.g. admin@example.com
+   * has no displayName of its own, but a prior signed-in member's name is
+   * still sitting in local storage) — disabling on that stale value would
+   * lock the field showing the wrong person's name with no way to fix it.
+   */
+  get isNameLocked(): boolean {
+    const user = this.auth.currentUser();
+    return !!user?.displayName && this.nameInput === user.displayName;
+  }
+
   get dateStr(): string {
     const d = this.state.meeting().date;
     if (!d) return '';

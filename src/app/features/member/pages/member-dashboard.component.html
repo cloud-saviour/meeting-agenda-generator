@@ -17,9 +17,12 @@
       </button>
     } @else if (editing()) {
       <label class="form-label small mb-1">Name</label>
-      <input class="form-control form-control-sm mb-3" type="text" [(ngModel)]="displayNameInput" name="displayName">
+      <input class="form-control form-control-sm mb-2" type="text" [(ngModel)]="displayNameInput" name="displayName">
+      @if (editError()) {
+        <div class="alert alert-danger py-1 px-2 small mb-2">{{ editError() }}</div>
+      }
       <button class="btn btn-danger btn-sm me-2" [disabled]="busy" (click)="saveEdit()">Save</button>
-      <button class="btn btn-outline-secondary btn-sm" [disabled]="busy" (click)="editing.set(false)">Cancel</button>
+      <button class="btn btn-outline-secondary btn-sm" [disabled]="busy" (click)="editing.set(false); editError.set(null)">Cancel</button>
     } @else {
       <h1 class="fs-5 fw-bold mb-1">{{ profile()!.displayName }}</h1>
       <p class="text-muted small mb-3">{{ profile()!.email }}</p>

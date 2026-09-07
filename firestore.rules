@@ -54,8 +54,14 @@ service cloud.firestore {
     // member's history in `checkins/**`.
     match /members/{memberId} {
       allow read: if request.auth != null && (request.auth.uid == memberId || isAdmin());
+      // displayName is never allowed to end up "", null, or missing — the
+      // ultimate guarantee against a direct API write bypassing
+      // MemberProfileService's own requireDisplayName() check. size() > 0
+      // rejects "" too, not just a missing/wrong-typed field.
       allow create, update: if request.auth != null && request.auth.uid == memberId
-        && request.resource.data.uid == memberId;
+        && request.resource.data.uid == memberId
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0;
       allow delete: if false;
     }
 

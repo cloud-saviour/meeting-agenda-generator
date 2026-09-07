@@ -25,7 +25,7 @@
   <div class="card p-3 mb-3 d-flex flex-row align-items-end gap-2" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
     <div class="flex-grow-1">
       <label class="form-label small mb-1">Your Name</label>
-      <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()">
+      <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()" [disabled]="isNameLocked">
     </div>
     <button class="btn btn-danger" (click)="checkIn()">
       {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
