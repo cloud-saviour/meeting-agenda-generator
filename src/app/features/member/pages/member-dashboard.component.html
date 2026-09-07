@@ -1,0 +1,54 @@
+<app-navbar title="My Account" [fixed]="true"
+  [links]="[
+    { label: '👁 Preview Agenda', path: '/preview' },
+    { label: '✅ Meeting Check-in', path: '/checkin' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container" style="max-width:640px; padding-top:80px; padding-bottom:40px;">
+  <div class="card p-4 shadow-sm mb-4">
+    @if (!profileLoaded()) {
+      <p class="text-muted small mb-0">Loading your profile…</p>
+    } @else if (!profile()) {
+      <p class="mb-3 small">No member profile yet for this account.</p>
+      <button class="btn btn-danger btn-sm" [disabled]="busy" (click)="createMissingProfile()">
+        Create My Profile
+      </button>
+    } @else if (editing()) {
+      <label class="form-label small mb-1">Name</label>
+      <input class="form-control form-control-sm mb-2" type="text" [(ngModel)]="displayNameInput" name="displayName">
+      @if (editError()) {
+        <div class="alert alert-danger py-1 px-2 small mb-2">{{ editError() }}</div>
+      }
+      <button class="btn btn-danger btn-sm me-2" [disabled]="busy" (click)="saveEdit()">Save</button>
+      <button class="btn btn-outline-secondary btn-sm" [disabled]="busy" (click)="editing.set(false); editError.set(null)">Cancel</button>
+    } @else {
+      <h1 class="fs-5 fw-bold mb-1">{{ profile()!.displayName }}</h1>
+      <p class="text-muted small mb-3">{{ profile()!.email }}</p>
+      <button class="btn btn-outline-secondary btn-sm" (click)="startEdit()">Edit Name</button>
+    }
+  </div>
+
+  <div class="card p-4 shadow-sm">
+    <h2 class="fs-6 fw-bold mb-3">My Meeting History</h2>
+    @if (history().length === 0) {
+      <p class="text-muted small mb-0">No meeting history yet.</p>
+    } @else {
+      <ul class="list-group list-group-flush">
+        @for (entry of history(); track entry.meetingId) {
+          <li class="list-group-item px-0">
+            <div class="fw-semibold small">{{ entry.theme || 'Meeting ' + entry.meetingId }}</div>
+            <div class="text-muted small">{{ entry.date }}</div>
+            <div class="small">
+              @if (entry.attended) { <span class="badge text-bg-secondary me-1">Attended</span> }
+              @for (role of entry.rolesConfirmed; track role) { <span class="badge text-bg-info me-1">{{ role }}</span> }
+              @if (entry.spoke) { <span class="badge text-bg-success me-1">Spoke</span> }
+              @if (entry.evaluatedSpeakerId) { <span class="badge text-bg-warning me-1">Evaluated a speaker</span> }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+</div>

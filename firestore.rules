@@ -46,5 +46,47 @@ service cloud.firestore {
     match /savedAgendas/{meetingId} {
       allow read, write: if isAdmin();
     }
+
+    // Self-service member accounts (separate from admin — see AuthService).
+    // Own-uid read/write, plus admin read for a future member directory —
+    // but never admin write, which would defeat the point of self-service.
+    // No delete in v1: no product decision yet on what happens to a deleted
+    // member's history in `checkins/**`.
+    match /members/{memberId} {
+      allow read: if request.auth != null && (request.auth.uid == memberId || isAdmin());
+      // displayName is never allowed to end up "", null, or missing — the
+      // ultimate guarantee against a direct API write bypassing
+      // MemberProfileService's own requireDisplayName() check. size() > 0
+      // rejects "" too, not just a missing/wrong-typed field.
+      allow create, update: if request.auth != null && request.auth.uid == memberId
+        && request.resource.data.uid == memberId
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0;
+      allow delete: if false;
+    }
+
+    // Official confirmed history — written only by an admin's "mark
+    // register" actions on /checkin (see AttendanceConfirmationService),
+    // one doc per (meeting, member) at memberHistory/{meetingId}_{uid}.
+    // Unlike checkins/** (unverified self-report, public), this collection
+    // IS the source of truth the member dashboard reads — so only an admin
+    // may write it. The writer is never the record's own subject (an admin
+    // confirms someone ELSE'S involvement), so unlike members/{memberId}
+    // there's no own-uid check on write, only on read.
+    match /memberHistory/{recordId} {
+      allow read: if request.auth != null && (isAdmin() || request.auth.uid == resource.data.uid);
+      allow write: if isAdmin();
+    }
+
+    // Real emails behind check-in identities — foundation for a planned
+    // reminder-email feature. Write is open, same as checkins/** itself
+    // (anonymous, self-reported, no verification barrier — same accepted
+    // risk model, not a new one), but read is admin-only: unlike
+    // checkins/**, this collection exists specifically to hold PII that
+    // must not be publicly readable.
+    match /checkinContacts/{uid} {
+      allow read: if isAdmin();
+      allow write: if true;
+    }
   }
 }

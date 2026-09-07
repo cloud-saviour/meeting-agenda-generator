@@ -3,13 +3,23 @@
   @if (attendees.length) {
     <div class="d-flex flex-wrap gap-2">
       @for (a of attendees; track a.uid) {
-        <span class="badge rounded-pill text-bg-light border">
+        <span class="badge rounded-pill text-bg-light border d-inline-flex align-items-center gap-1">
           <b>{{ a.name }}</b>
           <span class="text-muted">{{ a.joinedAt }}</span>
+          @if (auth.isAdmin()) {
+            @if (isConfirmed(a.uid)) {
+              <button type="button" class="btn btn-success btn-sm py-0 px-1" [disabled]="isConfirmPending(a.uid)" (click)="toggleConfirm(a.uid)">{{ isConfirmPending(a.uid) ? '…' : '✓ Confirmed' }}</button>
+            } @else {
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" [disabled]="isConfirmPending(a.uid)" (click)="toggleConfirm(a.uid)">{{ isConfirmPending(a.uid) ? 'Confirming…' : 'Confirm present' }}</button>
+            }
+          }
         </span>
       }
     </div>
   } @else {
     <div class="text-muted fst-italic small">No one has checked in yet — be the first!</div>
+  }
+  @if (confirmError) {
+    <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ confirmError }}</div>
   }
 </div>

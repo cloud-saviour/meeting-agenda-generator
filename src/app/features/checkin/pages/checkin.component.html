@@ -1,10 +1,4 @@
-<app-navbar title="Meeting Check-in" [fixed]="true"
-  [links]="[
-    { label: '👁 Preview Agenda', path: '/preview', queryParams: { meeting: meetingId } },
-    { label: '📝 Agenda Editor', path: '/admin' },
-    { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
-    { label: '🏠 Home', path: '/' }
-  ]">
+<app-navbar title="Meeting Check-in" [fixed]="true" [links]="navLinks">
 </app-navbar>
 
 <div class="container py-4" style="max-width:760px;margin-top:64px;">
@@ -20,18 +14,42 @@
         <span>Word of the Day: <b class="text-body">{{ state.meeting().word }}</b></span>
       }
     </div>
+    @if (state.meeting().club || state.meeting().sub || state.meeting().addr) {
+      <div class="d-flex flex-wrap gap-3 text-muted small mt-1">
+        @if (state.meeting().club) {
+          <span>Club: <b class="text-body">{{ state.meeting().club }}</b></span>
+        }
+        @if (state.meeting().sub) {
+          <span>Sub Name: <b class="text-body">{{ state.meeting().sub }}</b></span>
+        }
+        @if (state.meeting().addr) {
+          <span>Address: <b class="text-body">{{ state.meeting().addr }}</b></span>
+        }
+      </div>
+    }
   </div>
 
-  <div class="card p-3 mb-3 d-flex flex-row align-items-end gap-2" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
-    <div class="flex-grow-1">
-      <label class="form-label small mb-1">Your Name</label>
-      <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()">
+  <div class="card p-3 mb-3" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
+    <div class="d-flex flex-row align-items-end gap-2 flex-wrap">
+      <div class="flex-grow-1" style="min-width:180px;">
+        <label class="form-label small mb-1">Your Name</label>
+        <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()" [disabled]="isNameLocked">
+      </div>
+      @if (isAnonymous) {
+        <div class="flex-grow-1" style="min-width:180px;">
+          <label class="form-label small mb-1">Your Email</label>
+          <input class="form-control" type="email" [(ngModel)]="emailInput" name="emailInput" placeholder="you@example.com" (keyup.enter)="checkIn()">
+        </div>
+      }
+      <button class="btn btn-danger" (click)="checkIn()">
+        {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
+      </button>
+      @if (state.isCheckedIn()) {
+        <span class="text-success fw-bold small">&#10003; Checked in</span>
+      }
     </div>
-    <button class="btn btn-danger" (click)="checkIn()">
-      {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
-    </button>
-    @if (state.isCheckedIn()) {
-      <span class="text-success fw-bold small">&#10003; Checked in</span>
+    @if (checkInError) {
+      <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ checkInError }}</div>
     }
   </div>
 

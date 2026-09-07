@@ -20,10 +20,17 @@
           <span class="text-muted small">{{ roles[def.id].name }}</span>
         }
         @if (!isLocked(def.id)) {
-          @if (isMine(def.id)) {
+          @if (isMine(def.id) || (auth.isAdmin() && isTaken(def.id))) {
             <button class="btn btn-outline-secondary btn-sm" (click)="release(def.id)">Release</button>
           } @else if (!isTaken(def.id)) {
             <button class="btn btn-danger btn-sm" (click)="claim(def.id)">Claim</button>
+          }
+        }
+        @if (auth.isAdmin() && roles[def.id]?.uid) {
+          @if (isRoleConfirmed(roles[def.id].uid, def.id)) {
+            <button type="button" class="btn btn-success btn-sm" [disabled]="isRoleConfirmPending(def.id)" (click)="toggleRoleConfirm(def.id)">{{ isRoleConfirmPending(def.id) ? '…' : '✓ Confirmed' }}</button>
+          } @else {
+            <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isRoleConfirmPending(def.id)" (click)="toggleRoleConfirm(def.id)">{{ isRoleConfirmPending(def.id) ? 'Confirming…' : 'Confirm done' }}</button>
           }
         }
       </div>

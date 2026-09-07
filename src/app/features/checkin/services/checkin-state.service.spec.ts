@@ -1,34 +1,43 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import type { Firestore } from 'firebase/firestore';
+import type { User } from 'firebase/auth';
 import { CheckinStateService } from './checkin-state.service';
-import { StorageService } from '../../../core/services/storage.service';
+import { CheckinContactsService } from './checkin-contacts.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { AuthService } from '../../../core/auth/auth.service';
 
 // Never exercised by this suite — only present so CheckinStateService's
-// constructor-time `inject(FIRESTORE)` has something to resolve.
+// constructor-time `inject(FIRESTORE)` has something to resolve. checkIn()'s
+// mutate() call cleanly no-ops without a real Firestore connection as long
+// as loadMeeting() was never called (currentMeetingId stays null), which is
+// exactly the case in every test below — none of them call loadMeeting().
 const unusedFirestoreStub = {} as unknown as Firestore;
+const noopContacts = { upsert: async () => undefined } as unknown as CheckinContactsService;
+
+function fakeAuthService(user: Pick<User, 'uid' | 'displayName' | 'email'> | null = null) {
+  return { currentUser: signal(user) } as unknown as AuthService;
+}
 
 /**
- * This suite covers only what doesn't touch the Firestore-backed snapshot:
- * per-browser uid persistence (still localStorage). Claim/release/signup/
- * evaluator/loadMeeting-isolation logic all moved to
+ * This suite covers what doesn't touch the Firestore-backed snapshot — pure
+ * identity derivation (no more localStorage anywhere in this service).
+ * Claim/release/signup/evaluator/loadMeeting-isolation logic lives in
  * checkin-state.service.emulator.spec.ts — per CLAUDE.md and the
  * role-locking-pattern/localStorage-to-firestore-migration skills, a
  * hand-rolled mock can't reproduce Firestore's transaction retry semantics,
  * so that logic must be verified against the real emulator, not a fake.
  */
-class FakeStorage {
-  private store = new Map<string, string>();
-  get(key: string): string | null {
-    return this.store.has(key) ? this.store.get(key)! : null;
-  }
-  set(key: string, value: string): void {
-    this.store.set(key, value);
-  }
-  remove(key: string): void {
-    this.store.delete(key);
-  }
+function createService(user: Pick<User, 'uid' | 'displayName' | 'email'> | null = null): CheckinStateService {
+  TestBed.configureTestingModule({
+    providers: [
+      { provide: FIRESTORE, useValue: unusedFirestoreStub },
+      { provide: AuthService, useValue: fakeAuthService(user) },
+      { provide: CheckinContactsService, useValue: noopContacts },
+    ],
+  });
+  return TestBed.inject(CheckinStateService);
 }
 
 describe('CheckinStateService', () => {
@@ -36,20 +45,107 @@ describe('CheckinStateService', () => {
     TestBed.resetTestingModule();
   });
 
-  it('generates a uid on first construction and reuses it on later construction', () => {
-    const fake = new FakeStorage();
-    const providers = [
-      { provide: StorageService, useValue: fake },
-      { provide: FIRESTORE, useValue: unusedFirestoreStub },
-    ];
-    TestBed.configureTestingModule({ providers });
-    const first = TestBed.inject(CheckinStateService);
-    const uid = first.currentUid;
+  it('gives an anonymous, not-yet-checked-in visitor a non-empty session uid', () => {
+    const service = createService();
+    expect(service.currentUid).not.toBe('');
+  });
+
+  it('two separate anonymous instances get different session uids — nothing persists across construction anymore', () => {
+    const first = createService();
+    const firstUid = first.currentUid;
 
     TestBed.resetTestingModule();
-    TestBed.configureTestingModule({ providers });
-    const second = TestBed.inject(CheckinStateService);
+    const second = createService();
 
-    expect(second.currentUid).toBe(uid);
+    expect(second.currentUid).not.toBe(firstUid);
+  });
+
+  it('currentUid is the signed-in account\'s real Firebase uid, regardless of email/name', () => {
+    const service = createService({ uid: 'member-uid', displayName: null, email: 'member@example.com' });
+    expect(service.currentUid).toBe('member-uid');
+  });
+
+  it('seeds currentName from the signed-in account\'s displayName on construction', () => {
+    const service = createService({ uid: 'member-uid', displayName: 'Ada Lovelace', email: 'ada@example.com' });
+    TestBed.tick();
+    expect(service.currentName()).toBe('Ada Lovelace');
+  });
+
+  it('does not overwrite a name already set this session, as long as the identity has not changed', () => {
+    const service = createService({ uid: 'member-uid', displayName: 'Ada Lovelace', email: 'ada@example.com' });
+    service.currentName.set('Typed Name');
+    TestBed.tick();
+    expect(service.currentName()).toBe('Typed Name');
+  });
+
+  it('clears and re-seeds currentName when the resolved identity actually changes — no leaking a name across identities', async () => {
+    const auth = fakeAuthService(); // starts anonymous
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: FIRESTORE, useValue: unusedFirestoreStub },
+        { provide: AuthService, useValue: auth },
+        { provide: CheckinContactsService, useValue: noopContacts },
+      ],
+    });
+    const service = TestBed.inject(CheckinStateService);
+
+    await service.checkIn('Jane Anonymous', 'jane@example.com');
+    expect(service.currentName()).toBe('Jane Anonymous');
+
+    // Same browser tab, someone now signs in as admin — simulates the real
+    // bug: CheckinStateService is a `providedIn: 'root'` singleton, so this
+    // is the SAME service instance the anonymous check-in used above.
+    auth.currentUser.set({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' } as User);
+    TestBed.tick();
+
+    expect(service.currentUid).toBe('admin-uid');
+    expect(service.currentName()).toBe('Admin'); // not the leftover "Jane Anonymous"
+
+    // Signing back out must not leak "Admin" forward to the next anonymous visitor either.
+    auth.currentUser.set(null);
+    TestBed.tick();
+
+    expect(service.currentName()).toBe('');
+  });
+
+  it('checkIn() derives the SAME uid for an anonymous visitor from the SAME email, even across separate instances', async () => {
+    const first = createService();
+    await first.checkIn('Alice', 'alice@example.com');
+    const firstUid = first.currentUid;
+    expect(firstUid).not.toBe('');
+
+    TestBed.resetTestingModule();
+    const second = createService();
+    await second.checkIn('Alice Again', 'ALICE@Example.com '); // different case/whitespace — must normalize to the same uid
+
+    expect(second.currentUid).toBe(firstUid);
+  });
+
+  it('checkIn() derives DIFFERENT uids for different emails', async () => {
+    const first = createService();
+    await first.checkIn('Alice', 'alice@example.com');
+
+    TestBed.resetTestingModule();
+    const second = createService();
+    await second.checkIn('Bob', 'bob@example.com');
+
+    expect(second.currentUid).not.toBe(first.currentUid);
+  });
+
+  it('checkIn() silently no-ops for an anonymous visitor with an invalid-looking email', async () => {
+    const service = createService();
+    const uidBefore = service.currentUid;
+
+    await service.checkIn('Alice', 'not-an-email');
+
+    expect(service.currentName()).toBe('');
+    expect(service.currentUid).toBe(uidBefore); // still the random session uid, untouched
+  });
+
+  it('checkIn() ignores the email param for a signed-in account and keeps their real uid', async () => {
+    const service = createService({ uid: 'member-uid', displayName: null, email: 'member@example.com' });
+    await service.checkIn('Whatever Name');
+    expect(service.currentUid).toBe('member-uid');
+    expect(service.currentName()).toBe('Whatever Name');
   });
 });

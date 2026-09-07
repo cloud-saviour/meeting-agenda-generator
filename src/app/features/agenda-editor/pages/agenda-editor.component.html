@@ -17,8 +17,8 @@
     </button>
     <button class="btn btn-danger btn-sm" (click)="printAgenda()">&#128438; Print / PDF</button>
     <button class="btn btn-outline-light btn-sm" [disabled]="!state.meeting().no" (click)="publishAgenda()"
-      title="Publish this agenda so members can preview it from the check-in page">
-      {{ published ? '✓ Published' : '📤 Publish' }}
+      title="Publish this agenda so members can preview it from the check-in page (publishing replaces any other currently-published meeting)">
+      {{ published ? '✓ Published' : '📤 Publish New Changes' }}
     </button>
     <a class="btn btn-outline-light btn-sm" routerLink="/admin/manage-roles">⚙ Manage Roles</a>
     <button class="btn btn-outline-light btn-sm" [disabled]="!state.meeting().no" (click)="copyCheckinLink()">

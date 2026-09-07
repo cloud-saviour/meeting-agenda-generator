@@ -19,6 +19,7 @@ process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 
 const EMAIL = 'admin@example.com';
 const PASSWORD = 'password123'; // local emulator only — never a real credential
+const DISPLAY_NAME = 'Admin';
 
 async function main() {
   const app = initializeApp({ projectId: 'meeting-agenda-generator' });
@@ -26,7 +27,7 @@ async function main() {
 
   let uid;
   try {
-    const user = await auth.createUser({ email: EMAIL, password: PASSWORD });
+    const user = await auth.createUser({ email: EMAIL, password: PASSWORD, displayName: DISPLAY_NAME });
     uid = user.uid;
     console.log(`Created admin account: ${EMAIL} / ${PASSWORD}`);
   } catch (err) {
@@ -37,6 +38,14 @@ async function main() {
       throw err;
     }
   }
+
+  // Backfills displayName on a re-run too — earlier versions of this script
+  // never set one, so an account seeded before this line existed would
+  // otherwise stay permanently nameless (see MemberProfileService's
+  // requireDisplayName(), which every UI-driven name write goes through —
+  // this is the one path that bypasses it, since it edits the Auth record
+  // directly via the Admin SDK, not through the app).
+  await auth.updateUser(uid, { displayName: DISPLAY_NAME });
 
   await auth.setCustomUserClaims(uid, { admin: true });
   console.log(`Ensured the 'admin' custom claim is set for ${uid}.`);

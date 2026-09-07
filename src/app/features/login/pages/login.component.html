@@ -1,10 +1,4 @@
-<app-navbar title="Admin Sign In" [fixed]="true"
-  [links]="[
-    { label: '👁 Preview Agenda', path: '/preview' },
-    { label: '📝 Agenda Editor', path: '/admin' },
-    { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
-    { label: '🏠 Home', path: '/' }
-  ]">
+<app-navbar title="Admin Sign In" [fixed]="true" [links]="navLinks">
 </app-navbar>
 
 <div class="d-flex flex-column align-items-center justify-content-center bg-body-secondary" style="min-height:100vh; padding-top:64px;">
@@ -34,6 +28,7 @@
         {{ busy ? 'Signing in…' : 'Sign In' }}
       </button>
       <button class="btn btn-link btn-sm w-100" (click)="showReset()">Forgot password?</button>
+      <a class="btn btn-link btn-sm w-100" routerLink="/signup">Not a member yet? Sign up</a>
     } @else {
       <div class="mb-3">
         <label class="form-label small mb-1">Email</label>

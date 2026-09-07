@@ -99,22 +99,30 @@ export class AgendaEditorComponent {
       });
     });
 
-    // Push meeting details (theme/date/word/start) into check-in's own
-    // CheckinMeeting record, so the header members see at /checkin reflects
-    // the real agenda instead of check-in's own separate, otherwise-never-set
-    // defaults. One-way (agenda is the source of truth) — nothing reads these
-    // fields back from check-in. Tracks the whole `meeting()` signal for the
-    // same reason as the auto-save effect below: simplicity over narrowly
-    // scoping four fields. Debounced, unlike before: this is now a real
-    // Firestore write per call, not a free in-memory one, so it shouldn't
-    // fire on every keystroke.
+    // Push meeting details (theme/date/word/start/club/sub/addr) into
+    // check-in's own CheckinMeeting record, so the header members see at
+    // /checkin reflects the real agenda instead of check-in's own separate,
+    // otherwise-never-set defaults. One-way (agenda is the source of truth)
+    // — nothing reads these fields back from check-in. Tracks the whole
+    // `meeting()` signal for the same reason as the auto-save effect below:
+    // simplicity over narrowly scoping seven fields. Debounced, unlike
+    // before: this is now a real Firestore write per call, not a free
+    // in-memory one, so it shouldn't fire on every keystroke.
     effect(() => {
       const m = this.state.meeting();
       if (!m.no) return;
       clearTimeout(this.meetingSyncTimer);
       this.meetingSyncTimer = setTimeout(() => {
         this.checkinState.loadMeeting(m.no);
-        this.checkinState.updateMeeting({ date: m.date, theme: m.theme, word: m.word, start: m.st });
+        this.checkinState.updateMeeting({
+          date: m.date,
+          theme: m.theme,
+          word: m.word,
+          start: m.st,
+          club: m.club,
+          sub: m.sub,
+          addr: m.addr,
+        });
       }, 500);
     });
 

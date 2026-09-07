@@ -1,5 +1,5 @@
 import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
-import { collection, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 import { AgendaSnapshot } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 
@@ -25,10 +25,19 @@ interface PublishedAgendaDoc extends AgendaSnapshot {
  * entire purpose is being read on a *different device* than the one that
  * published it, which localStorage can never do.
  *
+ * **At most one document exists in this collection at a time** — `publish()`
+ * is exclusive: it reads the whole collection, deletes every other document,
+ * and sets the new one, all inside a single `writeBatch()` (this codebase's
+ * first use of `writeBatch()`), so publishing meeting B always un-publishes
+ * whatever meeting A was previously published, atomically — there's never a
+ * window where zero or two meetings are simultaneously published.
+ *
  * No separate index collection is needed the way the old localStorage
  * version needed a hand-rolled one — `entries()`/`nearestEntry()` are
  * derived from a live `onSnapshot()` on the whole collection, which is
- * Firestore's version of "enumerate the keys" for free.
+ * Firestore's version of "enumerate the keys" for free (in practice they now
+ * only ever see 0 or 1 entries, but their code is unchanged — it already
+ * degrades to that correctly).
  */
 @Injectable({ providedIn: 'root' })
 export class PublishedAgendaService implements OnDestroy {
@@ -43,7 +52,7 @@ export class PublishedAgendaService implements OnDestroy {
 
   readonly current = computed(() => this.snapshot());
 
-  /** Published meetings, sorted by date ascending. */
+  /** Currently-published meeting(s), sorted by date ascending — normally 0 or 1, since publish() is exclusive. */
   readonly entries = computed(() =>
     [...this.allEntries()].sort((a, b) => a.date.localeCompare(b.date))
   );
@@ -85,10 +94,40 @@ export class PublishedAgendaService implements OnDestroy {
     this.unsubscribeMeeting?.();
   }
 
+  /**
+   * Exclusive publish: at most one meeting is ever published at a time.
+   * Reads the whole collection, deletes every doc whose id isn't the one
+   * being published, then sets the new one — all inside a single
+   * writeBatch() so viewers never observe a transient "nothing published"
+   * or "two published" state between the deletes and the set.
+   */
   publish(meetingId: string, data: AgendaSnapshot): Promise<void> {
     const payload: PublishedAgendaDoc = { ...data, publishedAt: new Date().toISOString() };
-    return setDoc(doc(this.firestore, COLLECTION, meetingId), payload).catch((err) =>
-      console.error('publish failed', err)
+    const coll = collection(this.firestore, COLLECTION);
+    return getDocs(coll)
+      .then((snap) => {
+        const batch = writeBatch(this.firestore);
+        for (const d of snap.docs) {
+          if (d.id !== meetingId) batch.delete(d.ref);
+        }
+        batch.set(doc(this.firestore, COLLECTION, meetingId), payload);
+        return batch.commit();
+      })
+      .catch((err) => console.error('publish failed', err));
+  }
+
+  /**
+   * Removes this meeting's published doc outright, if any — a no-op if it
+   * isn't currently published (e.g. it was already superseded by a later
+   * publish()). Callers that delete a saved agenda must call this too
+   * (see AdminAgendasComponent.remove()) — otherwise a deleted meeting's
+   * published snapshot lingers as an orphaned entry, keeping Home's
+   * Check-in tile (and /preview) alive for a meeting that no longer
+   * exists anywhere else.
+   */
+  unpublish(meetingId: string): Promise<void> {
+    return deleteDoc(doc(this.firestore, COLLECTION, meetingId)).catch((err) =>
+      console.error('unpublish failed', err)
     );
   }
 

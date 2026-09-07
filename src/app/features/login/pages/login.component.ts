@@ -1,15 +1,15 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
-import { NavbarComponent } from '../../../layout/navbar/navbar.component';
+import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
 
 const RESET_SENT_MESSAGE = 'If an account exists for that email, a password reset link has been sent.';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule, NavbarComponent],
+  imports: [FormsModule, RouterLink, NavbarComponent],
   templateUrl: './login.component.html',
 })
 export class LoginComponent {
@@ -28,6 +28,16 @@ export class LoginComponent {
   resetBusy = false;
   resetMessage: string | null = null;
   resetError: string | null = null;
+
+  /** Admin-only nav links (Agenda Editor, Manage Roles) only appear for actual admins — /login is reachable by anyone, including an already-signed-in non-admin member. */
+  get navLinks(): NavLink[] {
+    const links: NavLink[] = [{ label: '👁 Preview Agenda', path: '/preview' }];
+    if (this.auth.isAdmin()) {
+      links.push({ label: '📝 Agenda Editor', path: '/admin' }, { label: '⚙ Manage Roles', path: '/admin/manage-roles' });
+    }
+    links.push({ label: '🏠 Home', path: '/' });
+    return links;
+  }
 
   async submit() {
     this.error = null;
