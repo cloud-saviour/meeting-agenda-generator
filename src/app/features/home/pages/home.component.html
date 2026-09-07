@@ -5,7 +5,12 @@
     <h1 class="fs-4 fw-bold" style="color:var(--dark)">Agora Agenda Writer</h1>
   </div>
 
-  <div class="row row-cols-1 g-4 px-3" [class.row-cols-md-3]="isAdmin()" [class.row-cols-md-2]="!isAdmin()" style="max-width:900px;width:100%;">
+  <div class="row row-cols-1 g-4 px-3"
+       [class.row-cols-md-2]="tileCount() === 2"
+       [class.row-cols-md-3]="tileCount() === 3"
+       [class.row-cols-md-4]="tileCount() === 4"
+       [style.max-width.px]="tileCount() === 1 ? 360 : 1100"
+       style="width:100%;">
 
     @if (isAdmin()) {
       <div class="col">
@@ -36,18 +41,16 @@
       </div>
     }
 
-    <div class="col">
-      <div class="card h-100 text-center p-4 shadow-sm position-relative">
-        <div class="fs-1 mb-2">&#128101;</div>
-        <h2 class="fs-6 fw-bold">Meeting Check-in</h2>
-        @if (nextMeeting(); as m) {
+    @if (nextMeeting(); as m) {
+      <div class="col">
+        <div class="card h-100 text-center p-4 shadow-sm position-relative">
+          <div class="fs-1 mb-2">&#128101;</div>
+          <h2 class="fs-6 fw-bold">Meeting #{{ m.no }} Check-in</h2>
           <p class="text-muted small mb-0">{{ m.theme || 'Meeting ' + m.no }} — check in, claim a role, or sign up to speak</p>
-        } @else {
-          <p class="text-muted small mb-0">Check in, claim a role, or sign up to speak</p>
-        }
-        <a routerLink="/checkin" [queryParams]="nextMeeting() ? { meeting: nextMeeting()!.no } : {}" class="stretched-link" aria-label="Open Meeting Check-in"></a>
+          <a routerLink="/checkin" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Open Meeting Check-in"></a>
+        </div>
       </div>
-    </div>
+    }
 
     @if (isAdmin()) {
       <div class="col">
@@ -56,6 +59,17 @@
           <h2 class="fs-6 fw-bold">Manage Roles</h2>
           <p class="text-muted small mb-0">Admin: manage meeting roles and committee roles</p>
           <a routerLink="/admin/manage-roles" class="stretched-link" aria-label="Open Manage Roles"></a>
+        </div>
+      </div>
+    }
+
+    @if (isSignedIn()) {
+      <div class="col">
+        <div class="card h-100 text-center p-4 shadow-sm position-relative">
+          <div class="fs-1 mb-2">&#128682;</div>
+          <h2 class="fs-6 fw-bold">Sign Out</h2>
+          <p class="text-muted small mb-0">End your session on this device</p>
+          <button type="button" class="stretched-link" style="background:none;border:none;padding:0;" (click)="signOut()" aria-label="Sign Out"></button>
         </div>
       </div>
     }

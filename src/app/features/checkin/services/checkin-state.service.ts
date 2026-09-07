@@ -208,12 +208,19 @@ export class CheckinStateService implements OnDestroy {
     }).then((result) => result ?? false);
   }
 
-  /** A member may only release their own claim; organizer-locked roles can't be released either. */
+  /**
+   * A member may only release their own claim; an admin may release anyone's
+   * (running the meeting means being able to free up a role someone claimed
+   * by mistake, or who's no longer available, without waiting on them).
+   * Organizer-locked roles can't be released by either.
+   */
   releaseRole(roleKey: string): Promise<void> {
     return this.mutate((s) => {
       if (s.lockedRoles.includes(roleKey)) return { next: s, result: undefined };
       const existing = s.roles[roleKey];
-      if (!existing || existing.uid !== this.currentUid) return { next: s, result: undefined };
+      if (!existing || (existing.uid !== this.currentUid && !this.auth.isAdmin())) {
+        return { next: s, result: undefined };
+      }
       const next = { ...s, roles: { ...s.roles, [roleKey]: { name: '', uid: '' } } };
       return { next, result: undefined };
     }).then(() => undefined);

@@ -83,7 +83,18 @@ src/app/
       utils/           agenda-timeline.ts
 
     admin-agendas/    Route "/admin/agendas" (guarded) — "My Agendas" library:
-                      list/open/delete saved agendas, "+ New Agenda"
+                      list/open/publish/delete saved agendas, "+ New Agenda".
+                      Each row has its own Publish button, highlighted
+                      solid blue and reading "Published" when that row is
+                      the currently-published meeting
+                      (`PublishedAgendaService.entries()`, normally 0-1
+                      elements now that publish() is exclusive — see
+                      Persistence below) — clicking it loads the full
+                      snapshot via `SavedAgendaService.load()` (the same
+                      one-time `getDoc()` `open()` already uses) and calls
+                      `PublishedAgendaService.publish()`, so publishing no
+                      longer requires opening the agenda into the editor
+                      first
       pages/           admin-agendas.component.ts
 
     admin-agendas-hub/  Route "/admin/manage-agendas" (guarded) — Home's
@@ -147,25 +158,40 @@ src/app/
 
     home/             Route "/" — tile picker. Signed in as an admin:
                       "Manage Agendas" (→ admin-agendas-hub), "Meeting
-                      Check-in", "Manage Roles" (→ admin-roles-hub). Not
-                      signed in, or signed in without the admin claim: the
-                      two admin tiles collapse into a single "Sign In" tile
-                      (→ /login) next to "Meeting Check-in" — gated on
+                      #<no> Check-in", "Manage Roles" (→ admin-roles-hub),
+                      "Sign Out". Not signed in, or signed in without the
+                      admin claim: the two admin tiles collapse into a
+                      single "Sign In" tile (→ /login) — gated on
                       `AuthService.isAdmin`, not just currentUser(), so a
                       real Firebase account without the admin claim still
                       sees "Sign In", not the admin tiles (see Authentication
-                      below for why that distinction matters). Its "Meeting
-                      Check-in" tile
-                      is the one non-admin, no-session entry point into
-                      check-in, so it can't rely on AgendaStateService
-                      (nothing's been loaded yet) — it links to
-                      PublishedAgendaService.nearestEntry() instead (nearest
-                      upcoming published meeting by date, or the most recent
-                      past one if none is upcoming, or a bare `/checkin` —
-                      the 'default' bucket — if nothing's ever been
-                      published). Every other check-in link in the app
-                      (editor navbar, admin-roles/-hub/-agendas navbars) DOES
-                      have an admin session, so those pass
+                      below for why that distinction matters); a signed-in
+                      non-admin member gets "Member Profile" (→ /member)
+                      instead. "Sign Out" appears whenever any account is
+                      signed in (admin or member), calling
+                      `AuthService.signOut()` directly rather than
+                      navigating — Home is otherwise the one page with no
+                      other way to sign out.
+                      The "Meeting #<no> Check-in" tile is the one
+                      non-admin, no-session entry point into check-in, so it
+                      can't rely on AgendaStateService (nothing's been
+                      loaded yet) — it links to
+                      PublishedAgendaService.nearestEntry() instead. It is
+                      **only rendered when a meeting is currently
+                      published** (`nearestEntry()` non-null) — omitted
+                      entirely otherwise, same as every other conditional
+                      tile here (`@if`/`@else`, never a shown-but-disabled
+                      tile) — and its heading shows which meeting via the
+                      app's `#<no>` convention (see checkin.component.html).
+                      This gating is uniform for admin/member/anonymous
+                      alike. `tileCount()` drives the grid's column count
+                      accordingly: `(isAdmin()?2:1) + (nextMeeting()?1:0) +
+                      (isSignedIn()?1:0)`, which can drop to 1 (anonymous,
+                      nothing published — just "Sign In"), handled by the
+                      template's `row-cols-1` default with no extra
+                      binding. Every other check-in link in the app (editor
+                      navbar, admin-roles/-hub/-agendas navbars) DOES have
+                      an admin session, so those pass
                       `queryParams: { meeting: state.meeting().no } }`
                       instead — `CheckinComponent`/`AgendaViewerComponent`
                       resolve an empty-but-present `?meeting=` (e.g. before
@@ -190,7 +216,12 @@ Export/Import JSON already uses) to one document per meeting number at
 `localStorage` version (`StorageService` has no key-enumeration API, which
 is why that index existed at all), `entries()` is derived live from
 `onSnapshot()` on the whole collection, same as `PublishedAgendaService`/
-`RoleDefinitionService`. Auto-save is driven by an untracked-free `effect()`
+`RoleDefinitionService`. The same list also exposes a per-row Publish
+button (mirroring the Agenda Editor's own Publish button, see Persistence
+below) that calls `SavedAgendaService.load()` — the same one-time
+`getDoc()` `open()` already uses — to get the full snapshot before calling
+`PublishedAgendaService.publish()`, so publishing works from either page
+without a trip through the editor. Auto-save is driven by an untracked-free `effect()`
 in `AgendaEditorComponent`'s constructor that calls `getSnapshot()`
 directly — since that reads every relevant signal, the effect naturally
 re-runs on any edit anywhere in the agenda, with no manual dependency list
@@ -314,20 +345,32 @@ model and what's still emulator-only.
   keys, so they must never change.
 - `PublishedAgendaService` — one document per meeting at
   `publishedAgendas/{meetingId}`, holding the full published `AgendaSnapshot`
-  plus `publishedAt`. Migrated specifically because — unlike `SavedAgendaService`,
-  a genuinely single-admin workload — this service's entire purpose is being
-  read on a *different device* than the one that published it (`/preview`,
-  reached from check-in's
-  "Preview Agenda" link) — on `localStorage` that literally couldn't work
-  cross-device, the same gap check-in had before its own migration. No
-  separate index collection needed the way the old `localStorage` version
-  needed a hand-rolled one (`agora-agenda-published-index`) — Firestore's
+  plus `publishedAt`. **At most one such document exists at a time** —
+  `publish()` is exclusive: it reads the whole collection, deletes every
+  other document, and sets the new one, all inside a single `writeBatch()`
+  (this codebase's first use of `writeBatch()`), so publishing meeting B
+  always un-publishes whatever meeting A was previously published,
+  atomically — there's never a window where zero or two meetings are
+  simultaneously published. Migrated specifically because — unlike
+  `SavedAgendaService`, a genuinely single-admin workload — this service's
+  entire purpose is being read on a *different device* than the one that
+  published it (`/preview`, reached from check-in's "Preview Agenda"
+  link) — on `localStorage` that literally couldn't work cross-device, the
+  same gap check-in had before its own migration. No separate index
+  collection needed the way the old `localStorage` version needed a
+  hand-rolled one (`agora-agenda-published-index`) — Firestore's
   `onSnapshot()` on the whole collection *is* "enumerate the keys," for
-  free, which is exactly what `entries()`/`nearestEntry()` are built on.
+  free, which is exactly what `entries()`/`nearestEntry()` are built on —
+  in practice they now only ever see 0 or 1 entries, but their code is
+  unchanged; it already degrades to that correctly, so it was deliberately
+  left as-is rather than collapsed to a single-value shape.
   `AgendaViewerComponent` reflects this reactively (an `effect()` over
   `current()`, not a one-time synchronous read), so it also updates live if
-  the admin re-publishes while someone's viewing — its "🔄 Refresh" button
-  is now just a reassurance affordance, not a real refetch.
+  the admin re-publishes while someone's viewing — including flipping from
+  showing an agenda to the not-published fallback if a *different* meeting
+  gets published while this one's `/preview` page is still open, since the
+  old document is deleted outright, not merely superseded. Its "🔄 Refresh"
+  button is now just a reassurance affordance, not a real refetch.
 - `CommitteeRosterService` — a **single** document at `committeeRoster/current`
   holding the whole roster array, not one-per-role like `RoleDefinitionService`.
   This is deliberate: `roleId` isn't a unique key on a committee slot (several
@@ -688,7 +731,7 @@ Routes: `http://localhost:4300/` (home tile picker),
 signed in), `http://localhost:4300/signup` (self-service member account
 creation), `http://localhost:4300/member` (signed-in member's own
 dashboard), `http://localhost:4300/admin` (agenda editor),
-`http://localhost:4300/admin/agendas` (My Agendas — list/open/delete saved agendas),
+`http://localhost:4300/admin/agendas` (My Agendas — list/open/publish/delete saved agendas),
 `http://localhost:4300/admin/manage-agendas` (hub: Agenda Editor / My Agendas),
 `http://localhost:4300/checkin` (check-in page, no sign-in needed),
 `http://localhost:4300/preview` (read-only published-agenda view, no sign-in needed), and

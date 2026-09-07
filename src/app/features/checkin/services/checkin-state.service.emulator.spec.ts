@@ -11,8 +11,8 @@ import { CheckinContactsService } from './checkin-contacts.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
 
-function fakeAuthService(user: Pick<User, 'uid' | 'displayName' | 'email'> | null = null) {
-  return { currentUser: signal(user) } as unknown as AuthService;
+function fakeAuthService(user: Pick<User, 'uid' | 'displayName' | 'email'> | null = null, isAdmin = false) {
+  return { currentUser: signal(user), isAdmin: signal(isAdmin) } as unknown as AuthService;
 }
 
 const noopContacts = { upsert: async () => undefined } as unknown as CheckinContactsService;
@@ -104,14 +104,17 @@ describe('CheckinStateService (Firestore emulator)', () => {
     createdServices.length = 0;
   });
 
-  function createService(signedInUser: Pick<User, 'uid' | 'displayName' | 'email'> | null = null): CheckinStateService {
+  function createService(
+    signedInUser: Pick<User, 'uid' | 'displayName' | 'email'> | null = null,
+    isAdmin = false
+  ): CheckinStateService {
     const child = Injector.create({
       parent: parentInjector,
       providers: [
         CheckinStateService,
         { provide: FIRESTORE, useValue: firestore },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
-        { provide: AuthService, useValue: fakeAuthService(signedInUser) },
+        { provide: AuthService, useValue: fakeAuthService(signedInUser, isAdmin) },
         { provide: CheckinContactsService, useValue: noopContacts },
       ],
     });
@@ -178,6 +181,37 @@ describe('CheckinStateService (Firestore emulator)', () => {
 
     await svcA.releaseRole('toastmaster');
     await waitFor(() => svcA.roles()['toastmaster']?.uid === '');
+  });
+
+  it('releaseRole() lets an admin release a claim they do not own', async () => {
+    const svcA = createService(); // anonymous claimant
+    const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+    svcA.loadMeeting('m4b');
+    admin.loadMeeting('m4b');
+    await svcA.checkIn('Alice', 'alice@example.com');
+    const uidA = svcA.currentUid;
+    await svcA.claimRole('toastmaster');
+    await waitFor(() => admin.roles()['toastmaster']?.uid === uidA);
+
+    await admin.releaseRole('toastmaster'); // not admin's claim, but admin — should succeed
+    await waitFor(() => admin.roles()['toastmaster']?.uid === '');
+  });
+
+  it('releaseRole() still respects a locked role even for an admin', async () => {
+    const svcA = createService();
+    const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+    svcA.loadMeeting('m4c');
+    admin.loadMeeting('m4c');
+    await svcA.checkIn('Alice', 'alice@example.com');
+    const uidA = svcA.currentUid;
+    await svcA.claimRole('toastmaster');
+    await waitFor(() => admin.roles()['toastmaster']?.uid === uidA);
+
+    await admin.setRoleLocked('toastmaster', true);
+    await waitFor(() => admin.lockedRoles().includes('toastmaster'));
+
+    await admin.releaseRole('toastmaster'); // locked — no-op even for an admin
+    expect(admin.roles()['toastmaster'].uid).toBe(uidA);
   });
 
   it('addSpeakerSignup() rejects a second signup from the same person and respects maxSpeakers', async () => {

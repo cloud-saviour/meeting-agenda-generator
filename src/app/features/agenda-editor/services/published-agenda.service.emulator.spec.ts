@@ -144,13 +144,38 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     expect(service.current()).toBeNull();
   });
 
-  it('entries() lists every published meeting, sorted by date ascending', async () => {
+  it('publishing a new meeting un-publishes whatever was previously published', async () => {
     const service = createService();
-    await service.publish('161', makeSnapshot({ no: '161', date: '2026-09-15', theme: 'Later' }));
     await service.publish('160', makeSnapshot({ no: '160', date: '2026-08-29', theme: 'Earlier' }));
+    await waitFor(() => service.entries().length === 1);
 
-    await waitFor(() => service.entries().length === 2);
-    expect(service.entries().map((e) => e.no)).toEqual(['160', '161']);
+    await service.publish('161', makeSnapshot({ no: '161', date: '2026-09-15', theme: 'Later' }));
+    await waitFor(() => service.entries()[0]?.no === '161');
+
+    expect(service.entries().length).toBe(1);
+    expect(service.entries()[0].no).toBe('161');
+  });
+
+  it("publishing a new meeting deletes the previously-published meeting's document, not just its index entry", async () => {
+    const service = createService();
+    await service.publish('160', makeSnapshot({ no: '160', theme: 'Earlier' }));
+    await service.publish('161', makeSnapshot({ no: '161', theme: 'Later' }));
+
+    service.loadMeeting('160');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(service.current()).toBeNull();
+  });
+
+  it('a component still watching a meeting via loadMeeting() sees current() go to null after a different meeting is published', async () => {
+    const service = createService();
+    await service.publish('160', makeSnapshot({ no: '160', theme: 'Earlier' }));
+    service.loadMeeting('160');
+    await waitFor(() => service.current() !== null);
+
+    await service.publish('161', makeSnapshot({ no: '161', theme: 'Later' }));
+
+    await waitFor(() => service.current() === null);
   });
 
   it('republishing the same meeting number upserts the index entry rather than duplicating', async () => {
@@ -164,6 +189,25 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     expect(service.entries().length).toBe(1);
   });
 
+  it('unpublish() removes the doc, leaving entries()/nearestEntry() empty', async () => {
+    const service = createService();
+    await service.publish('160', makeSnapshot({ no: '160', theme: 'First' }));
+    await waitFor(() => service.entries().length === 1);
+
+    await service.unpublish('160');
+    await waitFor(() => service.entries().length === 0);
+
+    expect(service.nearestEntry()).toBeNull();
+  });
+
+  it('unpublish() is a no-op for a meeting that was never published', async () => {
+    const service = createService();
+    await service.unpublish('999');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(service.entries().length).toBe(0);
+  });
+
   it('nearestEntry() is null when nothing has ever been published', async () => {
     const service = createService();
     await new Promise((resolve) => setTimeout(resolve, 300));
@@ -171,31 +215,28 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     expect(service.nearestEntry()).toBeNull();
   });
 
-  it('nearestEntry() picks the nearest upcoming (today-or-later) published meeting', async () => {
+  it('nearestEntry() picks the published meeting when its date is upcoming (today-or-later)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); // real setTimeout for waitFor() to keep polling
     try {
       vi.setSystemTime(new Date('2026-08-31T12:00:00Z'));
       const service = createService();
-      await service.publish('165', makeSnapshot({ no: '165', date: '2026-10-01', theme: 'Far Future' }));
       await service.publish('160', makeSnapshot({ no: '160', date: '2026-09-05', theme: 'Near Future' }));
-      await service.publish('159', makeSnapshot({ no: '159', date: '2026-08-01', theme: 'Past' }));
 
-      await waitFor(() => service.entries().length === 3);
+      await waitFor(() => service.entries().length === 1);
       expect(service.nearestEntry()?.no).toBe('160');
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("nearestEntry() falls back to the most recent past meeting when nothing is upcoming", async () => {
+  it("nearestEntry() falls back to the published meeting even when its date is in the past", async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); // real setTimeout for waitFor() to keep polling
     try {
       vi.setSystemTime(new Date('2026-08-31T12:00:00Z'));
       const service = createService();
-      await service.publish('158', makeSnapshot({ no: '158', date: '2026-07-01', theme: 'Older' }));
-      await service.publish('159', makeSnapshot({ no: '159', date: '2026-08-01', theme: 'Most Recent Past' }));
+      await service.publish('159', makeSnapshot({ no: '159', date: '2026-08-01', theme: 'Past' }));
 
-      await waitFor(() => service.entries().length === 2);
+      await waitFor(() => service.entries().length === 1);
       expect(service.nearestEntry()?.no).toBe('159');
     } finally {
       vi.useRealTimers();

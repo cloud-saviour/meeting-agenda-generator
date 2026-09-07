@@ -20,7 +20,7 @@
           <span class="text-muted small">{{ roles[def.id].name }}</span>
         }
         @if (!isLocked(def.id)) {
-          @if (isMine(def.id)) {
+          @if (isMine(def.id) || (auth.isAdmin() && isTaken(def.id))) {
             <button class="btn btn-outline-secondary btn-sm" (click)="release(def.id)">Release</button>
           } @else if (!isTaken(def.id)) {
             <button class="btn btn-danger btn-sm" (click)="claim(def.id)">Claim</button>
