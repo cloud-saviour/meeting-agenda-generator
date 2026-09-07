@@ -1,34 +1,47 @@
 import { Injectable, NgZone, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { deleteDoc, doc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { Attendee, CheckinMeeting, CheckinSnapshot, CheckinSpeaker } from '../models/checkin.models';
-import { StorageService } from '../../../core/services/storage.service';
+import { CheckinContactsService } from './checkin-contacts.service';
 import { APP_LOCALE } from '../../../core/utils/locale';
+import { sha256Hex } from '../../../core/utils/hash';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
 
-const UID_KEY = 'agora-checkin-uid';
-const NAME_KEY = 'agora-checkin-name';
 const CHECKINS_COLLECTION = 'checkins';
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+/** Trimmed, lowercased so the same person always hashes to the same uid regardless of capitalization/whitespace. */
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 @Injectable({ providedIn: 'root' })
 export class CheckinStateService implements OnDestroy {
-  private readonly storage = inject(StorageService);
   private readonly firestore = inject(FIRESTORE);
   private readonly zone = inject(NgZone);
   private readonly auth = inject(AuthService);
+  private readonly contacts = inject(CheckinContactsService);
 
   // ── Identity ──────────────────────────────────────────────────────────
-  // A signed-in member's real Firebase uid takes over from the anonymous
-  // per-browser local id — see the member-facing-accounts plan. `currentUid`
-  // stays a plain string getter (not a Signal<string>) so every existing
-  // `=== this.currentUid` comparison, here and in role-board/speaker-signup/
-  // evaluator-slots, keeps working unchanged.
-  private readonly localUid = this.loadOrCreateUid();
-  private readonly uidSource = computed(() => this.auth.currentUser()?.uid ?? this.localUid);
+  // No localStorage anywhere in this service — nothing here persists across
+  // a reload. A signed-in account (member or admin) always uses its real
+  // Firebase uid. An anonymous visitor's uid is derived deterministically
+  // from the email they enter at check-in (sha256Hex — see checkIn() below),
+  // so the SAME person gets the SAME uid on a later visit or a different
+  // device without anything being stored client-side; before they've
+  // checked in, `sessionUid` is a random, in-memory-only placeholder (never
+  // written anywhere) so `=== this.currentUid` comparisons elsewhere don't
+  // need to handle a null case. `currentUid` stays a plain string getter
+  // (not a Signal<string>) so every existing comparison, here and in
+  // role-board/speaker-signup/evaluator-slots, keeps working unchanged.
+  private readonly sessionUid = makeId();
+  private readonly emailIdentity = signal<string | null>(null);
+  private readonly uidSource = computed(() => this.auth.currentUser()?.uid ?? this.emailIdentity() ?? this.sessionUid);
   get currentUid(): string {
     return this.uidSource();
   }
@@ -50,7 +63,6 @@ export class CheckinStateService implements OnDestroy {
   );
 
   constructor() {
-    this.currentName.set(this.storage.get(NAME_KEY) || '');
     this.seedNameFromDisplayName(this.auth.currentUser());
 
     // CheckinComponent reads currentName() once into a plain field at
@@ -65,12 +77,12 @@ export class CheckinStateService implements OnDestroy {
 
   /**
    * Seeds the name field from a signed-in member's Auth displayName, but
-   * only on the blank-first-visit case — never overwrites a name the
-   * person already typed on this browser (checkIn()'s own storage.set()
-   * is untouched by this).
+   * only while it's still blank — never overwrites a name the person has
+   * already typed this session (there's no localStorage anymore to check
+   * instead, so "already typed" is just "currentName() is non-empty").
    */
   private seedNameFromDisplayName(user: { displayName: string | null } | null): void {
-    if (user?.displayName && !this.storage.get(NAME_KEY)) {
+    if (user?.displayName && !this.currentName()) {
       this.currentName.set(user.displayName);
     }
   }
@@ -105,24 +117,45 @@ export class CheckinStateService implements OnDestroy {
     );
   }
 
-  // ── Identity ──────────────────────────────────────────────────────────
-  private loadOrCreateUid(): string {
-    let uid = this.storage.get(UID_KEY);
-    if (!uid) {
-      uid = makeId();
-      this.storage.set(UID_KEY, uid);
-    }
-    return uid;
-  }
-
   // ── Attendance ────────────────────────────────────────────────────────
-  checkIn(name: string): Promise<void> {
+  /**
+   * `email` is required for an anonymous check-in (validated here, not
+   * just client-side, since this is the one place identity is actually
+   * established) — it's how a stable uid gets derived without
+   * localStorage, and it's separately upserted into CheckinContactsService
+   * (admin-only-readable) for the planned reminder-email feature. Omit it
+   * for a signed-in account (member or admin), which already has a stable
+   * uid and a real email via Firebase Auth — passing one anyway is ignored.
+   *
+   * Async because deriving the uid from email (sha256Hex) must complete
+   * BEFORE building the attendee record below, which reads `currentUid`.
+   *
+   * Returns `Promise<boolean>` (false only for a blank name or, for an
+   * anonymous visitor, an invalid-looking email) rather than `void`, matching
+   * `claimRole()`/`addSpeakerSignup()`/`claimEvaluatorSlot()` below — callers
+   * must not infer success from `isCheckedIn()` immediately afterward, since
+   * that reads the `onSnapshot()`-driven `snapshot` signal, which can still
+   * lag behind the transaction this method just awaited.
+   */
+  async checkIn(name: string, email?: string): Promise<boolean> {
     const trimmed = name.trim();
-    if (!trimmed) return Promise.resolve();
-    this.currentName.set(trimmed);
-    this.storage.set(NAME_KEY, trimmed);
+    if (!trimmed) return false;
 
-    return this.mutate((s) => {
+    const signedInUser = this.auth.currentUser();
+    let contactEmail: string;
+    if (signedInUser) {
+      contactEmail = signedInUser.email ?? '';
+    } else {
+      const normalized = normalizeEmail(email ?? '');
+      if (!EMAIL_PATTERN.test(normalized)) return false; // anonymous check-in requires a real-looking email
+      this.emailIdentity.set(await sha256Hex(normalized));
+      contactEmail = normalized;
+    }
+
+    this.currentName.set(trimmed);
+    this.contacts.upsert(this.currentUid, trimmed, contactEmail); // best-effort, doesn't block the check-in below
+
+    await this.mutate((s) => {
       const already = s.attendees.some((a) => a.uid === this.currentUid);
       if (already) {
         const next = {
@@ -140,7 +173,8 @@ export class CheckinStateService implements OnDestroy {
       };
       const next = { ...s, attendees: [...s.attendees, attendee] };
       return { next, result: undefined };
-    }).then(() => undefined);
+    });
+    return true;
   }
 
   // ── Roles: first-come locking ────────────────────────────────────────

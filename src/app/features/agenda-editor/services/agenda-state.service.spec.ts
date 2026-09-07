@@ -2,22 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { AgendaStateService } from './agenda-state.service';
 import { CommitteeRosterService } from './committee-roster.service';
-import { StorageService } from '../../../core/services/storage.service';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { AgendaItem, CommitteeMember } from '../models/agenda.models';
-
-class FakeStorage {
-  private store = new Map<string, string>();
-  get(key: string): string | null {
-    return this.store.has(key) ? this.store.get(key)! : null;
-  }
-  set(key: string, value: string): void {
-    this.store.set(key, value);
-  }
-  remove(key: string): void {
-    this.store.delete(key);
-  }
-}
 
 // AgendaStateService only ever calls roleDefs.activeRoles() (to default a new
 // agenda item's role) — nothing here exercises that path, so a stub avoids
@@ -50,7 +36,6 @@ class FakeCommitteeRosterService {
 function makeService(): { state: AgendaStateService; roster: CommitteeRosterService } {
   TestBed.configureTestingModule({
     providers: [
-      { provide: StorageService, useClass: FakeStorage },
       { provide: RoleDefinitionService, useValue: fakeRoleDefinitionService },
       { provide: CommitteeRosterService, useClass: FakeCommitteeRosterService },
     ],

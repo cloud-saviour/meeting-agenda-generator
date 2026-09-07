@@ -77,5 +77,16 @@ service cloud.firestore {
       allow read: if request.auth != null && (isAdmin() || request.auth.uid == resource.data.uid);
       allow write: if isAdmin();
     }
+
+    // Real emails behind check-in identities — foundation for a planned
+    // reminder-email feature. Write is open, same as checkins/** itself
+    // (anonymous, self-reported, no verification barrier — same accepted
+    // risk model, not a new one), but read is admin-only: unlike
+    // checkins/**, this collection exists specifically to hold PII that
+    // must not be publicly readable.
+    match /checkinContacts/{uid} {
+      allow read: if isAdmin();
+      allow write: if true;
+    }
   }
 }

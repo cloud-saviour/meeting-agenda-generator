@@ -8,7 +8,7 @@ import { RoleBoardComponent } from '../components/role-board/role-board.componen
 import { SpeakerSignupComponent } from '../components/speaker-signup/speaker-signup.component';
 import { EvaluatorSlotsComponent } from '../components/evaluator-slots/evaluator-slots.component';
 import { APP_LOCALE } from '../../../core/utils/locale';
-import { NavbarComponent } from '../../../layout/navbar/navbar.component';
+import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
 import { AuthService } from '../../../core/auth/auth.service';
 
 @Component({
@@ -30,6 +30,8 @@ export class CheckinComponent {
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   private readonly route = inject(ActivatedRoute);
   nameInput = '';
+  emailInput = '';
+  checkInError: string | null = null;
   meetingId: string;
 
   constructor() {
@@ -65,19 +67,41 @@ export class CheckinComponent {
   }
 
   /**
-   * Locks the name field only once nameInput demonstrably IS the signed-in
-   * account's own name (matches their Auth displayName exactly) — not just
-   * "someone is signed in and the field happens to be non-empty". Guards
-   * against a real bug: nameInput is seeded from per-browser localStorage
-   * (agora-checkin-name), which can be stale leftover from a DIFFERENT
-   * account that previously used this same browser (e.g. admin@example.com
-   * has no displayName of its own, but a prior signed-in member's name is
-   * still sitting in local storage) — disabling on that stale value would
-   * lock the field showing the wrong person's name with no way to fix it.
+   * Only admin and anonymous users may change their check-in name; a
+   * signed-in non-admin member's name is locked to their account (they use
+   * /member's "Edit Name" instead). Admins are deliberately exempt — they
+   * need the flexibility to type whatever name makes sense while running a
+   * meeting, same as an anonymous check-in — so isAdmin() short-circuits
+   * this to false before the match check below ever runs.
+   *
+   * The match check itself locks the field only once nameInput demonstrably
+   * IS the signed-in member's own name (matches their Auth displayName
+   * exactly) — not just "someone is signed in and the field happens to be
+   * non-empty". There's no localStorage anymore for this to go stale
+   * against, but the same defensive shape is kept: never lock on a value
+   * that doesn't actually match the account's real name.
    */
   get isNameLocked(): boolean {
+    if (this.auth.isAdmin()) return false;
     const user = this.auth.currentUser();
     return !!user?.displayName && this.nameInput === user.displayName;
+  }
+
+  /** Anonymous visitors must additionally enter an email, used to derive a stable identity without localStorage — see CheckinStateService.checkIn(). Signed-in accounts already have one via Firebase Auth. */
+  get isAnonymous(): boolean {
+    return !this.auth.currentUser();
+  }
+
+  /** Admin-only nav links (Agenda Editor, Manage Roles) only appear for actual admins — /checkin is reachable by anonymous visitors and non-admin members alike. */
+  get navLinks(): NavLink[] {
+    const links: NavLink[] = [
+      { label: '👁 Preview Agenda', path: '/preview', queryParams: { meeting: this.meetingId } },
+    ];
+    if (this.auth.isAdmin()) {
+      links.push({ label: '📝 Agenda Editor', path: '/admin' }, { label: '⚙ Manage Roles', path: '/admin/manage-roles' });
+    }
+    links.push({ label: '🏠 Home', path: '/' });
+    return links;
   }
 
   get dateStr(): string {
@@ -90,7 +114,23 @@ export class CheckinComponent {
     });
   }
 
-  checkIn() {
-    this.state.checkIn(this.nameInput);
+  async checkIn() {
+    this.checkInError = null;
+    if (!this.nameInput.trim()) {
+      this.checkInError = 'Enter your name.';
+      return;
+    }
+    if (this.isAnonymous && !this.emailInput.trim()) {
+      this.checkInError = 'Enter your email.';
+      return;
+    }
+    const success = await this.state.checkIn(this.nameInput, this.emailInput);
+    // checkIn() returns false only on an invalid-looking anonymous email
+    // (CheckinStateService is the source of truth for that validation) — not
+    // inferred from isCheckedIn(), which lags behind on the onSnapshot()
+    // listener and would false-positive right after a real success.
+    if (!success) {
+      this.checkInError = 'Enter a valid email address.';
+    }
   }
 }

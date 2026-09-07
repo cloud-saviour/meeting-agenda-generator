@@ -17,12 +17,14 @@ browser, it's a formatted page, not plain markdown.
   see `src/styles.css` for the brand-color theme-variable overrides
 - `docx` npm package for Word export, `file-saver` for downloads
 - `@angular/cdk` drag-drop for agenda item reordering
-- Firestore (via the `firebase` npm package, modular SDK) for check-in,
-  role-definition, published-agenda, committee-roster, and saved-agenda
-  state; `localStorage` for everything else — see Persistence below for
-  exactly which services use which and why
-- Firebase Auth (same `firebase` package, emulator-only) gates every
-  `/admin*` route behind email/password sign-in — see Authentication below
+- Firestore (via the `firebase` npm package, modular SDK) for **all** app
+  state — check-in, role-definition, published-agenda, committee-roster,
+  saved-agenda, self-service member profiles/history, and check-in contact
+  emails; no `localStorage` anywhere in the app anymore — see Persistence
+  below for what each collection holds and why
+- Firebase Auth (same `firebase` package, emulator-only) gates `/admin*`
+  routes behind email/password sign-in, and separately backs self-service
+  `/member` accounts — see Authentication below
 
 ## Structure
 
@@ -34,8 +36,8 @@ chrome.
 ```
 src/app/
   core/
-    services/   storage.service.ts, role-definition.service.ts (Firestore-
-                backed — see Persistence below) (+ specs)
+    services/   role-definition.service.ts (Firestore-backed — see
+                Persistence below) (+ specs)
     models/     role-definition.models.ts
     firebase/   firestore.provider.ts — FIRESTORE injection token +
                 provideAppFirestore(); auth.provider.ts — AUTH injection
@@ -43,9 +45,12 @@ src/app/
                 FirebaseApp pattern as firestore.provider.ts. Both read
                 src/environments/environment.ts
     auth/       auth.service.ts (AuthService — currentUser/isAdmin/ready
-                signals, signIn()/signOut()/resetPassword()), auth.guard.ts
-                (authGuard — CanActivateFn gating every /admin* route on
-                isAdmin(), not just currentUser()) — see Authentication below
+                signals, signIn()/signUp()/signOut()/resetPassword()/
+                updateDisplayName()), auth.guard.ts (authGuard —
+                CanActivateFn gating every /admin* route on isAdmin(), not
+                just currentUser()), member.guard.ts (memberGuard — gates
+                /member on currentUser() alone, since any signed-in account
+                counts as a member) — see Authentication below
     utils/      locale.ts (APP_LOCALE)
 
   layout/
@@ -93,13 +98,21 @@ src/app/
                       "Manage Committee Roles" (/admin/committee-roles)
       pages/           admin-roles-hub.component.ts
 
-    checkin/          Route "/checkin" — member-facing check-in page, no
-                      auth guard — stays fully anonymous by design, see
-                      Authentication below
+    checkin/          Route "/checkin" — the check-in page for everyone
+                      (anonymous visitors, signed-in members, and admins
+                      alike), no auth guard — stays anonymous-capable by
+                      design, see Authentication below
       pages/           checkin.component.ts
       components/      attendance-list, role-board, speaker-signup,
                         evaluator-slots
-      services/        checkin-state.service.ts (CheckinStateService)
+      services/        checkin-state.service.ts (CheckinStateService),
+                        checkin-contacts.service.ts (CheckinContactsService —
+                        Firestore-backed, admin-only-readable raw emails,
+                        see Persistence below),
+                        attendance-confirmation.service.ts
+                        (AttendanceConfirmationService — admin "mark
+                        register" actions, writes memberHistory, see
+                        Persistence below)
       models/          checkin.models.ts
 
     admin-roles/      Route "/admin/roles" (guarded) — manage role definitions
@@ -110,6 +123,27 @@ src/app/
                       navigates to ?returnUrl= (defaulting to "/") — see
                       Authentication below
       pages/           login.component.ts
+
+    signup/           Route "/signup" — self-service member account
+                      creation (name/email/password), no auth guard, same
+                      tier as /login. On success creates the Firebase Auth
+                      account AND a matching `members/{uid}` Firestore
+                      profile (see Authentication below), then navigates to
+                      ?returnUrl= (defaulting to "/member")
+      pages/           signup.component.ts
+
+    member/           Route "/member" — guarded by memberGuard, not
+                      authGuard (any signed-in account, not just admins —
+                      see Authentication below): the signed-in member's own
+                      dashboard, edit display name, view confirmed
+                      attendance/role/speech history
+      pages/           member-dashboard.component.ts
+      services/        member-profile.service.ts (MemberProfileService —
+                        Firestore-backed, own-uid read/write, see
+                        Persistence below), member-history.service.ts
+                        (MemberHistoryService — Firestore-backed, one-time
+                        query, see Persistence below)
+      models/          member.models.ts
 
     home/             Route "/" — tile picker. Signed in as an admin:
                       "Manage Agendas" (→ admin-agendas-hub), "Meeting
@@ -228,7 +262,7 @@ sides are Firestore `onSnapshot()` listeners on the same document rather
 than a browser-local `storage` event. See Persistence below for the data
 model and what's still emulator-only.
 
-## Persistence — Firestore for shared/live state, localStorage for the rest
+## Persistence — everything in Firestore, no localStorage
 
 **Firestore-backed (emulator-only — no real Firebase project exists yet):**
 
@@ -251,6 +285,18 @@ model and what's still emulator-only.
   with an empty claim everywhere it's read — the service doesn't need to
   know the full set of role definitions, so it has **no dependency on
   `RoleDefinitionService`**.
+- `CheckinContactsService` — one document per check-in identity at
+  `checkinContacts/{uid}`, holding the *raw* `name`/`email` behind that
+  hash (see "How anonymous identity works" below). The one place in the app
+  raw PII is stored, which is exactly why its rule is admin-read-only while
+  every other collection here is public-read (or, on `checkins/**`, public
+  read *and* write). Write is intentionally open — same accepted-risk model
+  as `checkins/**` itself (self-reported, unverified) —
+  `CheckinStateService.checkIn()` calls `upsert()` fire-and-forget (best
+  effort; a failure here must never block the actual check-in). Exists to
+  back a planned reminder-email feature (email every past attendee, member
+  or anonymous) without ever exposing an attendee's email on the public
+  `checkins` collection.
 - `RoleDefinitionService` (meeting roles) and `CommitteeRoleDefinitionService`
   (committee/governance titles) — one Firestore document per role, at
   `roleDefinitions/{roleId}` and `committeeRoleDefinitions/{roleId}`
@@ -304,18 +350,41 @@ model and what's still emulator-only.
   is a one-time `getDoc()`, not a live subscription (see the Agenda editor
   section above); the auto-save effect that calls `save()` is debounced for
   the same reason as check-in's meeting-fields push.
+- `MemberProfileService` — one document per self-service member account at
+  `members/{uid}` (uid/email/displayName/createdAt/updatedAt). Own-uid
+  read/write only, plus admin read for a future member directory — never
+  admin *write*, which would defeat the point of self-service (see
+  firestore.rules). `updateProfile()` writes both this doc and the Firebase
+  Auth user record's `displayName` together in one call, since the name
+  exists in both places and no caller should need to know that.
+- `MemberHistoryService` / `AttendanceConfirmationService` — share one
+  collection, `memberHistory/{meetingId}_{uid}`, but with opposite
+  read/write roles: `AttendanceConfirmationService` (an admin's "mark
+  register" controls on `/checkin`) is the only writer;
+  `MemberHistoryService` (`loadHistory(uid)`, a one-time filtered
+  `getDocs()` on the member dashboard) only ever reads. This is
+  deliberately the *official*, admin-confirmed record — unlike the public,
+  unverified self-report in `checkins/**` — which is also why only
+  `isAdmin()` may write it, while read is gated to the record's own subject
+  or an admin.
 
-**Still `localStorage` (deliberately, not a migration backlog item):**
-`StorageService`'s one remaining direct consumer — `CheckinStateService`'s
-own per-browser identity (`agora-checkin-uid`/`agora-checkin-name`,
-unrelated to the Firestore-backed meeting data it now writes) — stays on
-`localStorage`. This is deliberately *not* meant to sync across devices:
-Firebase Auth now exists in this app (see Authentication below), but only
-for the admin side — check-in is deliberately kept outside that system, so
-"who you are" at check-in is still just a random id your browser remembers,
-not an account. This is the only thing left that isn't a candidate for
-Firestore migration at all — everything else that was localStorage-based in
-this app has now migrated.
+**How anonymous identity works now (no `localStorage` anywhere)** —
+`StorageService` (the last remaining consumer was `CheckinStateService`'s
+own per-browser identity) has been deleted outright. An anonymous check-in
+visitor's identity is now derived deterministically instead of being
+remembered by the browser: `CheckinStateService.checkIn()` normalizes (trim
++ lowercase) the email they type and SHA-256-hashes it
+(`core/utils/hash.ts`'s `sha256Hex()`, Web Crypto) into their `uid` — so the
+*same* person gets the *same* uid on a different device or after clearing
+browser storage, with nothing client-side to lose, and without the raw
+email ever touching the public `checkins` collection (see
+`CheckinContactsService` above for where the raw email actually lives).
+Before a first successful check-in this session, `currentUid` is a random,
+in-memory-only placeholder (`sessionUid`, never written anywhere) purely so
+`=== currentUid` comparisons elsewhere don't need to handle a null case. A
+signed-in account (member or admin) skips all of this and always uses its
+real Firebase uid instead — passing an email to `checkIn()` while signed in
+is accepted but ignored.
 
 **A real gotcha hit migrating `CommitteeRosterService`, worth knowing before
 migrating anything else that follows this same shape:** `AgendaStateService`
@@ -361,10 +430,13 @@ to commit.
 localStorage-to-firestore-migration skills, a hand-rolled mock can't
 faithfully reproduce Firestore's optimistic-concurrency retry behavior, so
 transactional logic is tested against the real Local Emulator Suite, never
-a mock. Each of the six Firestore-backed services (`CheckinStateService`,
-`RoleDefinitionService`, `CommitteeRoleDefinitionService`,
-`PublishedAgendaService`, `CommitteeRosterService`, `SavedAgendaService`) has a
-`*.emulator.spec.ts` sibling (using `@firebase/rules-unit-testing`'s
+a mock. Each Firestore-backed service (`CheckinStateService`,
+`CheckinContactsService`, `RoleDefinitionService`,
+`CommitteeRoleDefinitionService`, `PublishedAgendaService`,
+`CommitteeRosterService`, `SavedAgendaService`, `MemberProfileService`,
+`MemberHistoryService`, `AttendanceConfirmationService`) has a
+`*.emulator.spec.ts` sibling, plus `AuthService` itself has one covering the
+Auth-emulator-backed sign-up/sign-in path (using `@firebase/rules-unit-testing`'s
 `initializeTestEnvironment()`, each with its own project id distinct from
 the dev project so running tests never wipes data you're interactively
 poking at) — run via `npm run test:emulator` with the emulator already
@@ -373,24 +445,38 @@ running. These are excluded from the default `npm test`/`ng test` run
 pinned to the `development` build configuration specifically so it can
 never accidentally pick up real production Firestore credentials once
 `environment.production.ts` has them). Their plain `*.spec.ts` files only
-cover what never touches Firestore — e.g. `CheckinStateService`'s
-`loadOrCreateUid()` localStorage persistence — and, for services now
-consumed by `AgendaStateService` (`RoleDefinitionService`,
-`CommitteeRosterService`), `agenda-state.service.spec.ts` and
-`agenda-import-export.service.spec.ts` provide plain synchronous fakes
-rather than the real Firestore-backed service, since neither suite is
-testing Firestore behavior itself.
+cover what never touches Firestore — e.g. `CheckinStateService`'s pure
+identity derivation (session uid, name seeding, email-hash uid derivation —
+see checkin-state.service.spec.ts) — and, for services now consumed by
+`AgendaStateService` (`RoleDefinitionService`, `CommitteeRosterService`),
+`agenda-state.service.spec.ts` and `agenda-import-export.service.spec.ts`
+provide plain synchronous fakes rather than the real Firestore-backed
+service, since neither suite is testing Firestore behavior itself.
 
-## Authentication — admin-only Firebase Auth
+## Authentication — admin, self-service member, and anonymous tiers
 
-Every `/admin*` route (6 total: `admin`, `admin/agendas`, `admin/manage-agendas`,
-`admin/manage-roles`, `admin/roles`, `admin/committee-roles`) is gated by
-`authGuard` (`core/auth/auth.guard.ts`) in `app.routes.ts`. `/checkin` and
-`/preview` are deliberately **not** guarded — check-in stays exactly as it
-always has been: anonymous, name-based, no account, first-come-first-served
-claims (`CheckinStateService`'s local/spoofable `uid` is completely
-untouched by this feature). This is a permanent split, not a stepping stone
-toward member accounts — see Known gaps below for that separate, later item.
+Three independent tiers share one `AuthService` / one Firebase Auth
+instance: **admin** (signed in + the `admin` custom claim, provisioned
+manually), **member** (any signed-in account — self-service, provisioned
+via `/signup`, no claim involved), and **anonymous** (no account at all —
+check-in's original, still-fully-supported mode). Every `/admin*` route (6
+total: `admin`, `admin/agendas`, `admin/manage-agendas`, `admin/manage-roles`,
+`admin/roles`, `admin/committee-roles`) is gated by `authGuard`
+(`core/auth/auth.guard.ts`) on `isAdmin()`; `/member` is gated by the
+separate `memberGuard` (`core/auth/member.guard.ts`) on `currentUser() !==
+null` alone — a member account never carries the admin claim (self-service
+sign-up can't grant one), so reusing `authGuard` there would wrongly reject
+every member. `/checkin` and `/preview` are still deliberately **not**
+guarded by either — check-in stays open to all three tiers: an anonymous
+visitor types a name+email (see "How anonymous identity works" under
+Persistence above), while a signed-in member or admin uses their real
+account instead (`CheckinStateService.currentUid` prefers
+`auth.currentUser()?.uid`, falling back to the anonymous email-hash only
+once signed out). Self-service member accounts were the "real
+member-facing accounts" item this file used to list under Known gaps — they
+now exist alongside the admin-only auth and the anonymous check-in flow;
+multi-tenant support and paid subscriptions are still open (see Known gaps
+below).
 
 **Admin model: signed in AND carrying the `admin` custom claim** — being a
 signed-in Firebase user is *not* by itself enough (this was an earlier,
@@ -439,6 +525,21 @@ refresh on any admin page would flash-redirect a signed-in admin to
 without the claim could still reach an admin page and only fail once it hit
 an actual Firestore read/write, instead of being redirected immediately.
 
+**Member accounts (`/signup`, `/member`)** — genuinely self-service: anyone
+can create one, no admin action required, which is exactly why it carries
+no privilege beyond "is signed in" (see `memberGuard` above).
+`AuthService.signUp()` creates the Firebase Auth account and sets its
+`displayName` in one call; `SignupComponent` then calls
+`MemberProfileService.createProfile()` to create the matching
+`members/{uid}` Firestore profile — two systems that must stay in sync (see
+Persistence above for why `MemberProfileService.updateProfile()` writes
+both together on a later edit, not just the Firestore doc). A member
+account's `/checkin` identity IS their Firebase uid (see above) — this is
+also why `isNameLocked` in `CheckinComponent` disables the check-in name
+field for a signed-in non-admin member (name changes belong on `/member`'s
+own "Edit Name" instead) but deliberately exempts admins, who need the
+flexibility to type any name while running a meeting.
+
 **Firestore rules are now per-collection, not a single blanket `allow read,
 write: if true`** (`firestore.rules`):
 - `checkins/**` — untouched, fully open (see above).
@@ -461,6 +562,18 @@ write: if true`** (`firestore.rules`):
   because `SavedAgendaService` is only ever injected by `AgendaEditorComponent`
   and `AdminAgendasComponent`, both already behind the guard — nothing on
   `/preview` or `/checkin` transitively touches it.
+- `members` — **own-uid read/write, plus admin read** (for a future member
+  directory) — but never admin *write*, which would defeat the point of
+  self-service. `firestore.rules` also enforces `displayName` can never be
+  blank server-side, mirroring `MemberProfileService`'s own
+  `requireDisplayName()` guard client-side.
+- `memberHistory` — **admin-only write, read gated to the record's own
+  subject or an admin**. The opposite ownership split from `members`: an
+  admin confirms someone ELSE'S attendance/role/speech, so there's no
+  own-uid check on write, only on read.
+- `checkinContacts` — **admin-only read, open write** (same accepted-risk
+  write model as `checkins/**` itself) — see Persistence above for why this
+  is the one place raw check-in email/PII is allowed to live at all.
 
 **Test impact**: the 5 `*.emulator.spec.ts` files for the
 public-read-admin-write and admin-only collections
@@ -504,10 +617,13 @@ route around.
 ## Naming
 
 The check-in feature is named "check-in" everywhere — route (`/checkin`),
-page heading, component/service class names, `localStorage` key prefix — not
-"signup," to avoid implying payment/registration. The one intentional
-exception is `SpeakerSignupComponent`: registering to give a speech is a
-distinct action from checking in to the meeting, so "sign up to speak" reads
+page heading, component/service class names — not "signup," to avoid
+implying payment/registration. `/signup` is a deliberate, unrelated
+exception: it's the literal account-creation route for self-service member
+accounts (see Authentication above), where "sign up" is the correct word
+for what's happening there. `SpeakerSignupComponent` is a second, older
+exception for a similar reason: registering to give a speech is a distinct
+action from checking in to the meeting, so "sign up to speak" reads
 correctly there.
 
 ## DOCX export
@@ -535,11 +651,12 @@ debug from the rendered output alone.
    at the emulator, since `setCustomUserClaims()` is Admin-SDK-only.
    (`.emulator-data/` and the local `seed:admin` script cover dev/testing
    only.)
-2. Multi-tenant support — multiple clubs, real **member-facing** accounts
-   (today's Firebase Auth is admin-only — see Authentication above; check-in
-   is still anonymous by design, not just not-yet-migrated), admin-managed
-   yearly subscriptions (manually flagged for now, modeled to slot in real
-   payments later without a schema rewrite)
+2. Multi-tenant support — multiple clubs under one deployment (separate
+   rosters/roles/agendas) — plus admin-managed yearly subscriptions
+   (manually flagged for now, modeled to slot in real payments later
+   without a schema rewrite). Self-service member accounts already exist
+   (see Authentication above); this item is specifically about supporting
+   more than one club, and billing.
 3. Admin console for the check-in page: reset a role, cap speaker slots,
    lock the sheet once the meeting starts (role-locking now exists per-role
    via the editor's override toggle — see above — but there's no bulk
@@ -567,8 +684,10 @@ by default (no flags needed), since `environment.ts` is what plain
 
 Routes: `http://localhost:4300/` (home tile picker),
 `http://localhost:4300/login` (admin sign-in — every route below except
-`/checkin` and `/preview` redirects here first if you're not signed in),
-`http://localhost:4300/admin` (agenda editor),
+`/checkin`, `/preview`, and `/signup` redirects here first if you're not
+signed in), `http://localhost:4300/signup` (self-service member account
+creation), `http://localhost:4300/member` (signed-in member's own
+dashboard), `http://localhost:4300/admin` (agenda editor),
 `http://localhost:4300/admin/agendas` (My Agendas — list/open/delete saved agendas),
 `http://localhost:4300/admin/manage-agendas` (hub: Agenda Editor / My Agendas),
 `http://localhost:4300/checkin` (check-in page, no sign-in needed),
