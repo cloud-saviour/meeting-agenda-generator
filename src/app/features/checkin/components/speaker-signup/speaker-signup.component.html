@@ -9,9 +9,9 @@
           <div class="d-flex align-items-center gap-1">
             @if (auth.isAdmin()) {
               @if (isSpeechConfirmed(s.uid)) {
-                <button type="button" class="btn btn-success btn-sm" (click)="toggleSpeechConfirm(s.uid)">✓ Confirmed</button>
+                <button type="button" class="btn btn-success btn-sm" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? '…' : '✓ Confirmed' }}</button>
               } @else {
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="toggleSpeechConfirm(s.uid)">Confirm spoke</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? 'Confirming…' : 'Confirm spoke' }}</button>
               }
             }
             @if (isMine(s.uid)) {

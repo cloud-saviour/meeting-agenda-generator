@@ -17,6 +17,7 @@ export class RoleBoardComponent {
   readonly activeRoles = this.roleDefs.activeRoles;
 
   claimError: string | null = null;
+  private readonly pendingRoleConfirm = new Set<string>();
 
   get roles() {
     return this.state.roles();
@@ -56,13 +57,27 @@ export class RoleBoardComponent {
     return !!this.attendanceConfirmation.confirmationsForCurrentMeeting().get(uid)?.rolesConfirmed.includes(roleId);
   }
 
-  toggleRoleConfirm(roleId: string) {
+  /** Disables the button for this role while its write is in flight — without this, a slow or
+   *  failed Firestore write looks identical to a click that did nothing. */
+  isRoleConfirmPending(roleId: string): boolean {
+    return this.pendingRoleConfirm.has(roleId);
+  }
+
+  async toggleRoleConfirm(roleId: string) {
+    this.claimError = null;
     const uid = this.roles[roleId]?.uid;
     if (!uid) return;
-    const meeting = this.state.meeting();
-    const meta = { date: meeting.date, theme: meeting.theme };
-    this.isRoleConfirmed(uid, roleId)
-      ? this.attendanceConfirmation.unconfirmRole(meeting.id, uid, roleId)
-      : this.attendanceConfirmation.confirmRole(meeting.id, uid, roleId, meta);
+    this.pendingRoleConfirm.add(roleId);
+    try {
+      const meeting = this.state.meeting();
+      const meta = { date: meeting.date, theme: meeting.theme };
+      await (this.isRoleConfirmed(uid, roleId)
+        ? this.attendanceConfirmation.unconfirmRole(meeting.id, uid, roleId)
+        : this.attendanceConfirmation.confirmRole(meeting.id, uid, roleId, meta));
+    } catch {
+      this.claimError = 'Could not update confirmation — try again.';
+    } finally {
+      this.pendingRoleConfirm.delete(roleId);
+    }
   }
 }

@@ -13,6 +13,7 @@ export class EvaluatorSlotsComponent {
   readonly auth = inject(AuthService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   error: string | null = null;
+  private readonly pendingEvaluationConfirm = new Set<string>();
 
   get speakers() {
     return this.state.speakers();
@@ -47,13 +48,27 @@ export class EvaluatorSlotsComponent {
     return this.attendanceConfirmation.confirmationsForCurrentMeeting().get(evaluatorUid)?.evaluatedSpeakerId === speakerId;
   }
 
-  toggleEvaluationConfirm(speakerId: string) {
+  /** Disables the button for this speech while its write is in flight — without this, a slow or
+   *  failed Firestore write looks identical to a click that did nothing. */
+  isEvaluationConfirmPending(speakerId: string): boolean {
+    return this.pendingEvaluationConfirm.has(speakerId);
+  }
+
+  async toggleEvaluationConfirm(speakerId: string) {
+    this.error = null;
     const evaluatorUid = this.speakers.find((sp) => sp.id === speakerId)?.evaluator?.uid;
     if (!evaluatorUid) return;
-    const meeting = this.state.meeting();
-    const meta = { date: meeting.date, theme: meeting.theme };
-    this.isEvaluationConfirmed(evaluatorUid, speakerId)
-      ? this.attendanceConfirmation.unconfirmEvaluation(meeting.id, evaluatorUid)
-      : this.attendanceConfirmation.confirmEvaluation(meeting.id, evaluatorUid, speakerId, meta);
+    this.pendingEvaluationConfirm.add(speakerId);
+    try {
+      const meeting = this.state.meeting();
+      const meta = { date: meeting.date, theme: meeting.theme };
+      await (this.isEvaluationConfirmed(evaluatorUid, speakerId)
+        ? this.attendanceConfirmation.unconfirmEvaluation(meeting.id, evaluatorUid)
+        : this.attendanceConfirmation.confirmEvaluation(meeting.id, evaluatorUid, speakerId, meta));
+    } catch {
+      this.error = 'Could not update confirmation — try again.';
+    } finally {
+      this.pendingEvaluationConfirm.delete(speakerId);
+    }
   }
 }

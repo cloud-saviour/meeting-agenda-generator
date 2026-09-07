@@ -21,9 +21,9 @@
             }
             @if (auth.isAdmin()) {
               @if (isEvaluationConfirmed(s.evaluator?.uid, s.id)) {
-                <button type="button" class="btn btn-success btn-sm" (click)="toggleEvaluationConfirm(s.id)">✓ Confirmed</button>
+                <button type="button" class="btn btn-success btn-sm" [disabled]="isEvaluationConfirmPending(s.id)" (click)="toggleEvaluationConfirm(s.id)">{{ isEvaluationConfirmPending(s.id) ? '…' : '✓ Confirmed' }}</button>
               } @else {
-                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="toggleEvaluationConfirm(s.id)">Confirm done</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isEvaluationConfirmPending(s.id)" (click)="toggleEvaluationConfirm(s.id)">{{ isEvaluationConfirmPending(s.id) ? 'Confirming…' : 'Confirm done' }}</button>
               }
             }
           } @else if (isSpeakerSelf(s.uid)) {
