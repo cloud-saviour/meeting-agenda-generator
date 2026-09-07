@@ -378,6 +378,9 @@ export class CheckinStateService implements OnDestroy {
         word: '',
         start: '18:15',
         maxSpeakers: 3,
+        club: '',
+        sub: '',
+        addr: '',
       },
       attendees: [],
       roles: {},
@@ -389,7 +392,7 @@ export class CheckinStateService implements OnDestroy {
   /** Cheap placeholder for the snapshot field initializer; real data arrives via loadMeeting()'s listener. */
   private emptySnapshotPlaceholder(): CheckinSnapshot {
     return {
-      meeting: { id: 'default', date: '', theme: '', word: '', start: '18:15', maxSpeakers: 3 },
+      meeting: { id: 'default', date: '', theme: '', word: '', start: '18:15', maxSpeakers: 3, club: '', sub: '', addr: '' },
       attendees: [],
       roles: {},
       speakers: [],

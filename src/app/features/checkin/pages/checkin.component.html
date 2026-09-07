@@ -14,6 +14,19 @@
         <span>Word of the Day: <b class="text-body">{{ state.meeting().word }}</b></span>
       }
     </div>
+    @if (state.meeting().club || state.meeting().sub || state.meeting().addr) {
+      <div class="d-flex flex-wrap gap-3 text-muted small mt-1">
+        @if (state.meeting().club) {
+          <span>Club: <b class="text-body">{{ state.meeting().club }}</b></span>
+        }
+        @if (state.meeting().sub) {
+          <span>Sub Name: <b class="text-body">{{ state.meeting().sub }}</b></span>
+        }
+        @if (state.meeting().addr) {
+          <span>Address: <b class="text-body">{{ state.meeting().addr }}</b></span>
+        }
+      </div>
+    }
   </div>
 
   <div class="card p-3 mb-3" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">

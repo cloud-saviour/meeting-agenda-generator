@@ -26,6 +26,9 @@ export interface CheckinMeeting {
   word: string;
   start: string;
   maxSpeakers: number;
+  club: string;
+  sub: string;
+  addr: string;
 }
 
 export interface CheckinSnapshot {
