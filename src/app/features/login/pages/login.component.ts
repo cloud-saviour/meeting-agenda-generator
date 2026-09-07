@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
@@ -9,7 +9,7 @@ const RESET_SENT_MESSAGE = 'If an account exists for that email, a password rese
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [FormsModule, NavbarComponent],
+  imports: [FormsModule, RouterLink, NavbarComponent],
   templateUrl: './login.component.html',
 })
 export class LoginComponent {

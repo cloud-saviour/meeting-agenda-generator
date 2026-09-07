@@ -46,5 +46,17 @@ service cloud.firestore {
     match /savedAgendas/{meetingId} {
       allow read, write: if isAdmin();
     }
+
+    // Self-service member accounts (separate from admin — see AuthService).
+    // Own-uid read/write, plus admin read for a future member directory —
+    // but never admin write, which would defeat the point of self-service.
+    // No delete in v1: no product decision yet on what happens to a deleted
+    // member's history in `checkins/**`.
+    match /members/{memberId} {
+      allow read: if request.auth != null && (request.auth.uid == memberId || isAdmin());
+      allow create, update: if request.auth != null && request.auth.uid == memberId
+        && request.resource.data.uid == memberId;
+      allow delete: if false;
+    }
   }
 }

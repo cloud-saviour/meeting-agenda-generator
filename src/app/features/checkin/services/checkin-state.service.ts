@@ -1,9 +1,10 @@
-import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { deleteDoc, doc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { Attendee, CheckinMeeting, CheckinSnapshot, CheckinSpeaker } from '../models/checkin.models';
 import { StorageService } from '../../../core/services/storage.service';
 import { APP_LOCALE } from '../../../core/utils/locale';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { AuthService } from '../../../core/auth/auth.service';
 
 const UID_KEY = 'agora-checkin-uid';
 const NAME_KEY = 'agora-checkin-name';
@@ -18,9 +19,19 @@ export class CheckinStateService implements OnDestroy {
   private readonly storage = inject(StorageService);
   private readonly firestore = inject(FIRESTORE);
   private readonly zone = inject(NgZone);
+  private readonly auth = inject(AuthService);
 
-  // ── Local identity (per-browser, persists across visits) ────────────────
-  readonly currentUid: string;
+  // ── Identity ──────────────────────────────────────────────────────────
+  // A signed-in member's real Firebase uid takes over from the anonymous
+  // per-browser local id — see the member-facing-accounts plan. `currentUid`
+  // stays a plain string getter (not a Signal<string>) so every existing
+  // `=== this.currentUid` comparison, here and in role-board/speaker-signup/
+  // evaluator-slots, keeps working unchanged.
+  private readonly localUid = this.loadOrCreateUid();
+  private readonly uidSource = computed(() => this.auth.currentUser()?.uid ?? this.localUid);
+  get currentUid(): string {
+    return this.uidSource();
+  }
   readonly currentName = signal<string>('');
 
   // ── Shared meeting state (Firestore-backed, kept live via onSnapshot) ───
@@ -39,8 +50,29 @@ export class CheckinStateService implements OnDestroy {
   );
 
   constructor() {
-    this.currentUid = this.loadOrCreateUid();
     this.currentName.set(this.storage.get(NAME_KEY) || '');
+    this.seedNameFromDisplayName(this.auth.currentUser());
+
+    // CheckinComponent reads currentName() once into a plain field at
+    // construction (not a reactive template binding), so the synchronous
+    // seed above covers the common case — already signed in when /checkin
+    // is first visited. This effect only helps the rarer case where auth
+    // state resolves later (e.g. a cached session restoring after
+    // CheckinStateService already constructed) for any *other* consumer
+    // that reads currentName() reactively.
+    effect(() => this.seedNameFromDisplayName(this.auth.currentUser()));
+  }
+
+  /**
+   * Seeds the name field from a signed-in member's Auth displayName, but
+   * only on the blank-first-visit case — never overwrites a name the
+   * person already typed on this browser (checkIn()'s own storage.set()
+   * is untouched by this).
+   */
+  private seedNameFromDisplayName(user: { displayName: string | null } | null): void {
+    if (user?.displayName && !this.storage.get(NAME_KEY)) {
+      this.currentName.set(user.displayName);
+    }
   }
 
   ngOnDestroy(): void {

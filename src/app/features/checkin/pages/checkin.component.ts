@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { CheckinStateService } from '../services/checkin-state.service';
@@ -34,6 +34,19 @@ export class CheckinComponent {
     this.meetingId = this.route.snapshot.queryParamMap.get('meeting') || 'default';
     this.state.loadMeeting(this.meetingId);
     this.nameInput = this.state.currentName();
+
+    // Catches up nameInput (a plain field, not a reactive template binding)
+    // when currentName() is seeded asynchronously after this constructor's
+    // synchronous read above — e.g. a signed-in member's displayName,
+    // arriving once Firebase Auth's session restore resolves. Guarded the
+    // same way CheckinStateService itself guards this seed: never overwrites
+    // something the person already typed.
+    effect(() => {
+      const name = this.state.currentName();
+      if (name && !this.nameInput) {
+        this.nameInput = name;
+      }
+    });
   }
 
   get dateStr(): string {

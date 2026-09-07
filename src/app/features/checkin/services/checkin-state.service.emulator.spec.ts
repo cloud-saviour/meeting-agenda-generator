@@ -1,13 +1,19 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { Injector, NgZone } from '@angular/core';
+import { Injector, NgZone, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, getDoc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
+import type { User } from 'firebase/auth';
 import { CheckinStateService } from './checkin-state.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { AuthService } from '../../../core/auth/auth.service';
+
+function fakeAuthService(user: Pick<User, 'uid' | 'displayName'> | null = null) {
+  return { currentUser: signal(user) } as unknown as AuthService;
+}
 
 /**
  * Exercises CheckinStateService against the real Firestore emulator — not a
@@ -82,12 +88,6 @@ describe('CheckinStateService (Firestore emulator)', () => {
     // runtime is interchangeable with the modular SDK's functions — this is the
     // pattern Firebase's own rules-unit-testing docs use for modular-SDK tests.
     firestore = testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
-
-    // A bare TestBed module, unused directly — just gives us a parent injector
-    // that already provides NgZone, so our own child injectors below don't
-    // need to reinvent it.
-    TestBed.configureTestingModule({});
-    parentInjector = TestBed.inject(Injector);
   });
 
   afterAll(async () => {
@@ -96,6 +96,17 @@ describe('CheckinStateService (Firestore emulator)', () => {
 
   beforeEach(async () => {
     await testEnv.clearFirestore();
+
+    // Fetched fresh per test, not once in beforeAll: TestBed destroys its
+    // environment injector after every test by default, and
+    // CheckinStateService's effect() (seeding currentName from a signed-in
+    // member's displayName) needs a live DestroyRef from this injector's
+    // ancestor chain — a stale parentInjector throws NG0205 on the second
+    // test onward. A bare TestBed module, unused directly beyond that — just
+    // gives us a parent injector that already provides NgZone, so our own
+    // child injectors below don't need to reinvent it.
+    TestBed.configureTestingModule({});
+    parentInjector = TestBed.inject(Injector);
   });
 
   afterEach(() => {
@@ -103,7 +114,7 @@ describe('CheckinStateService (Firestore emulator)', () => {
     createdServices.length = 0;
   });
 
-  function createService(uid: string, name?: string): CheckinStateService {
+  function createService(uid: string, name?: string, signedInUser: Pick<User, 'uid' | 'displayName'> | null = null): CheckinStateService {
     const storage = new FakeStorage();
     storage.set('agora-checkin-uid', uid);
     if (name) storage.set('agora-checkin-name', name);
@@ -115,6 +126,7 @@ describe('CheckinStateService (Firestore emulator)', () => {
         { provide: StorageService, useValue: storage },
         { provide: FIRESTORE, useValue: firestore },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
+        { provide: AuthService, useValue: fakeAuthService(signedInUser) },
       ],
     });
     const service = child.get(CheckinStateService);
@@ -274,6 +286,38 @@ describe('CheckinStateService (Firestore emulator)', () => {
     ]);
 
     expect([okA, okB].filter(Boolean).length).toBe(1);
+  });
+
+  it('claimRole()/releaseRole() ownership checks work identically when currentUid comes from a signed-in member, not the local anonymous uid', async () => {
+    // signedInUser's uid takes over from the local anon uid passed as the first arg —
+    // proves the getter-based currentUid switch didn't change mutate()'s ownership logic.
+    // Asserts via direct getDoc() reads rather than waiting on a second
+    // service instance's own onSnapshot listener to catch up — claimRole()/
+    // releaseRole() only resolve once their runTransaction() has actually
+    // committed, so the write is already durable the moment each awaited
+    // call returns; a second listener's independent push delivery is a
+    // separate, slower concern this test doesn't need to depend on.
+    const svcA = createService('local-anon-a', undefined, { uid: 'member-a', displayName: null });
+    const svcB = createService('local-anon-b', undefined, { uid: 'member-b', displayName: null });
+    svcA.loadMeeting('m12');
+    svcB.loadMeeting('m12');
+    await svcA.checkIn('Alice');
+    await svcB.checkIn('Bongani');
+
+    expect(svcA.currentUid).toBe('member-a');
+    expect(await svcA.claimRole('toastmaster')).toBe(true);
+    expect(await svcB.claimRole('toastmaster')).toBe(false);
+
+    const afterClaim = await getDoc(doc(firestore, 'checkins', 'm12'));
+    expect(afterClaim.data()?.['roles']?.['toastmaster']?.uid).toBe('member-a');
+
+    await svcB.releaseRole('toastmaster'); // not svcB's claim — no-op
+    const afterNoopRelease = await getDoc(doc(firestore, 'checkins', 'm12'));
+    expect(afterNoopRelease.data()?.['roles']?.['toastmaster']?.uid).toBe('member-a');
+
+    await svcA.releaseRole('toastmaster');
+    const afterRelease = await getDoc(doc(firestore, 'checkins', 'm12'));
+    expect(afterRelease.data()?.['roles']?.['toastmaster']?.uid).toBe('');
   });
 
   it('deleteMeeting() removes the Firestore document outright, without needing loadMeeting() first', async () => {
