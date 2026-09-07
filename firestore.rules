@@ -58,5 +58,18 @@ service cloud.firestore {
         && request.resource.data.uid == memberId;
       allow delete: if false;
     }
+
+    // Official confirmed history — written only by an admin's "mark
+    // register" actions on /checkin (see AttendanceConfirmationService),
+    // one doc per (meeting, member) at memberHistory/{meetingId}_{uid}.
+    // Unlike checkins/** (unverified self-report, public), this collection
+    // IS the source of truth the member dashboard reads — so only an admin
+    // may write it. The writer is never the record's own subject (an admin
+    // confirms someone ELSE'S involvement), so unlike members/{memberId}
+    // there's no own-uid check on write, only on read.
+    match /memberHistory/{recordId} {
+      allow read: if request.auth != null && (isAdmin() || request.auth.uid == resource.data.uid);
+      allow write: if isAdmin();
+    }
   }
 }

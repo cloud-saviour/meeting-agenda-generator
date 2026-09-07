@@ -1,6 +1,8 @@
 import { Component, inject } from '@angular/core';
 import { CheckinStateService } from '../../services/checkin-state.service';
+import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
 import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
+import { AuthService } from '../../../../core/auth/auth.service';
 
 @Component({
   selector: 'app-role-board',
@@ -10,6 +12,8 @@ import { RoleDefinitionService } from '../../../../core/services/role-definition
 export class RoleBoardComponent {
   readonly state = inject(CheckinStateService);
   readonly roleDefs = inject(RoleDefinitionService);
+  readonly auth = inject(AuthService);
+  private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   readonly activeRoles = this.roleDefs.activeRoles;
 
   claimError: string | null = null;
@@ -46,5 +50,19 @@ export class RoleBoardComponent {
 
   release(roleId: string) {
     this.state.releaseRole(roleId);
+  }
+
+  isRoleConfirmed(uid: string, roleId: string): boolean {
+    return !!this.attendanceConfirmation.confirmationsForCurrentMeeting().get(uid)?.rolesConfirmed.includes(roleId);
+  }
+
+  toggleRoleConfirm(roleId: string) {
+    const uid = this.roles[roleId]?.uid;
+    if (!uid) return;
+    const meeting = this.state.meeting();
+    const meta = { date: meeting.date, theme: meeting.theme };
+    this.isRoleConfirmed(uid, roleId)
+      ? this.attendanceConfirmation.unconfirmRole(meeting.id, uid, roleId)
+      : this.attendanceConfirmation.confirmRole(meeting.id, uid, roleId, meta);
   }
 }

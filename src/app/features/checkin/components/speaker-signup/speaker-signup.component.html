@@ -6,9 +6,18 @@
       <div class="card bg-body-tertiary p-2 mb-2">
         <div class="d-flex justify-content-between align-items-center mb-1">
           <span class="fw-bold small">{{ s.name }}@if (isMine(s.uid)) { <span class="badge bg-warning-subtle text-warning-emphasis ms-1">You</span> }</span>
-          @if (isMine(s.uid)) {
-            <button class="btn btn-outline-secondary btn-sm" (click)="remove(s.id)">Remove</button>
-          }
+          <div class="d-flex align-items-center gap-1">
+            @if (auth.isAdmin()) {
+              @if (isSpeechConfirmed(s.uid)) {
+                <button type="button" class="btn btn-success btn-sm" (click)="toggleSpeechConfirm(s.uid)">✓ Confirmed</button>
+              } @else {
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="toggleSpeechConfirm(s.uid)">Confirm spoke</button>
+              }
+            }
+            @if (isMine(s.uid)) {
+              <button class="btn btn-outline-secondary btn-sm" (click)="remove(s.id)">Remove</button>
+            }
+          </div>
         </div>
         <div class="text-muted small">
           "{{ s.title }}"@if (s.level) { &nbsp;&middot;&nbsp;{{ s.level }} } &nbsp;&middot;&nbsp; {{ s.timePref }} mins

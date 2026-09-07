@@ -19,6 +19,13 @@
             } @else {
               <span class="badge bg-danger-subtle text-danger-emphasis">{{ s.evaluator?.name }}</span>
             }
+            @if (auth.isAdmin()) {
+              @if (isEvaluationConfirmed(s.evaluator?.uid, s.id)) {
+                <button type="button" class="btn btn-success btn-sm" (click)="toggleEvaluationConfirm(s.id)">✓ Confirmed</button>
+              } @else {
+                <button type="button" class="btn btn-outline-secondary btn-sm" (click)="toggleEvaluationConfirm(s.id)">Confirm done</button>
+              }
+            }
           } @else if (isSpeakerSelf(s.uid)) {
             <span class="badge bg-success-subtle text-success-emphasis opacity-50">N/A</span>
           } @else {

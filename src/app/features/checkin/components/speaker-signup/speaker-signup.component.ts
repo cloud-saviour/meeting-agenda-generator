@@ -1,6 +1,8 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CheckinStateService } from '../../services/checkin-state.service';
+import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
+import { AuthService } from '../../../../core/auth/auth.service';
 
 @Component({
   selector: 'app-speaker-signup',
@@ -10,6 +12,8 @@ import { CheckinStateService } from '../../services/checkin-state.service';
 })
 export class SpeakerSignupComponent {
   readonly state = inject(CheckinStateService);
+  readonly auth = inject(AuthService);
+  private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
 
   title = '';
   level = '';
@@ -57,5 +61,17 @@ export class SpeakerSignupComponent {
 
   isMine(uid: string): boolean {
     return uid === this.state.currentUid;
+  }
+
+  isSpeechConfirmed(uid: string): boolean {
+    return !!this.attendanceConfirmation.confirmationsForCurrentMeeting().get(uid)?.spoke;
+  }
+
+  toggleSpeechConfirm(uid: string) {
+    const meeting = this.state.meeting();
+    const meta = { date: meeting.date, theme: meeting.theme };
+    this.isSpeechConfirmed(uid)
+      ? this.attendanceConfirmation.unconfirmSpeech(meeting.id, uid)
+      : this.attendanceConfirmation.confirmSpeech(meeting.id, uid, meta);
   }
 }

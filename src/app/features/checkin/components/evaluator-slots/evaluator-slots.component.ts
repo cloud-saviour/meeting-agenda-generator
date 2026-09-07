@@ -1,5 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { CheckinStateService } from '../../services/checkin-state.service';
+import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
+import { AuthService } from '../../../../core/auth/auth.service';
 
 @Component({
   selector: 'app-evaluator-slots',
@@ -8,6 +10,8 @@ import { CheckinStateService } from '../../services/checkin-state.service';
 })
 export class EvaluatorSlotsComponent {
   readonly state = inject(CheckinStateService);
+  readonly auth = inject(AuthService);
+  private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   error: string | null = null;
 
   get speakers() {
@@ -36,5 +40,20 @@ export class EvaluatorSlotsComponent {
 
   release(speakerId: string) {
     this.state.releaseEvaluatorSlot(speakerId);
+  }
+
+  isEvaluationConfirmed(evaluatorUid: string | undefined, speakerId: string): boolean {
+    if (!evaluatorUid) return false;
+    return this.attendanceConfirmation.confirmationsForCurrentMeeting().get(evaluatorUid)?.evaluatedSpeakerId === speakerId;
+  }
+
+  toggleEvaluationConfirm(speakerId: string) {
+    const evaluatorUid = this.speakers.find((sp) => sp.id === speakerId)?.evaluator?.uid;
+    if (!evaluatorUid) return;
+    const meeting = this.state.meeting();
+    const meta = { date: meeting.date, theme: meeting.theme };
+    this.isEvaluationConfirmed(evaluatorUid, speakerId)
+      ? this.attendanceConfirmation.unconfirmEvaluation(meeting.id, evaluatorUid)
+      : this.attendanceConfirmation.confirmEvaluation(meeting.id, evaluatorUid, speakerId, meta);
   }
 }

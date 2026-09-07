@@ -1,60 +1,41 @@
 import { Injectable, inject } from '@angular/core';
-import { collection, getDocs } from 'firebase/firestore';
-import { CheckinSnapshot } from '../../checkin/models/checkin.models';
-import { MemberHistoryEntry } from '../models/member.models';
-import { PublishedAgendaService } from '../../agenda-editor/services/published-agenda.service';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { MemberHistoryEntry, MemberHistoryRecord } from '../models/member.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 
-const COLLECTION = 'checkins';
-
-/** Pure so it's testable without Firestore — scans one meeting's checkin snapshot for a given uid's involvement. */
-export function scanOne(meetingId: string, data: CheckinSnapshot, uid: string): MemberHistoryEntry {
-  const rolesClaimed = Object.entries(data.roles)
-    .filter(([, claim]) => claim.uid === uid)
-    .map(([roleKey]) => roleKey);
-  const speaker = data.speakers.find((sp) => sp.uid === uid);
-  const evaluated = data.speakers.find((sp) => sp.evaluator?.uid === uid);
-
-  return {
-    meetingId,
-    date: '',
-    theme: '',
-    attended: data.attendees.some((a) => a.uid === uid),
-    rolesClaimed,
-    spoke: !!speaker,
-    evaluatedSpeakerId: evaluated?.id ?? null,
-  };
-}
+const COLLECTION = 'memberHistory';
 
 /**
- * Cross-meeting history for a member — reuses PublishedAgendaService's
- * "enumerate the whole collection client-side" pattern rather than a new
- * denormalized index, since `uid` only lives nested inside array/map fields
- * on `checkins/{meetingId}` docs (unqueryable via `where()`). Costs O(every
- * meeting the club has ever held) per call, not O(meetings this member
- * attended) — the right fit at small-club scale, not beyond it (see the
- * member-facing-accounts plan for the future denormalized-index option).
+ * Cross-meeting history for a member — a real filtered query
+ * (`where('uid','==', uid)`) against the official memberHistory collection
+ * written by AttendanceConfirmationService's admin confirm actions (see
+ * `/checkin`'s admin-only controls). Replaces the earlier whole-`checkins`-
+ * collection scan: date/theme are now denormalized onto each record at
+ * confirm time, so no PublishedAgendaService join is needed either.
  *
  * A one-time getDocs(), not a live onSnapshot() — a dashboard visit is
  * occasional, matching SavedAgendaService.load()'s one-time-read precedent
- * rather than holding a permanent listener over the whole collection.
+ * rather than holding a permanent listener.
  */
 @Injectable({ providedIn: 'root' })
 export class MemberHistoryService {
   private readonly firestore = inject(FIRESTORE);
-  private readonly publishedAgenda = inject(PublishedAgendaService);
 
   async loadHistory(uid: string): Promise<MemberHistoryEntry[]> {
-    const snap = await getDocs(collection(this.firestore, COLLECTION));
-    const meta = this.publishedAgenda.entries();
+    const snap = await getDocs(query(collection(this.firestore, COLLECTION), where('uid', '==', uid)));
 
     return snap.docs
-      .map((d) => scanOne(d.id, d.data() as CheckinSnapshot, uid))
-      .filter((e) => e.attended || e.rolesClaimed.length > 0 || e.spoke || e.evaluatedSpeakerId)
-      .map((e) => {
-        const entry = meta.find((m) => m.no === e.meetingId);
-        return { ...e, date: entry?.date ?? '', theme: entry?.theme ?? '' };
-      })
+      .map((d) => d.data() as MemberHistoryRecord)
+      .filter((r) => r.attended || r.rolesConfirmed.length > 0 || r.spoke || r.evaluatedSpeakerId)
+      .map((r) => ({
+        meetingId: r.meetingId,
+        date: r.date,
+        theme: r.theme,
+        attended: r.attended,
+        rolesConfirmed: r.rolesConfirmed,
+        spoke: r.spoke,
+        evaluatedSpeakerId: r.evaluatedSpeakerId,
+      }))
       .sort((a, b) => b.date.localeCompare(a.date));
   }
 }

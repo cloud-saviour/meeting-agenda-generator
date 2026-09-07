@@ -2,12 +2,14 @@ import { Component, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { CheckinStateService } from '../services/checkin-state.service';
+import { AttendanceConfirmationService } from '../services/attendance-confirmation.service';
 import { AttendanceListComponent } from '../components/attendance-list/attendance-list.component';
 import { RoleBoardComponent } from '../components/role-board/role-board.component';
 import { SpeakerSignupComponent } from '../components/speaker-signup/speaker-signup.component';
 import { EvaluatorSlotsComponent } from '../components/evaluator-slots/evaluator-slots.component';
 import { APP_LOCALE } from '../../../core/utils/locale';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
+import { AuthService } from '../../../core/auth/auth.service';
 
 @Component({
   selector: 'app-checkin',
@@ -24,6 +26,8 @@ import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 })
 export class CheckinComponent {
   readonly state = inject(CheckinStateService);
+  private readonly auth = inject(AuthService);
+  private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   private readonly route = inject(ActivatedRoute);
   nameInput = '';
   meetingId: string;
@@ -45,6 +49,17 @@ export class CheckinComponent {
       const name = this.state.currentName();
       if (name && !this.nameInput) {
         this.nameInput = name;
+      }
+    });
+
+    // Reactive, not a one-time check: isAdmin() reads false until Firebase
+    // Auth's async session restore resolves, even for an already-signed-in
+    // admin on a cold reload — a plain `if (auth.isAdmin())` here would
+    // silently skip loading forever. loadForMeeting() is itself idempotent
+    // per meetingId, so repeated effect firings are cheap no-ops.
+    effect(() => {
+      if (this.auth.isAdmin()) {
+        this.attendanceConfirmation.loadForMeeting(this.meetingId);
       }
     });
   }

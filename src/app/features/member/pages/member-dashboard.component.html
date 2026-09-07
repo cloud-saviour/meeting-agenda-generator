@@ -39,7 +39,7 @@
             <div class="text-muted small">{{ entry.date }}</div>
             <div class="small">
               @if (entry.attended) { <span class="badge text-bg-secondary me-1">Attended</span> }
-              @for (role of entry.rolesClaimed; track role) { <span class="badge text-bg-info me-1">{{ role }}</span> }
+              @for (role of entry.rolesConfirmed; track role) { <span class="badge text-bg-info me-1">{{ role }}</span> }
               @if (entry.spoke) { <span class="badge text-bg-success me-1">Spoke</span> }
               @if (entry.evaluatedSpeakerId) { <span class="badge text-bg-warning me-1">Evaluated a speaker</span> }
             </div>

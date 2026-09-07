@@ -26,6 +26,13 @@
             <button class="btn btn-danger btn-sm" (click)="claim(def.id)">Claim</button>
           }
         }
+        @if (auth.isAdmin() && roles[def.id]?.uid) {
+          @if (isRoleConfirmed(roles[def.id].uid, def.id)) {
+            <button type="button" class="btn btn-success btn-sm" (click)="toggleRoleConfirm(def.id)">✓ Confirmed</button>
+          } @else {
+            <button type="button" class="btn btn-outline-secondary btn-sm" (click)="toggleRoleConfirm(def.id)">Confirm done</button>
+          }
+        }
       </div>
     }
   </div>
