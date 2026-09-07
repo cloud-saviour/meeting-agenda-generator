@@ -725,6 +725,15 @@ confirm the claim is still set). `npm start` already points at the emulator
 by default (no flags needed), since `environment.ts` is what plain
 `ng serve` uses.
 
+For manual QA of a fully connected scenario (one meeting — `TEST-1` — with
+a saved+published agenda, a filled committee roster, check-in attendees/
+role-claims/speaker-signups, and member dashboard history, all
+cross-referencing the same meeting id and 3 seeded member accounts —
+`member1@example.com` / `password123`, etc.), optionally also run
+`npm run seed:test-data` (`scripts/seed-test-data.mjs`) after the two seeds
+above. Not required for first-time setup or by any test suite — the app
+works fully without it — and safe to re-run.
+
 Routes: `http://localhost:4300/` (home tile picker),
 `http://localhost:4300/login` (admin sign-in — every route below except
 `/checkin`, `/preview`, and `/signup` redirects here first if you're not

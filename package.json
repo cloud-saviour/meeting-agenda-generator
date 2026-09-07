@@ -11,7 +11,8 @@
     "test:emulator": "ng run meeting-agenda-generator:test-emulator",
     "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit=./.emulator-data",
     "seed:roles": "node scripts/seed-role-definitions.mjs",
-    "seed:admin": "node scripts/seed-admin-user.mjs"
+    "seed:admin": "node scripts/seed-admin-user.mjs",
+    "seed:test-data": "node scripts/seed-test-data.mjs"
   },
   "prettier": {
     "printWidth": 100,
