@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { PublishedAgendaService } from '../../agenda-editor/services/published-agenda.service';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -16,6 +16,9 @@ export class HomeComponent {
   /** The meeting the "Meeting Check-in" tile links to — nearest upcoming published meeting, or the most recent past one. Null if nothing's ever been published. */
   readonly nextMeeting = this.publishedAgenda.nearestEntry;
 
-  /** Gates the admin tiles (Manage Agendas / Manage Roles) vs. a single Sign In tile. */
+  /** Gates the admin tiles (Manage Agendas / Manage Roles) vs. everyone else's first tile. */
   readonly isAdmin = this.auth.isAdmin;
+
+  /** A signed-in non-admin member gets a "Member Profile" tile instead of "Sign In" — isAdmin() is checked first in the template, so this only ever matters for the non-admin case. */
+  readonly isSignedIn = computed(() => this.auth.currentUser() !== null);
 }
