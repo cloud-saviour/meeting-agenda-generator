@@ -158,10 +158,10 @@ src/app/
 
     home/             Route "/" — tile picker. Signed in as an admin:
                       "Manage Agendas" (→ admin-agendas-hub), "Meeting
-                      #<no> Check-in", "Manage Roles" (→ admin-roles-hub),
-                      "Sign Out". Not signed in, or signed in without the
-                      admin claim: the two admin tiles collapse into a
-                      single "Sign In" tile (→ /login) — gated on
+                      Check-in", "Manage Roles" (→ admin-roles-hub), "Sign
+                      Out". Not signed in, or signed in without the admin
+                      claim: the two admin tiles collapse into a single
+                      "Sign In" tile (→ /login) — gated on
                       `AuthService.isAdmin`, not just currentUser(), so a
                       real Firebase account without the admin claim still
                       sees "Sign In", not the admin tiles (see Authentication
@@ -172,26 +172,32 @@ src/app/
                       `AuthService.signOut()` directly rather than
                       navigating — Home is otherwise the one page with no
                       other way to sign out.
-                      The "Meeting #<no> Check-in" tile is the one
+                      The "Meeting Check-in" tile is always shown — it was
+                      briefly gated on a meeting being currently published
+                      (`PublishedAgendaService.nearestEntry()` non-null),
+                      but that hid the app's only anonymous, no-session
+                      check-in entry point whenever nothing happened to be
+                      published, which defeats check-in's own
+                      anonymous-by-design intent (see Authentication below);
+                      reverted back to unconditional. It's the one
                       non-admin, no-session entry point into check-in, so it
                       can't rely on AgendaStateService (nothing's been
                       loaded yet) — it links to
-                      PublishedAgendaService.nearestEntry() instead. It is
-                      **only rendered when a meeting is currently
-                      published** (`nearestEntry()` non-null) — omitted
-                      entirely otherwise, same as every other conditional
-                      tile here (`@if`/`@else`, never a shown-but-disabled
-                      tile) — and its heading shows which meeting via the
-                      app's `#<no>` convention (see checkin.component.html).
-                      This gating is uniform for admin/member/anonymous
-                      alike. `tileCount()` drives the grid's column count
-                      accordingly: `(isAdmin()?2:1) + (nextMeeting()?1:0) +
-                      (isSignedIn()?1:0)`, which can drop to 1 (anonymous,
-                      nothing published — just "Sign In"), handled by the
-                      template's `row-cols-1` default with no extra
-                      binding. Every other check-in link in the app (editor
-                      navbar, admin-roles/-hub/-agendas navbars) DOES have
-                      an admin session, so those pass
+                      `PublishedAgendaService.nearestEntry()` when non-null
+                      (heading becomes "Meeting #<no> Check-in", using the
+                      app's `#<no>` convention, see checkin.component.html)
+                      or degrades to a bare `/checkin` link with a generic
+                      "Meeting Check-in" heading otherwise. Whenever nobody
+                      is signed in, `checkinTileHeading()` appends
+                      " As Guest" to whichever of those two headings
+                      applies, so an anonymous visitor knows up front
+                      they're checking in as a guest, not their own account.
+                      `tileCount()` drives the grid's column count
+                      accordingly: `(isAdmin()?2:1) + 1 + (isSignedIn()?1:0)`
+                      — the middle `+1` is the Meeting Check-in tile,
+                      unconditional. Every other check-in link in the app
+                      (editor navbar, admin-roles/-hub/-agendas navbars)
+                      DOES have an admin session, so those pass
                       `queryParams: { meeting: state.meeting().no } }`
                       instead — `CheckinComponent`/`AgendaViewerComponent`
                       resolve an empty-but-present `?meeting=` (e.g. before

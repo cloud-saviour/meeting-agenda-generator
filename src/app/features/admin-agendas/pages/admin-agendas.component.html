@@ -32,6 +32,10 @@
                 title="This is the currently published agenda — click to re-publish and refresh it">
                 {{ isPublishPending(e.no) ? '…' : '✓ Published' }}
               </button>
+              <button class="btn btn-outline-secondary btn-sm" [disabled]="isPublishPending(e.no)" (click)="unpublish(e.no)"
+                title="Unpublish this agenda — members will no longer see it as the meeting to check in for">
+                {{ isPublishPending(e.no) ? '…' : 'Unpublish' }}
+              </button>
             } @else {
               <button class="btn btn-outline-primary btn-sm" [disabled]="isPublishPending(e.no)" (click)="publish(e.no)"
                 title="Publish this agenda so members can preview it from the check-in page (publishing replaces any other currently-published meeting)">

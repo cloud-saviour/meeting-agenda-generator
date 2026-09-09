@@ -4,7 +4,8 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { MemberProfileService } from '../services/member-profile.service';
 import { MemberHistoryService } from '../services/member-history.service';
 import { MemberHistoryEntry, MemberProfile } from '../models/member.models';
-import { NavbarComponent } from '../../../layout/navbar/navbar.component';
+import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
+import { PublishedAgendaService } from '../../agenda-editor/services/published-agenda.service';
 
 @Component({
   selector: 'app-member-dashboard',
@@ -16,6 +17,18 @@ export class MemberDashboardComponent {
   private readonly auth = inject(AuthService);
   private readonly memberProfile = inject(MemberProfileService);
   private readonly memberHistory = inject(MemberHistoryService);
+  private readonly publishedAgenda = inject(PublishedAgendaService);
+
+  /** "Meeting Check-in" only appears when a meeting is currently published — same visitor-facing gating as Home's tile, since a member with nothing published has nowhere check-in-related to go either. */
+  get navLinks(): NavLink[] {
+    const links: NavLink[] = [{ label: '👁 Preview Agenda', path: '/preview' }];
+    const meeting = this.publishedAgenda.nearestEntry();
+    if (meeting) {
+      links.push({ label: '✅ Meeting Check-in', path: '/checkin', queryParams: { meeting: meeting.no } });
+    }
+    links.push({ label: '🏠 Home', path: '/' });
+    return links;
+  }
 
   readonly profile = signal<MemberProfile | null>(null);
   readonly profileLoaded = signal(false);
