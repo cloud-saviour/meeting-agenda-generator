@@ -9,9 +9,8 @@ import { DocxService } from '../services/docx.service';
 import { MeetingFormComponent } from '../components/meeting-form/meeting-form.component';
 import { AgendaItemsComponent } from '../components/agenda-items/agenda-items.component';
 import { SpeakersFormComponent } from '../components/speakers-form/speakers-form.component';
-import { CommitteeFormComponent } from '../components/committee-form/committee-form.component';
 import { AgendaPreviewComponent } from '../components/agenda-preview/agenda-preview.component';
-import { NavbarComponent } from '../../../layout/navbar/navbar.component';
+import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
 
 @Component({
   selector: 'app-agenda-editor',
@@ -22,7 +21,6 @@ import { NavbarComponent } from '../../../layout/navbar/navbar.component';
     MeetingFormComponent,
     AgendaItemsComponent,
     SpeakersFormComponent,
-    CommitteeFormComponent,
     AgendaPreviewComponent,
   ],
   templateUrl: './agenda-editor.component.html',
@@ -38,7 +36,6 @@ export class AgendaEditorComponent {
 
   docxBusy = false;
   linkCopied = false;
-  published = false;
   mobilePreviewMode = false;
 
   // Tracks, per roleId, the last name this component itself synced in from a
@@ -47,6 +44,13 @@ export class AgendaEditorComponent {
   // ONLY when it still shows exactly what check-in put there, never a name
   // the admin has since typed in by hand.
   private readonly lastSyncedPersonByRole = new Map<string, string>();
+
+  // Same idea as lastSyncedPersonByRole, but for apology names — keyed by
+  // check-in uid, not roleId — so a re-attend (which drops that uid from
+  // checkinState.apologies()) can retract their name from the agenda's own
+  // free-text apologies field ONLY when it still shows exactly what was
+  // synced in, never a name the admin has since edited by hand.
+  private readonly lastSyncedApologyByUid = new Map<string, string>();
 
   // Last serialized snapshot JSON actually written per meeting number — lets
   // the auto-save effect below skip a no-op re-save (see its comment).
@@ -86,13 +90,14 @@ export class AgendaEditorComponent {
     // localStorage `storage`-event listener outright; this is strictly better
     // since it's real cross-device sync (see CLAUDE.md's Persistence section).
     effect(() => {
-      // Only these two should drive this effect — everything
+      // Only these three should drive this effect — everything
       // `applyCheckinSnapshot()` reads/writes (spks, overriddenRoles,
       // AgendaStateService's signals) must stay untracked, or the effect
       // would re-trigger itself on every edit it makes, including ordinary
       // manual admin edits.
       this.checkinState.roles();
       this.checkinState.speakers();
+      this.checkinState.apologies();
       untracked(() => {
         if (!this.state.meeting().no) return;
         this.applyCheckinSnapshot();
@@ -142,6 +147,17 @@ export class AgendaEditorComponent {
     // false-positive against a different agenda's last-saved content.
     // Debounced, same reasoning as the meeting-sync effect above — this is
     // now a real Firestore write per call, not a free in-memory one.
+    //
+    // Also keeps the PUBLISHED copy live, replacing the old manual "Publish
+    // New Changes" button: once this meeting is the currently-published one
+    // (checked fresh inside the debounced callback, not as a tracked effect
+    // dependency, so this fires on THIS meeting's own content changing, not
+    // merely because publish status changed elsewhere), every edit —
+    // including a check-in role/speaker/apology sync applied above — reaches
+    // `publishedAgendas` too, via the same PublishedAgendaService.publish()
+    // AdminAgendasComponent's own Publish button already calls. First-time
+    // publishing a meeting is unchanged and still only happens from My
+    // Agendas — this only keeps an already-published meeting current.
     effect(() => {
       const snapshot = this.importExport.getSnapshot();
       if (!snapshot.no) return;
@@ -151,6 +167,9 @@ export class AgendaEditorComponent {
       this.agendaSaveTimer = setTimeout(() => {
         this.lastSavedJsonByNo.set(snapshot.no, json);
         this.savedAgendas.save(snapshot);
+        if (this.publishedAgenda.entries().some((e) => e.no === snapshot.no)) {
+          this.publishedAgenda.publish(snapshot.no, snapshot);
+        }
       }, 500);
     });
   }
@@ -160,12 +179,23 @@ export class AgendaEditorComponent {
     this.state.resetAll();
   }
 
-  publishAgenda() {
-    const meetingNo = this.state.meeting().no;
-    if (!meetingNo) return;
-    this.publishedAgenda.publish(meetingNo, this.importExport.getSnapshot());
-    this.published = true;
-    setTimeout(() => (this.published = false), 2000);
+  /** True once this open meeting is the currently-published one — drives the passive "● Live" badge that replaced the old Publish button. */
+  get isLivePublished(): boolean {
+    return this.publishedAgenda.entries().some((e) => e.no === this.state.meeting().no);
+  }
+
+  /**
+   * "Meeting Check-in" only appears once this meeting is actually live
+   * (published) — before that, there's nothing for a member to check into
+   * yet, so pointing anyone at /checkin from here would be premature.
+   */
+  get navLinks(): NavLink[] {
+    const links: NavLink[] = [];
+    if (this.isLivePublished) {
+      links.push({ label: '👥 Meeting Check-in', path: '/checkin', queryParams: { meeting: this.state.meeting().no } });
+    }
+    links.push({ label: '🏠 Home', path: '/' });
+    return links;
   }
 
   toggleMobilePreview() {
@@ -212,6 +242,52 @@ export class AgendaEditorComponent {
         timeLo,
         timeHi,
       });
+    }
+
+    // Imports new check-in apology names (from uncheckIn()) into the
+    // agenda's own free-text apologies field — append-only, same
+    // dedup-by-name precedent as the speaker import above. This is a
+    // heuristic over free text, not a structured list: prose like "Bob and
+    // Carol" (no comma) won't register "Carol" as already present, so a
+    // later apology from Carol could append a redundant second "Carol" —
+    // an accepted fragility of keeping apologies a free-text field, not
+    // something this sync tries to solve.
+    //
+    // Also retracts a name once its uid drops out of checkinState.apologies()
+    // — i.e. they clicked "I'm Attending" again, which already removed them
+    // from check-in's own list — mirroring lastSyncedPersonByRole above:
+    // only removes the token if it still matches exactly what was synced
+    // in, never touching text the admin has since edited by hand.
+    let apologiesText = this.state.meeting().apologies;
+    const checkinApologies = this.checkinState.apologies();
+    const currentApologyUids = new Set(checkinApologies.map((a) => a.uid));
+
+    const existingApologyNames = new Set(
+      apologiesText.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+    );
+    for (const a of checkinApologies) {
+      const name = a.name.trim();
+      if (!name) continue;
+      if (!existingApologyNames.has(name.toLowerCase())) {
+        apologiesText = [apologiesText, name].filter(Boolean).join(', ');
+        existingApologyNames.add(name.toLowerCase());
+      }
+      this.lastSyncedApologyByUid.set(a.uid, name);
+    }
+
+    for (const [uid, syncedName] of [...this.lastSyncedApologyByUid]) {
+      if (currentApologyUids.has(uid)) continue;
+      const tokens = apologiesText.split(',').map((s) => s.trim());
+      const idx = tokens.findIndex((t) => t.toLowerCase() === syncedName.toLowerCase());
+      if (idx !== -1) {
+        tokens.splice(idx, 1);
+        apologiesText = tokens.filter(Boolean).join(', ');
+      }
+      this.lastSyncedApologyByUid.delete(uid);
+    }
+
+    if (apologiesText !== this.state.meeting().apologies) {
+      this.state.updateMeeting({ apologies: apologiesText });
     }
   }
 

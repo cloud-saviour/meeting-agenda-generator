@@ -103,4 +103,16 @@
     <label class="form-label small mb-1">Mission Contact VPE name</label>
     <input class="form-control form-control-sm" type="text" [value]="m.vpe" (input)="update('vpe', $any($event.target).value)">
   </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Committee Period</label>
+    <input class="form-control form-control-sm" type="text" [value]="m.period" (input)="update('period', $any($event.target).value)">
+  </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Website URL</label>
+    <input class="form-control form-control-sm" type="text" [value]="m.web" (input)="update('web', $any($event.target).value)">
+  </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Facebook Group Name</label>
+    <input class="form-control form-control-sm" type="text" [value]="m.fb" (input)="update('fb', $any($event.target).value)">
+  </div>
 </div>

@@ -31,20 +31,34 @@ export class CheckinStateService implements OnDestroy {
   // No localStorage anywhere in this service — nothing here persists across
   // a reload. A signed-in account (member or admin) always uses its real
   // Firebase uid. An anonymous visitor's uid is derived deterministically
-  // from the email they enter at check-in (sha256Hex — see checkIn() below),
-  // so the SAME person gets the SAME uid on a later visit or a different
+  // from an email — normally entered up front at CheckinComponent's
+  // guest-email gate via identifyAsGuest() below, before any name is typed
+  // — so the SAME person gets the SAME uid on a later visit or a different
   // device without anything being stored client-side; before they've
-  // checked in, `sessionUid` is a random, in-memory-only placeholder (never
+  // identified, `sessionUid` is a random, in-memory-only placeholder (never
   // written anywhere) so `=== this.currentUid` comparisons elsewhere don't
   // need to handle a null case. `currentUid` stays a plain string getter
   // (not a Signal<string>) so every existing comparison, here and in
   // role-board/speaker-signup/evaluator-slots, keeps working unchanged.
   private readonly sessionUid = makeId();
   private readonly emailIdentity = signal<string | null>(null);
+  // The normalized (trimmed+lowercased) raw email behind emailIdentity —
+  // kept separately so checkIn() can still upsert it into
+  // CheckinContactsService even when identifyAsGuest() was called earlier
+  // (by the gate) rather than inline within this same checkIn() call.
+  private readonly guestEmail = signal<string | null>(null);
   private readonly uidSource = computed(() => this.auth.currentUser()?.uid ?? this.emailIdentity() ?? this.sessionUid);
   get currentUid(): string {
     return this.uidSource();
   }
+  /**
+   * True for a signed-in account, or once an anonymous visitor has
+   * identified themselves via identifyAsGuest() — drives
+   * CheckinComponent's guest-email gate. Folds in the signed-in case so
+   * the gate condition is a single check (`!isGuestIdentified()`) rather
+   * than every caller needing to separately check auth state too.
+   */
+  readonly isGuestIdentified = computed(() => !!this.auth.currentUser() || this.emailIdentity() !== null);
   readonly currentName = signal<string>('');
   /** `undefined` (distinct from the real "signed out" value `null`) so the very first
    *  identity-change effect run below always seeds/clears, even on a cold, signed-out load. */
@@ -60,6 +74,7 @@ export class CheckinStateService implements OnDestroy {
   readonly roles = computed(() => this.snapshot().roles);
   readonly speakers = computed(() => this.snapshot().speakers);
   readonly lockedRoles = computed(() => this.snapshot().lockedRoles);
+  readonly apologies = computed(() => this.snapshot().apologies);
 
   readonly isCheckedIn = computed(() =>
     this.attendees().some((a) => a.uid === this.currentUid)
@@ -98,6 +113,7 @@ export class CheckinStateService implements OnDestroy {
     this.lastUid = uid;
     this.currentName.set(user?.displayName ?? '');
     this.emailIdentity.set(null);
+    this.guestEmail.set(null);
   }
 
   ngOnDestroy(): void {
@@ -122,7 +138,7 @@ export class CheckinStateService implements OnDestroy {
       (snap) =>
         this.zone.run(() => {
           const data = snap.exists()
-            ? (snap.data() as CheckinSnapshot)
+            ? this.normalize(snap.data() as CheckinSnapshot)
             : this.defaultSnapshot(meetingId);
           this.snapshot.set(data);
         }),
@@ -132,23 +148,64 @@ export class CheckinStateService implements OnDestroy {
 
   // ── Attendance ────────────────────────────────────────────────────────
   /**
-   * `email` is required for an anonymous check-in (validated here, not
-   * just client-side, since this is the one place identity is actually
-   * established) — it's how a stable uid gets derived without
-   * localStorage, and it's separately upserted into CheckinContactsService
+   * Establishes an anonymous visitor's identity from a typed email —
+   * normalizes (trim+lowercase) and SHA-256-hashes it into `emailIdentity`
+   * (see the class-level Identity comment), so `currentUid` resolves
+   * deterministically to the same uid on a later visit or device with
+   * nothing stored client-side. Also stashes the normalized email in
+   * `guestEmail` so a later `checkIn()` call — made without an email, once
+   * already identified — can still upsert it into CheckinContactsService.
+   *
+   * This is CheckinComponent's guest-email gate's entry point, called up
+   * front before any name is entered. `checkIn()` below also calls it
+   * internally (only when not already identified) so every existing
+   * `checkIn(name, email)` call site that passes email+name together in
+   * one step — chiefly in the test suites — keeps working unchanged.
+   *
+   * Safe to call again after already identified (e.g. re-entering the same
+   * email after a reload): just re-derives and re-sets the same hash.
+   * Never called for a signed-in account.
+   *
+   * Returns false only for an invalid-looking email.
+   */
+  async identifyAsGuest(email: string): Promise<boolean> {
+    const normalized = normalizeEmail(email);
+    if (!EMAIL_PATTERN.test(normalized)) return false;
+    this.emailIdentity.set(await sha256Hex(normalized));
+    this.guestEmail.set(normalized);
+    return true;
+  }
+
+  /**
+   * `email` is required for an anonymous check-in that hasn't already
+   * identified via `identifyAsGuest()` — it's how a stable uid gets
+   * derived without localStorage, and (via `guestEmail`, from either
+   * source) it's separately upserted into CheckinContactsService
    * (admin-only-readable) for the planned reminder-email feature. Omit it
    * for a signed-in account (member or admin), which already has a stable
    * uid and a real email via Firebase Auth — passing one anyway is ignored.
    *
-   * Async because deriving the uid from email (sha256Hex) must complete
-   * BEFORE building the attendee record below, which reads `currentUid`.
+   * Async because deriving the uid from email (sha256Hex, via
+   * identifyAsGuest()) must complete BEFORE building the attendee record
+   * below, which reads `currentUid`.
    *
    * Returns `Promise<boolean>` (false only for a blank name or, for an
-   * anonymous visitor, an invalid-looking email) rather than `void`, matching
-   * `claimRole()`/`addSpeakerSignup()`/`claimEvaluatorSlot()` below — callers
-   * must not infer success from `isCheckedIn()` immediately afterward, since
-   * that reads the `onSnapshot()`-driven `snapshot` signal, which can still
-   * lag behind the transaction this method just awaited.
+   * anonymous visitor not yet identified, an invalid-looking email) rather
+   * than `void`, matching `claimRole()`/`addSpeakerSignup()`/
+   * `claimEvaluatorSlot()` below — callers must not infer success from
+   * `isCheckedIn()` immediately afterward, since that reads the
+   * `onSnapshot()`-driven `snapshot` signal, which can still lag behind the
+   * transaction this method just awaited.
+   *
+   * Also retracts any prior `uncheckIn()` apology for this uid, for
+   * symmetry — re-attending after apologizing should un-apologize, at
+   * least at the check-in layer. This does NOT retroactively remove the
+   * name from the agenda's already-synced free-text
+   * `MeetingData.apologies` string (see AgendaEditorComponent's
+   * applyCheckinSnapshot()) — that's a one-way import, same limitation the
+   * existing speaker-signup import already has. If an admin has already
+   * synced "Jane" into the printed agenda and Jane later re-checks-in, the
+   * admin must remove her name from that text by hand.
    */
   async checkIn(name: string, email?: string): Promise<boolean> {
     const trimmed = name.trim();
@@ -159,20 +216,23 @@ export class CheckinStateService implements OnDestroy {
     if (signedInUser) {
       contactEmail = signedInUser.email ?? '';
     } else {
-      const normalized = normalizeEmail(email ?? '');
-      if (!EMAIL_PATTERN.test(normalized)) return false; // anonymous check-in requires a real-looking email
-      this.emailIdentity.set(await sha256Hex(normalized));
-      contactEmail = normalized;
+      if (!this.emailIdentity()) {
+        const ok = await this.identifyAsGuest(email ?? '');
+        if (!ok) return false; // invalid-looking anonymous email
+      }
+      contactEmail = this.guestEmail() ?? '';
     }
 
     this.currentName.set(trimmed);
     this.contacts.upsert(this.currentUid, trimmed, contactEmail); // best-effort, doesn't block the check-in below
 
     await this.mutate((s) => {
+      const apologies = s.apologies.filter((a) => a.uid !== this.currentUid);
       const already = s.attendees.some((a) => a.uid === this.currentUid);
       if (already) {
         const next = {
           ...s,
+          apologies,
           attendees: s.attendees.map((a) =>
             a.uid === this.currentUid ? { ...a, name: trimmed } : a
           ),
@@ -184,10 +244,51 @@ export class CheckinStateService implements OnDestroy {
         name: trimmed,
         joinedAt: new Date().toLocaleTimeString(APP_LOCALE, { hour: '2-digit', minute: '2-digit' }),
       };
-      const next = { ...s, attendees: [...s.attendees, attendee] };
+      const next = { ...s, apologies, attendees: [...s.attendees, attendee] };
       return { next, result: undefined };
     });
     return true;
+  }
+
+  /**
+   * Withdraws the current user from this meeting: removes them from
+   * attendees, releases any (unlocked) role claim they hold, cancels their
+   * own speaker signup, releases any evaluator slot they hold for someone
+   * else's speech, and records them in `apologies` — all in one
+   * transaction. Determines "was checked in" from the transaction's own
+   * `attendees` read, not from `currentName()`, so it's a safe no-op
+   * standalone (e.g. a signed-in member who never actually checked in for
+   * this meeting) rather than depending on the caller (the UI) to enforce
+   * that — consistent with how every other mutator here validates inside
+   * its own `mutate()` callback.
+   */
+  uncheckIn(): Promise<void> {
+    const uid = this.currentUid;
+
+    return this.mutate((s) => {
+      const attendee = s.attendees.find((a) => a.uid === uid);
+      if (!attendee) return { next: s, result: undefined }; // never checked in — nothing to withdraw
+
+      const next: CheckinSnapshot = {
+        ...s,
+        attendees: s.attendees.filter((a) => a.uid !== uid),
+        roles: Object.fromEntries(
+          Object.entries(s.roles).map(([roleId, claim]) =>
+            !s.lockedRoles.includes(roleId) && claim.uid === uid ? [roleId, { name: '', uid: '' }] : [roleId, claim]
+          )
+        ),
+        speakers: s.speakers
+          .filter((sp) => sp.uid !== uid) // cancels their own prepared-speech signup
+          .map((sp) => (sp.evaluator?.uid === uid ? { ...sp, evaluator: null } : sp)), // releases an evaluator slot claimed for someone else's speech
+        apologies: s.apologies.some((a) => a.uid === uid)
+          ? s.apologies // idempotent — repeat calls don't duplicate
+          : [
+              ...s.apologies,
+              { uid, name: attendee.name, joinedAt: new Date().toLocaleTimeString(APP_LOCALE, { hour: '2-digit', minute: '2-digit' }) },
+            ],
+      };
+      return { next, result: undefined };
+    }).then(() => undefined);
   }
 
   // ── Roles: first-come locking ────────────────────────────────────────
@@ -358,7 +459,7 @@ export class CheckinStateService implements OnDestroy {
     return runTransaction(this.firestore, async (tx) => {
       const snap = await tx.get(ref);
       const current = snap.exists()
-        ? (snap.data() as CheckinSnapshot)
+        ? this.normalize(snap.data() as CheckinSnapshot)
         : this.defaultSnapshot(meetingId);
       const { next, result } = fn(current);
       tx.set(ref, next);
@@ -367,6 +468,17 @@ export class CheckinStateService implements OnDestroy {
       console.error('checkin transaction failed', err);
       return undefined;
     });
+  }
+
+  /**
+   * Backward-compat for checkins/** documents written before `apologies`
+   * existed (`.emulator-data/` persists across restarts, so old documents
+   * genuinely exist without this field) — treats a missing field as empty
+   * rather than `undefined`, which would otherwise throw the moment
+   * anything here calls `.some()`/`.filter()`/`.map()` on it.
+   */
+  private normalize(data: CheckinSnapshot): CheckinSnapshot {
+    return { ...data, apologies: data.apologies ?? [] };
   }
 
   private defaultSnapshot(meetingId: string): CheckinSnapshot {
@@ -386,6 +498,7 @@ export class CheckinStateService implements OnDestroy {
       roles: {},
       speakers: [],
       lockedRoles: [],
+      apologies: [],
     };
   }
 
@@ -397,6 +510,7 @@ export class CheckinStateService implements OnDestroy {
       roles: {},
       speakers: [],
       lockedRoles: [],
+      apologies: [],
     };
   }
 }

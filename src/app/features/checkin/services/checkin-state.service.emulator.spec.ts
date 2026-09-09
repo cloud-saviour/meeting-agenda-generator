@@ -144,6 +144,103 @@ describe('CheckinStateService (Firestore emulator)', () => {
     expect(service.attendees().length).toBe(0);
   });
 
+  it('identifyAsGuest() then checkIn(name) produces the identical Firestore attendee record and uid as checkIn(name, email) in one step', async () => {
+    const oneStep = createService();
+    oneStep.loadMeeting('m1c');
+    await oneStep.checkIn('Thabo M.', 'thabo@example.com');
+    await waitFor(() => oneStep.attendees().length === 1);
+
+    const twoStep = createService();
+    twoStep.loadMeeting('m1d');
+    await twoStep.identifyAsGuest('thabo@example.com');
+    await twoStep.checkIn('Thabo M.');
+    await waitFor(() => twoStep.attendees().length === 1);
+
+    expect(twoStep.currentUid).toBe(oneStep.currentUid); // same email → same derived uid, regardless of path
+    expect(twoStep.attendees()[0]).toEqual(oneStep.attendees()[0]);
+  });
+
+  it('uncheckIn() removes the attendee, releases their role claim and evaluator slot, cancels their own speaker signup, and records them in apologies', async () => {
+    const svcA = createService();
+    const svcB = createService();
+    svcA.loadMeeting('m1e');
+    svcB.loadMeeting('m1e');
+    await svcA.checkIn('Alice', 'alice@example.com');
+    await svcB.checkIn('Bongani', 'bongani@example.com');
+    const uidA = svcA.currentUid;
+
+    await svcA.claimRole('toastmaster');
+    await svcB.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+    await waitFor(() => svcA.speakers().length === 1);
+    const speakerId = svcA.speakers()[0].id;
+    await svcA.claimEvaluatorSlot(speakerId); // Alice evaluates Bongani's speech
+    await svcA.addSpeakerSignup({ title: 'Alice\'s Talk', level: 'CC1', timePref: '5-7' }); // Alice's own signup too
+    await waitFor(() => svcA.speakers().length === 2);
+
+    await svcA.uncheckIn();
+
+    await waitFor(() => svcB.attendees().every((a) => a.uid !== uidA));
+    expect(svcB.roles()['toastmaster']?.uid).toBe('');
+    expect(svcB.speakers().find((sp) => sp.uid === uidA)).toBeUndefined(); // Alice's own signup gone
+    expect(svcB.speakers().find((sp) => sp.id === speakerId)?.evaluator).toBeNull(); // her evaluator claim released
+    expect(svcB.apologies().some((a) => a.uid === uidA && a.name === 'Alice')).toBe(true);
+  });
+
+  it('uncheckIn() does not release an organizer-locked role', async () => {
+    const svcA = createService();
+    const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+    svcA.loadMeeting('m1f');
+    admin.loadMeeting('m1f');
+    await svcA.checkIn('Alice', 'alice@example.com');
+    const uidA = svcA.currentUid;
+    await svcA.claimRole('toastmaster');
+    await waitFor(() => admin.roles()['toastmaster']?.uid === uidA);
+
+    await admin.setRoleLocked('toastmaster', true);
+    await waitFor(() => admin.lockedRoles().includes('toastmaster'));
+
+    await svcA.uncheckIn();
+    await waitFor(() => admin.apologies().some((a) => a.uid === uidA));
+    expect(admin.roles()['toastmaster'].uid).toBe(uidA); // locked — role claim survives the withdrawal
+  });
+
+  it('uncheckIn() is idempotent — calling it twice does not duplicate the apologies entry', async () => {
+    const service = createService();
+    service.loadMeeting('m1g');
+    await service.checkIn('Alice', 'alice@example.com');
+
+    await service.uncheckIn();
+    await waitFor(() => service.apologies().length === 1);
+    await service.uncheckIn(); // already withdrawn — safe no-op
+
+    expect(service.apologies().length).toBe(1);
+  });
+
+  it('uncheckIn() is a safe no-op for someone never checked in', async () => {
+    const service = createService();
+    service.loadMeeting('m1h');
+
+    await service.uncheckIn();
+
+    expect(service.attendees()).toEqual([]);
+    expect(service.roles()).toEqual({});
+    expect(service.speakers()).toEqual([]);
+    expect(service.apologies()).toEqual([]);
+  });
+
+  it('checkIn() after uncheckIn() removes the person from apologies again', async () => {
+    const service = createService();
+    service.loadMeeting('m1i');
+    await service.checkIn('Alice', 'alice@example.com');
+
+    await service.uncheckIn();
+    await waitFor(() => service.apologies().length === 1);
+
+    await service.checkIn('Alice', 'alice@example.com');
+    await waitFor(() => service.attendees().length === 1);
+    expect(service.apologies()).toEqual([]);
+  });
+
   it('claimRole() succeeds when unclaimed and blocks a different uid from claiming it', async () => {
     const svcA = createService();
     const svcB = createService();

@@ -1,6 +1,6 @@
 import { Component, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CheckinStateService } from '../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../services/attendance-confirmation.service';
 import { AttendanceListComponent } from '../components/attendance-list/attendance-list.component';
@@ -16,6 +16,7 @@ import { AuthService } from '../../../core/auth/auth.service';
   standalone: true,
   imports: [
     FormsModule,
+    RouterLink,
     NavbarComponent,
     AttendanceListComponent,
     RoleBoardComponent,
@@ -30,9 +31,12 @@ export class CheckinComponent {
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   private readonly route = inject(ActivatedRoute);
   nameInput = '';
-  emailInput = '';
   checkInError: string | null = null;
   meetingId: string;
+
+  guestEmailInput = '';
+  guestEmailError: string | null = null;
+  guestIdentifying = false;
 
   constructor() {
     // `||`, not `??` — an empty-but-present `?meeting=` (e.g. a nav link built
@@ -87,9 +91,29 @@ export class CheckinComponent {
     return !!user?.displayName && this.nameInput === user.displayName;
   }
 
-  /** Anonymous visitors must additionally enter an email, used to derive a stable identity without localStorage — see CheckinStateService.checkIn(). Signed-in accounts already have one via Firebase Auth. */
-  get isAnonymous(): boolean {
-    return !this.auth.currentUser();
+  /**
+   * Gate condition — hides everything but the meeting-header card until
+   * identity is established: signed in, or an anonymous visitor has
+   * already identified via email (this session, or after retyping the
+   * same email post-reload). See CheckinStateService.identifyAsGuest().
+   */
+  get needsGuestIdentification(): boolean {
+    return !this.state.isGuestIdentified();
+  }
+
+  async identifyAsGuest() {
+    this.guestEmailError = null;
+    if (!this.guestEmailInput.trim()) {
+      this.guestEmailError = 'Enter your email.';
+      return;
+    }
+    this.guestIdentifying = true;
+    try {
+      const ok = await this.state.identifyAsGuest(this.guestEmailInput);
+      if (!ok) this.guestEmailError = 'Enter a valid email address.';
+    } finally {
+      this.guestIdentifying = false;
+    }
   }
 
   /** Admin-only nav links (Agenda Editor, Manage Roles) only appear for actual admins — /checkin is reachable by anonymous visitors and non-admin members alike. */
@@ -120,17 +144,21 @@ export class CheckinComponent {
       this.checkInError = 'Enter your name.';
       return;
     }
-    if (this.isAnonymous && !this.emailInput.trim()) {
-      this.checkInError = 'Enter your email.';
-      return;
-    }
-    const success = await this.state.checkIn(this.nameInput, this.emailInput);
-    // checkIn() returns false only on an invalid-looking anonymous email
-    // (CheckinStateService is the source of truth for that validation) — not
-    // inferred from isCheckedIn(), which lags behind on the onSnapshot()
-    // listener and would false-positive right after a real success.
+    // Identity (including, for an anonymous visitor, a validated email) is
+    // already established by the guest-email gate before this card even
+    // renders — see needsGuestIdentification — so a failure here would only
+    // be defensive (not something the gate should let happen in practice).
+    const success = await this.state.checkIn(this.nameInput);
     if (!success) {
-      this.checkInError = 'Enter a valid email address.';
+      this.checkInError = 'Something went wrong — try again.';
     }
+  }
+
+  async uncheckIn() {
+    const confirmed = confirm(
+      "Mark yourself as not attending? This will also release any role you've claimed, cancel your speech signup, and release any evaluator slot you hold — and you'll be listed as an apology on the agenda."
+    );
+    if (!confirmed) return;
+    await this.state.uncheckIn();
   }
 }

@@ -69,7 +69,7 @@ src/app/
     agenda-editor/    Route "/admin" — the agenda-building tool
       pages/           agenda-editor.component.ts
       components/      meeting-form, agenda-items, speakers-form,
-                        committee-form, agenda-preview
+                        agenda-preview
       services/        agenda-state.service.ts (AgendaStateService),
                         agenda-import-export.service.ts, docx.service.ts
                         (DocxService — all DOCX generation logic),
@@ -112,7 +112,14 @@ src/app/
     checkin/          Route "/checkin" — the check-in page for everyone
                       (anonymous visitors, signed-in members, and admins
                       alike), no auth guard — stays anonymous-capable by
-                      design, see Authentication below
+                      design, see Authentication below. Conditionally
+                      renders behind a guest-email gate
+                      (`CheckinComponent.needsGuestIdentification`, no
+                      separate route) — an anonymous visitor sees only the
+                      meeting-header card plus an email prompt until they
+                      identify; a signed-in member/admin skips it entirely.
+                      See "How anonymous identity works" under Persistence
+                      below
       pages/           checkin.component.ts
       components/      attendance-list, role-board, speaker-signup,
                         evaluator-slots
@@ -128,6 +135,37 @@ src/app/
 
     admin-roles/      Route "/admin/roles" (guarded) — manage role definitions
       pages/           admin-roles.component.ts
+
+    admin-committee-roles/  Route "/admin/committee-roles" (guarded) — the one
+                      place both committee role *definitions* (title/
+                      description CRUD, unchanged) and role *assignment*
+                      (who currently holds each role) are managed. Injects
+                      both CommitteeRoleDefinitionService (definitions) and
+                      CommitteeRosterService (assignment — see Persistence
+                      below); each active role row shows an
+                      Assigned/Unassigned badge plus Assign/Reassign/
+                      Unassign controls calling `roster.assign()`/
+                      `unassign()` directly — no separate "save" step,
+                      unlike the old embedded Agenda Editor panel this
+                      replaced. Assignment here is immediately live
+                      everywhere: `AgendaStateService.cmt` is a computed
+                      mirroring `CommitteeRosterService.all()`, so every
+                      agenda (a fresh draft, a reopened saved one, or an
+                      already-published one open on /preview) always shows
+                      whoever currently holds each role — no per-agenda
+                      committee editing exists anymore. The DOCX/live-
+                      preview "Executive Committee" footer
+                      (`docx.service.ts`/`agenda-preview.component.ts`) is a
+                      hand-tuned, fixed table hardcoded to exactly 7 role
+                      ids (`president`, `secretary`, `vpEducation`,
+                      `communityManager`, `vpMembership`, `rsaAmbassador`,
+                      `treasurer`) — a role beyond those 7 is fully
+                      assignable here (flagged "(not printed on agenda)" in
+                      the UI) but never appears in the footer or the
+                      exported DOCX. This is an accepted scope boundary,
+                      not a bug — deliberately kept simple rather than
+                      redesigning that fixed table to be dynamic.
+      pages/           admin-committee-roles.component.ts
 
     login/            Route "/login", the only route the auth guard doesn't
                       protect — email/password sign-in form. On success,
@@ -253,7 +291,25 @@ check simultaneously before a meeting: check in, claim one of 6 standard roles
 Chairman), sign up to speak, claim an evaluator slot for someone else's speech.
 Role/evaluator claims are first-come-first-served — `CheckinStateService`
 enforces "only the current claimant can release their own claim" and blocks
-self-evaluation.
+self-evaluation. An anonymous visitor identifies themselves with an email
+up front — a small gate card (`CheckinComponent`'s `needsGuestIdentification`)
+shown before any of the page's interactive content (name/check-in form,
+attendance list, role board, speaker signup, evaluator slots), via
+`CheckinStateService.identifyAsGuest()`, distinct from and called
+internally by `checkIn()` — see "How anonymous identity works" below. A
+signed-in member or admin never sees this gate.
+
+A checked-in attendee (admin, member, or guest, on their own check-in only)
+can also mark themselves **Not Attending** — a `confirm()`-gated button
+next to "Update", since it's broader than a toggle:
+`CheckinStateService.uncheckIn()` removes them from attendees, releases
+any *unlocked* role claim they hold, cancels their own speaker signup,
+releases any evaluator slot they hold for someone else's speech, and
+records them in a new `apologies` list on the check-in snapshot — all in
+one transaction. Re-attending afterward (`checkIn()` again) removes them
+from that list again, for symmetry. `apologies` here is check-in's own
+list, distinct from — but two-way synced into — `MeetingData.apologies`,
+the agenda's free-text field; see the paragraph below.
 
 These two pages are now linked both ways, via the agenda's own meeting
 number. Editor → check-in: a "🔗 Share Check-in Link" button copies
@@ -275,17 +331,40 @@ number field changes (an `effect()` over a `computed(() => state.meeting().no)`,
 so it only fires on an actual number change, not on every unrelated
 meeting-details edit), which subscribes to that meeting's `checkins/{no}`
 Firestore document. A separate `effect()` depends on
-`checkinState.roles()`/`checkinState.speakers()` directly and re-applies
-the snapshot every time either changes — which happens on that initial
-load AND every time Firestore's live listener delivers a claim/signup made
-from **any device**, not just another tab of the same browser. Applying a
-snapshot overwrites the `person` field on every agenda row/dual-sub-item
-whose `roleId` has a current check-in claim (via
-`AgendaStateService.applyRolePerson()`, reusing the same role/person
-group-sync mechanism agenda items already use internally), leaving a
-role's existing value untouched if check-in has no claim for it yet, and
-imports any check-in speaker signup not already present in the Prepared
-Speakers list by name. The admin can mark any role as **overridden** (a
+`checkinState.roles()`/`checkinState.speakers()`/`checkinState.apologies()`
+directly and re-applies the snapshot every time any of them changes — which
+happens on that initial load AND every time Firestore's live listener
+delivers a claim/signup/uncheck-in made from **any device**, not just
+another tab of the same browser. Applying a snapshot overwrites the
+`person` field on every agenda row/dual-sub-item whose `roleId` has a
+current check-in claim (via `AgendaStateService.applyRolePerson()`, reusing
+the same role/person group-sync mechanism agenda items already use
+internally), leaving a role's existing value untouched if check-in has no
+claim for it yet, imports any check-in speaker signup not already present
+in the Prepared Speakers list by name, and keeps the agenda's own
+free-text `MeetingData.apologies` field synced with check-in's `apologies`
+list (populated by a member's Not Attending action, see above) in both
+directions: a name not yet present is appended (comma-split,
+case-insensitive comparison against whatever the admin has already typed,
+never rewriting the admin's own prose), and a name is removed again once
+its uid drops out of check-in's list (i.e. that person re-attended) —
+**but only if the agenda's text still holds exactly the token this sync
+itself added**, tracked per-uid in `AgendaEditorComponent.lastSyncedApologyByUid`,
+the same "only touch what we ourselves put there" guard
+`lastSyncedPersonByRole` already uses for role sync above. A name the
+admin typed in by hand (or edited after the sync added it) is never
+touched by the retraction. This is still a heuristic over free text, not a
+structured list, so it has one accepted fragility: prose without commas
+(e.g. "Bob and Carol") won't register "Carol" as already present, so a
+later check-in apology from Carol could append a redundant second "Carol"
+— not solved here, since migrating `apologies` to a structured array was
+a deliberate non-goal (would touch the model, the meeting-form input,
+`docx.service.ts`, and `agenda-preview.component.*`, plus backward-compat
+for already-saved string-typed documents). Same only-while-Editor-open
+limitation as the role/speaker sync: a re-attend made while nobody has
+that meeting's Editor open won't retract the agenda text until the Editor
+is next opened for that meeting. The admin can mark any role as
+**overridden** (a
 checkbox in the Agenda Items edit panel, per role) to take it over
 entirely: an overridden role is skipped by future syncs and disappears
 from the check-in role board (`CheckinStateService.lockedRoles`/
@@ -378,19 +457,24 @@ model and what's still emulator-only.
   old document is deleted outright, not merely superseded. Its "🔄 Refresh"
   button is now just a reassurance affordance, not a real refetch.
 - `CommitteeRosterService` — a **single** document at `committeeRoster/current`
-  holding the whole roster array, not one-per-role like `RoleDefinitionService`.
-  This is deliberate: `roleId` isn't a unique key on a committee slot (several
-  slots legitimately share the same blank `roleId` until assigned — see
-  `AgendaStateService.updateCommitteeMember`'s own comment on addressing by
-  array position, not `roleId`), and `replaceAll()` already treated the whole
-  roster as one atomic unit before the migration, so one document matches
-  the existing access pattern exactly. Also normalizes any stored roster
-  shorter than 7 slots back up to 7 on every load, padding with blanks —
-  needed because the app itself never removes a slot, but the Firestore
-  document can still end up short some other way (an admin manually deleting
-  one array element via the Emulator UI, which happened in practice —
-  without this, that slot and the ability to re-enter anyone into it would
-  be gone for good).
+  holding the whole roster as one array, one entry per *assigned* role.
+  `roleId` is a genuine unique key: an unassigned role simply has no entry
+  at all, not a blank placeholder — earlier this held a fixed-length,
+  position-addressed array of 7 slots (padded with blanks, several
+  legitimately sharing the same blank `roleId` until assigned), but that
+  model was replaced when officer assignment moved from being typed inline
+  per-agenda to being centrally managed on `/admin/committee-roles` (see
+  that Structure entry above) — a variable-length, role-keyed array matches
+  that screen's per-role assign/unassign actions directly, with no fixed
+  slot count to pad to. `assign(roleId, name, email, phone)` replaces any
+  existing entry for that role in one `setDoc()`; `unassign(roleId)` removes
+  the entry entirely — both read the already-live `roster()` value and
+  write back the whole array, no `runTransaction` (this is admin-authored,
+  not a first-come-first-served identity claim — see the role-locking-
+  pattern skill for when a transaction *is* warranted). On load, entries
+  with a blank `roleId` are filtered out defensively, tolerating any
+  leftover padded data from the old fixed-slot model still sitting in dev/
+  emulator data.
 - `SavedAgendaService` — one document per meeting at `savedAgendas/{meetingId}`,
   the "My Agendas" draft library. Migrated for cross-device admin convenience
   (start on your laptop, finish on your phone), not to fix a correctness bug
@@ -421,14 +505,27 @@ model and what's still emulator-only.
 `StorageService` (the last remaining consumer was `CheckinStateService`'s
 own per-browser identity) has been deleted outright. An anonymous check-in
 visitor's identity is now derived deterministically instead of being
-remembered by the browser: `CheckinStateService.checkIn()` normalizes (trim
-+ lowercase) the email they type and SHA-256-hashes it
+remembered by the browser: `CheckinStateService.identifyAsGuest(email)`
+normalizes (trim + lowercase) the email they type and SHA-256-hashes it
 (`core/utils/hash.ts`'s `sha256Hex()`, Web Crypto) into their `uid` — so the
 *same* person gets the *same* uid on a different device or after clearing
 browser storage, with nothing client-side to lose, and without the raw
 email ever touching the public `checkins` collection (see
 `CheckinContactsService` above for where the raw email actually lives).
-Before a first successful check-in this session, `currentUid` is a random,
+`identifyAsGuest()` is the primary entry point — called directly by
+`CheckinComponent`'s guest-email gate, up front, before any name is ever
+entered — so a returning guest re-establishes the *same* uid, and
+therefore immediately sees their prior claims/attendance (`isCheckedIn()`,
+role-board's `isMine()`, etc. all key off `currentUid`), just by retyping
+the same email at the gate, with no separate resubmission of the name/
+check-in form required. `checkIn(name, email?)` also calls
+`identifyAsGuest()` internally, but only as a fallback when not already
+identified — kept so the many existing test call sites that still pass
+name+email together in one call (chiefly in
+`checkin-state.service.emulator.spec.ts`) keep working unchanged.
+`isGuestIdentified` (computed: true for a signed-in account, or once
+`identifyAsGuest()` has set an identity) drives the gate itself. Before a
+first successful identification this session, `currentUid` is a random,
 in-memory-only placeholder (`sessionUid`, never written anywhere) purely so
 `=== currentUid` comparisons elsewhere don't need to handle a null case. A
 signed-in account (member or admin) skips all of this and always uses its
@@ -437,7 +534,7 @@ is accepted but ignored.
 
 **A real gotcha hit migrating `CommitteeRosterService`, worth knowing before
 migrating anything else that follows this same shape:** `AgendaStateService`
-copies `committeeRoster.all()` into its own `cmt`/`agItems`/`meeting.vpe`
+used to copy `committeeRoster.all()` into its own `cmt`/`agItems`/`meeting.vpe`
 *once*, synchronously, at construction — but Firestore data always arrives
 asynchronously, even on the very first read. A naive "seed once when real
 data arrives" `effect()` guard is not enough, because the pre-load
@@ -455,6 +552,36 @@ inside the `onSnapshot()` callback, and the consuming effect gates on
 `ready()`, not on `all()` changing. Any future one-time-copy-at-construction
 consumer of a Firestore-backed signal needs the same `ready()` pattern —
 don't assume "the signal changed" means "real data arrived."
+
+**`cmt` itself is now exempt from this gotcha** — since officer assignment
+moved to being centrally managed on `/admin/committee-roles` (always-live,
+not per-agenda; see that Structure entry above),
+`AgendaStateService.cmt` became a plain `computed(() => this.committeeRoster.all())`
+with nothing to seed: it mirrors the roster's current value, placeholder or
+real, with no one-time copy to get wrong. The `ready()`-gated effect still
+exists and still fully needs the pattern above, just narrower now — it
+only redoes the one-time `agItems`/`meeting.vpe` seed once real data
+arrives, not `cmt` too.
+
+**A second-order version of the same gotcha, caught later:** the narrowed
+`agItems`/`meeting.vpe` reseed above still races against something else —
+`AgendaImportExportService.loadSnapshot()` (used by `AgendaViewerComponent`
+on `/preview`, `AdminAgendasComponent.open()`, and JSON import) explicitly
+loads a *specific* agenda's real `agItems` via
+`AgendaStateService.setAgItemsFromSnapshot()`. If `committeeRoster.ready()`
+only flips true *after* that load — again, a genuine race, Firestore data
+always arrives asynchronously — the one-time reseed effect fired anyway and
+silently overwrote the just-loaded real agenda with a fresh
+`defaultAgenda()` template. Caught by inspecting a live `/preview` tab:
+`PublishedAgendaService.current()` held a snapshot with a real role claim,
+but `AgendaStateService.agItems()` showed an unrelated id sequence with
+blank person fields, matching `defaultAgenda()`'s output exactly — the
+reseed had clobbered it moments after `loadSnapshot()` ran. The fix:
+`setAgItemsFromSnapshot()` sets a `hasLoadedSnapshot` flag, and the reseed
+effect's guard now also checks it — once a real agenda has been explicitly
+loaded, the entire premise of "the construction-time default needs
+correcting" is moot, so the reseed must never fire at all from that point
+on, regardless of what `ready()` does afterward.
 
 **Why emulator-only, not a real project:** no `firebase login`, no real
 Firebase/GCP project, no billing — `.firebaserc` uses project id

@@ -12,7 +12,7 @@ const fakeRoleDefinitionService = { activeRoles: () => [] } as unknown as RoleDe
 
 // Same reasoning — CommitteeRosterService is Firestore-backed too.
 const fakeCommitteeRosterService = {
-  all: () => [],
+  all: () => [{ roleId: 'president', name: 'Current President', email: '', phone: '' }],
   ready: () => true,
 } as unknown as CommitteeRosterService;
 
@@ -61,6 +61,17 @@ describe('AgendaImportExportService', () => {
     state.addAgItem('row');
     const newItem = state.agItems()[state.agItems().length - 1];
     expect(newItem.id).toBe(501);
+  });
+
+  it('loadSnapshot() ignores a snapshot\'s cmt field — cmt always reflects the live committee roster, not the imported historical record', () => {
+    const snapshot = {
+      ...importExport.getSnapshot(),
+      cmt: [{ roleId: 'president', name: 'Old Imported President', email: '', phone: '' }],
+    };
+
+    importExport.loadSnapshot(snapshot);
+
+    expect(state.cmt()).toEqual([{ roleId: 'president', name: 'Current President', email: '', phone: '' }]);
   });
 
   it('loadSnapshot() replaces speakers via addSpeaker so ids are freshly assigned starting from 1', () => {
