@@ -16,6 +16,19 @@ export interface MeetingData {
   period: string;
   web: string;
   fb: string;
+  /**
+   * uid → name, tracking which tokens currently in `apologies` were added by
+   * AgendaEditorComponent's check-in sync (as opposed to typed in by the
+   * admin) — so a later retraction (the person re-attended) only ever
+   * removes a token this sync itself put there. Persisted here, not just
+   * held in component memory, specifically so it survives an Editor reload
+   * between "they apologized" and "they re-attended" — an in-memory-only
+   * version of this tracking cannot retract across a reload at all, since a
+   * fresh component instance has no record of what a previous one added.
+   * Optional: absent on any agenda saved before this field existed —
+   * treat a missing value as `{}` at every read site, never assume present.
+   */
+  apologySyncUids?: Record<string, string>;
 }
 
 export interface AgendaRowItem {

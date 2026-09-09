@@ -34,6 +34,7 @@ function defaultMeeting(no: string, cmt: CommitteeMember[]): MeetingData {
     hotSeat: '',
     reserve: '',
     apologies: '',
+    apologySyncUids: {},
     period: 'Aug 2025 – February 2026',
     web: 'http://www.agoraspeakers.org/',
     fb: 'Agora Speakers South Africa',

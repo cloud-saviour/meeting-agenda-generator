@@ -349,21 +349,38 @@ case-insensitive comparison against whatever the admin has already typed,
 never rewriting the admin's own prose), and a name is removed again once
 its uid drops out of check-in's list (i.e. that person re-attended) —
 **but only if the agenda's text still holds exactly the token this sync
-itself added**, tracked per-uid in `AgendaEditorComponent.lastSyncedApologyByUid`,
-the same "only touch what we ourselves put there" guard
-`lastSyncedPersonByRole` already uses for role sync above. A name the
-admin typed in by hand (or edited after the sync added it) is never
-touched by the retraction. This is still a heuristic over free text, not a
-structured list, so it has one accepted fragility: prose without commas
-(e.g. "Bob and Carol") won't register "Carol" as already present, so a
-later check-in apology from Carol could append a redundant second "Carol"
-— not solved here, since migrating `apologies` to a structured array was
-a deliberate non-goal (would touch the model, the meeting-form input,
-`docx.service.ts`, and `agenda-preview.component.*`, plus backward-compat
-for already-saved string-typed documents). Same only-while-Editor-open
-limitation as the role/speaker sync: a re-attend made while nobody has
-that meeting's Editor open won't retract the agenda text until the Editor
-is next opened for that meeting. The admin can mark any role as
+itself added**, tracked per-uid in `MeetingData.apologySyncUids` (uid →
+name). Unlike `lastSyncedPersonByRole` above — an in-memory-only `Map` on
+`AgendaEditorComponent`, since a role's *current* claim/release state is
+always re-derivable from `checkinState.roles()` alone — apology retraction
+specifically needs to remember something no longer visible anywhere once
+the person re-attends (check-in's own list has already dropped them by
+then), so that tracking is persisted as part of the saved agenda itself,
+not just held in component memory: an in-memory-only version was tried
+first and shipped with a real bug — a fresh `AgendaEditorComponent`
+instance (any Editor reload) starts with an empty map, so it could never
+retract a name a *previous* instance had added, even though the text was
+still sitting there. `apologySyncUids` is optional on `MeetingData` (absent
+on any agenda saved before this existed; every read site treats a missing
+value as `{}`) and round-trips through `getSnapshot()`/`loadSnapshot()`
+automatically, same as every other `MeetingData` field — never rendered
+anywhere (not in the meeting-form, DOCX, or preview), purely internal
+bookkeeping. A name the admin typed in by hand (or edited after the sync
+added it) is never touched by the retraction, since `apologySyncUids` only
+ever contains uids the sync itself added. This is still a heuristic over
+free text, not a structured list, so it has one accepted fragility: prose
+without commas (e.g. "Bob and Carol") won't register "Carol" as already
+present, so a later check-in apology from Carol could append a redundant
+second "Carol" — not solved here, since migrating `apologies` to a
+structured array was a deliberate non-goal (would touch the model, the
+meeting-form input, `docx.service.ts`, and `agenda-preview.component.*`,
+plus backward-compat for already-saved string-typed documents). Same
+only-while-Editor-open limitation as the role/speaker sync: a re-attend
+made while nobody has that meeting's Editor open won't retract the agenda
+text until the Editor is next opened for that meeting — but unlike the
+in-memory version, it now genuinely does catch up at that point, since the
+tracking survived in the saved document the whole time. The admin can mark
+any role as
 **overridden** (a
 checkbox in the Agenda Items edit panel, per role) to take it over
 entirely: an overridden role is skipped by future syncs and disappears

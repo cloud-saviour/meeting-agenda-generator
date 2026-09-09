@@ -45,13 +45,6 @@ export class AgendaEditorComponent {
   // the admin has since typed in by hand.
   private readonly lastSyncedPersonByRole = new Map<string, string>();
 
-  // Same idea as lastSyncedPersonByRole, but for apology names — keyed by
-  // check-in uid, not roleId — so a re-attend (which drops that uid from
-  // checkinState.apologies()) can retract their name from the agenda's own
-  // free-text apologies field ONLY when it still shows exactly what was
-  // synced in, never a name the admin has since edited by hand.
-  private readonly lastSyncedApologyByUid = new Map<string, string>();
-
   // Last serialized snapshot JSON actually written per meeting number — lets
   // the auto-save effect below skip a no-op re-save (see its comment).
   private readonly lastSavedJsonByNo = new Map<string, string>();
@@ -255,10 +248,17 @@ export class AgendaEditorComponent {
     //
     // Also retracts a name once its uid drops out of checkinState.apologies()
     // — i.e. they clicked "I'm Attending" again, which already removed them
-    // from check-in's own list — mirroring lastSyncedPersonByRole above:
-    // only removes the token if it still matches exactly what was synced
-    // in, never touching text the admin has since edited by hand.
+    // from check-in's own list — only removing the token if it still
+    // matches exactly what was synced in, never touching text the admin has
+    // since edited by hand. Unlike lastSyncedPersonByRole's in-memory-only
+    // tracking, which of these names were sync-added is tracked in
+    // `MeetingData.apologySyncUids` — part of the saved agenda itself, not
+    // just this component instance — specifically so a retraction still
+    // works after an Editor reload between "they apologized" and "they
+    // re-attended": an in-memory-only Map would start empty on the fresh
+    // instance and could never retract anything a PREVIOUS instance added.
     let apologiesText = this.state.meeting().apologies;
+    const syncedUids: Record<string, string> = { ...(this.state.meeting().apologySyncUids ?? {}) };
     const checkinApologies = this.checkinState.apologies();
     const currentApologyUids = new Set(checkinApologies.map((a) => a.uid));
 
@@ -272,10 +272,10 @@ export class AgendaEditorComponent {
         apologiesText = [apologiesText, name].filter(Boolean).join(', ');
         existingApologyNames.add(name.toLowerCase());
       }
-      this.lastSyncedApologyByUid.set(a.uid, name);
+      syncedUids[a.uid] = name;
     }
 
-    for (const [uid, syncedName] of [...this.lastSyncedApologyByUid]) {
+    for (const [uid, syncedName] of Object.entries(syncedUids)) {
       if (currentApologyUids.has(uid)) continue;
       const tokens = apologiesText.split(',').map((s) => s.trim());
       const idx = tokens.findIndex((t) => t.toLowerCase() === syncedName.toLowerCase());
@@ -283,11 +283,14 @@ export class AgendaEditorComponent {
         tokens.splice(idx, 1);
         apologiesText = tokens.filter(Boolean).join(', ');
       }
-      this.lastSyncedApologyByUid.delete(uid);
+      delete syncedUids[uid];
     }
 
-    if (apologiesText !== this.state.meeting().apologies) {
-      this.state.updateMeeting({ apologies: apologiesText });
+    if (
+      apologiesText !== this.state.meeting().apologies ||
+      JSON.stringify(syncedUids) !== JSON.stringify(this.state.meeting().apologySyncUids ?? {})
+    ) {
+      this.state.updateMeeting({ apologies: apologiesText, apologySyncUids: syncedUids });
     }
   }
 
