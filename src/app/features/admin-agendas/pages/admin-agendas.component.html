@@ -17,7 +17,7 @@
     } @else {
       <div class="list-group list-group-flush">
         @for (e of entries(); track e.no) {
-          <div class="list-group-item d-flex align-items-center gap-2">
+          <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
             <span class="badge bg-secondary" style="min-width:52px;">No. {{ e.no }}</span>
             <span class="flex-grow-1 small">
               <span class="fw-semibold">{{ e.theme || 'Untitled meeting' }}</span>

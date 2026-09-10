@@ -1,0 +1,73 @@
+/* Base (all widths): field wrappers that gained a class but no longer carry
+   their own inline flex sizing (role/custom-role/person/etc. keep their
+   original inline styles untouched — only used here to widen the duration
+   box and to host the mobile-only label). Mobile-only rules are gated below. */
+.agenda-field-label {
+  display: none;
+}
+
+.agenda-field-visible,
+.agenda-field-lock {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media screen and (max-width: 767.98px) {
+  /* A stacked layout has no fixed columns left to label. */
+  .agenda-items-header {
+    display: none !important;
+  }
+
+  /* Let every row wrap instead of forcing the page wider than the phone. */
+  .agenda-row-line,
+  .agenda-dual-line,
+  .agenda-recess-line {
+    flex-wrap: wrap !important;
+    row-gap: 0.4rem;
+  }
+
+  .agenda-field-label {
+    display: block;
+    flex: 1 1 100%;
+    font-size: 0.65rem;
+    color: #6c757d;
+    margin-bottom: -2px;
+  }
+
+  /* Title / custom-role: own full line each. */
+  .agenda-field-title,
+  .agenda-field-custom {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+
+  /* Role / person: paired half-width. */
+  .agenda-field-role,
+  .agenda-field-person {
+    flex: 1 1 calc(50% - 0.25rem) !important;
+    width: calc(50% - 0.25rem) !important;
+  }
+
+  /* Duration: no longer squeezed against 7 neighbors — give it more room. */
+  .agenda-field-duration,
+  .agenda-field-duration-label {
+    flex: 0 0 72px !important;
+    width: 72px !important;
+    margin-left: auto;
+  }
+
+  /* Checkboxes: bump up to a comfortable tap target (native inputs are ~16px). */
+  .agenda-field-visible,
+  .agenda-field-lock {
+    flex: 0 0 auto !important;
+    min-height: 44px;
+    padding: 0 0.35rem;
+  }
+
+  .agenda-field-visible input[type='checkbox'],
+  .agenda-field-lock input[type='checkbox'] {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin: 0;
+  }
+}
