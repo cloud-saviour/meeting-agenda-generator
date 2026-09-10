@@ -26,13 +26,15 @@ export class HomeComponent {
    * Drives the grid's column count. The first slot is always exactly one of
    * Manage Agendas+Manage Roles (admin, counts as 2) or Member Profile/Sign
    * In (everyone else, counts as 1); Meeting Check-in only counts when a
-   * meeting is currently published (nextMeeting() non-null); Sign Out only
+   * meeting is currently published (nextMeeting() non-null — the tile is
+   * omitted entirely otherwise, not shown-disabled, since it's the app's
+   * only anonymous/visitor-facing check-in entry point and there's nothing
+   * for a visitor to check into if nothing's published); Sign Out only
    * counts when signed in. Can be as low as 1 (anonymous, nothing
    * published — just "Sign In"), which the template's `row-cols-1` default
-   * already handles column-wise — but that lone tile still needs a much
-   * narrower row max-width (see the template's `[style.max-width.px]`
-   * binding) or it stretches to the full multi-tile container width and
-   * looks oversized.
+   * handles column-wise, but that lone tile still needs the narrower
+   * `[style.max-width.px]` binding in the template or it stretches to the
+   * full multi-tile container width.
    */
   readonly tileCount = computed(
     () => (this.isAdmin() ? 2 : 1) + (this.nextMeeting() ? 1 : 0) + (this.isSignedIn() ? 1 : 0)

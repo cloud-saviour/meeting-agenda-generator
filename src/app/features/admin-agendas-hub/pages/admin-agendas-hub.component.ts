@@ -1,6 +1,5 @@
-import { Component, inject } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { AgendaStateService } from '../../agenda-editor/services/agenda-state.service';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
 @Component({
@@ -9,6 +8,4 @@ import { NavbarComponent } from '../../../layout/navbar/navbar.component';
   imports: [RouterLink, NavbarComponent],
   templateUrl: './admin-agendas-hub.component.html',
 })
-export class AdminAgendasHubComponent {
-  readonly state = inject(AgendaStateService);
-}
+export class AdminAgendasHubComponent {}

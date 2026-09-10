@@ -5,6 +5,12 @@
  * real project is created (firebase login + project setup), only the values in this
  * file need to change — no code changes required.
  */
+
+// See environment.ts's identical comment: derived from the browser's own
+// hostname (LAN IP included) rather than hardcoded, so this still works
+// when reached from another device over LAN, not just from this machine.
+const emulatorHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+
 export const environment = {
   firebase: {
     projectId: 'meeting-agenda-generator',
@@ -15,9 +21,9 @@ export const environment = {
     apiKey: 'emulator-placeholder-api-key',
   },
   useFirestoreEmulator: true,
-  firestoreEmulatorHost: '127.0.0.1',
+  firestoreEmulatorHost: emulatorHost,
   firestoreEmulatorPort: 8080, // must match firebase.json's emulators.firestore.port
   useAuthEmulator: true,
-  authEmulatorHost: '127.0.0.1',
+  authEmulatorHost: emulatorHost,
   authEmulatorPort: 9099, // must match firebase.json's emulators.auth.port
 };

@@ -29,33 +29,49 @@
     }
   </div>
 
-  <div class="card p-3 mb-3" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
-    <div class="d-flex flex-row align-items-end gap-2 flex-wrap">
-      <div class="flex-grow-1" style="min-width:180px;">
-        <label class="form-label small mb-1">Your Name</label>
-        <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()" [disabled]="isNameLocked">
+  @if (needsGuestIdentification) {
+    <div class="card p-4 shadow-sm mx-auto" style="max-width:360px;">
+      <div class="text-center mb-3">
+        <h2 class="fs-6 fw-bold mb-0">Check In As Guest</h2>
+        <p class="text-muted small mb-0">Enter your email to continue — you'll use the same email to come back and amend your check-in later.</p>
       </div>
-      @if (isAnonymous) {
-        <div class="flex-grow-1" style="min-width:180px;">
-          <label class="form-label small mb-1">Your Email</label>
-          <input class="form-control" type="email" [(ngModel)]="emailInput" name="emailInput" placeholder="you@example.com" (keyup.enter)="checkIn()">
-        </div>
+      <div class="mb-3">
+        <label class="form-label small mb-1">Your Email</label>
+        <input class="form-control form-control-sm" type="email" [(ngModel)]="guestEmailInput" name="guestEmailInput"
+          (keydown.enter)="identifyAsGuest()" autocomplete="email">
+      </div>
+      @if (guestEmailError) {
+        <div class="alert alert-danger py-1 px-2 small mb-3">{{ guestEmailError }}</div>
       }
-      <button class="btn btn-danger" (click)="checkIn()">
-        {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
+      <button class="btn btn-danger btn-sm w-100" [disabled]="guestIdentifying" (click)="identifyAsGuest()">
+        {{ guestIdentifying ? 'Continuing…' : 'Continue' }}
       </button>
-      @if (state.isCheckedIn()) {
-        <span class="text-success fw-bold small">&#10003; Checked in</span>
+      <a class="btn btn-link btn-sm w-100" routerLink="/login">Have an account? Sign in instead</a>
+    </div>
+  } @else {
+    <div class="card p-3 mb-3" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
+      <div class="d-flex flex-row align-items-end gap-2 flex-wrap">
+        <div class="flex-grow-1" style="min-width:180px;">
+          <label class="form-label small mb-1">Your Name</label>
+          <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()" [disabled]="isNameLocked">
+        </div>
+        <button class="btn btn-danger" (click)="checkIn()">
+          {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
+        </button>
+        @if (state.isCheckedIn()) {
+          <span class="text-success fw-bold small">&#10003; Checked in</span>
+          <button class="btn btn-outline-secondary" (click)="uncheckIn()">Not Attending</button>
+        }
+      </div>
+      @if (checkInError) {
+        <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ checkInError }}</div>
       }
     </div>
-    @if (checkInError) {
-      <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ checkInError }}</div>
-    }
-  </div>
 
-  <app-attendance-list></app-attendance-list>
-  <app-role-board></app-role-board>
-  <app-speaker-signup></app-speaker-signup>
-  <app-evaluator-slots></app-evaluator-slots>
+    <app-attendance-list></app-attendance-list>
+    <app-role-board></app-role-board>
+    <app-speaker-signup></app-speaker-signup>
+    <app-evaluator-slots></app-evaluator-slots>
+  }
 
 </div>

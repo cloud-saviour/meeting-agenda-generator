@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { AgendaStateService } from './agenda-state.service';
 import { CommitteeRosterService } from './committee-roster.service';
@@ -11,24 +12,29 @@ import { AgendaItem, CommitteeMember } from '../models/agenda.models';
 const fakeRoleDefinitionService = { activeRoles: () => [] } as unknown as RoleDefinitionService;
 
 // CommitteeRosterService is Firestore-backed and its real data arrives
-// asynchronously even on the first read — this suite needs cmt/agItems/meeting
-// seeded synchronously at construction (as they always have been), so a plain
-// in-memory fake stands in, exactly like RoleDefinitionService's fake above.
+// asynchronously even on the first read — this suite needs a signal-backed
+// fake so AgendaStateService.cmt (a computed over committeeRoster.all())
+// reacts live to assign()/unassign(), exactly like the real service.
 class FakeCommitteeRosterService {
-  private roster: CommitteeMember[] = Array.from({ length: 7 }, () => ({
-    roleId: '',
-    name: '',
-    email: '',
-    phone: '',
-  }));
+  private readonly roster = signal<CommitteeMember[]>([]);
+  // Defaults to true so every existing test (none of which care about the
+  // ready()-gated reseed timing) keeps working unchanged — tests that
+  // specifically need to control when Firestore "arrives" (e.g. the
+  // reseed-vs-loadSnapshot race below) call `.set(false)` right after
+  // construction, then `.set(true)` later to simulate a delayed arrival.
+  readonly readySignal = signal(true);
   all(): CommitteeMember[] {
-    return this.roster;
+    return this.roster();
   }
   ready(): boolean {
-    return true;
+    return this.readySignal();
   }
-  replaceAll(members: CommitteeMember[]): Promise<void> {
-    this.roster = JSON.parse(JSON.stringify(members));
+  assign(roleId: string, name: string, email: string, phone: string): Promise<void> {
+    this.roster.update((members) => [...members.filter((m) => m.roleId !== roleId), { roleId, name, email, phone }]);
+    return Promise.resolve();
+  }
+  unassign(roleId: string): Promise<void> {
+    this.roster.update((members) => members.filter((m) => m.roleId !== roleId));
     return Promise.resolve();
   }
 }
@@ -46,81 +52,28 @@ function makeService(): { state: AgendaStateService; roster: CommitteeRosterServ
   };
 }
 
-describe('AgendaStateService — committee methods', () => {
+describe('AgendaStateService — cmt', () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
   });
 
-  describe('updateCommitteeMember', () => {
-    it('updates name/email/phone on the committee member at the given index', () => {
-      const { state } = makeService();
+  it('reflects the committee roster live — no separate state or method to call', async () => {
+    const { state, roster } = makeService();
+    expect(state.cmt()).toEqual([]);
 
-      state.updateCommitteeMember(0, 'name', 'Naledi K.');
-      state.updateCommitteeMember(0, 'email', 'naledi@example.com');
-      state.updateCommitteeMember(0, 'phone', '0821234567');
+    await roster.assign('president', 'Naledi K.', 'naledi@example.com', '');
 
-      const updated = state.cmt()[0];
-      expect(updated.name).toBe('Naledi K.');
-      expect(updated.email).toBe('naledi@example.com');
-      expect(updated.phone).toBe('0821234567');
-    });
-
-    it('only touches the targeted index, leaving other slots untouched', () => {
-      const { state } = makeService();
-
-      state.updateCommitteeMember(2, 'name', 'Third Slot');
-
-      const cmt = state.cmt();
-      expect(cmt[2].name).toBe('Third Slot');
-      expect(cmt.filter((m) => m.name === 'Third Slot').length).toBe(1);
-    });
-
-    it('is a safe no-op when the index is out of range', () => {
-      const { state } = makeService();
-      const before = state.cmt();
-
-      state.updateCommitteeMember(99, 'name', 'Should Not Apply');
-
-      const after = state.cmt();
-      expect(after).toEqual(before);
-      expect(after.some((m) => m.name === 'Should Not Apply')).toBe(false);
-    });
-
-    it('regression guard: with multiple slots sharing the same (blank) roleId, only the targeted slot changes', () => {
-      // This is the actual first-time-setup scenario: every committee slot
-      // starts with roleId === '' until an admin assigns a role, so several
-      // slots can legitimately share the same roleId value at once. Since
-      // updateCommitteeMember addresses by array position (not by roleId
-      // value), picking a role for one slot must never affect another slot
-      // that happens to share the same current roleId.
-      const { state } = makeService();
-
-      const allBlank: CommitteeMember[] = [
-        { roleId: '', name: '', email: '', phone: '' },
-        { roleId: '', name: '', email: '', phone: '' },
-        { roleId: '', name: '', email: '', phone: '' },
-      ];
-      state.cmt.set(allBlank);
-
-      state.updateCommitteeMember(1, 'roleId', 'secretary');
-
-      const [first, second, third] = state.cmt();
-      expect(first.roleId).toBe('');
-      expect(second.roleId).toBe('secretary');
-      expect(third.roleId).toBe('');
-    });
+    expect(state.cmt()).toEqual([{ roleId: 'president', name: 'Naledi K.', email: 'naledi@example.com', phone: '' }]);
   });
 
-  describe('saveCommitteeRoster', () => {
-    it('persists the current cmt array into CommitteeRosterService', () => {
-      const { state, roster } = makeService();
+  it('reflects an unassign the same way', async () => {
+    const { state, roster } = makeService();
+    await roster.assign('secretary', 'Thabo M.', '', '');
+    expect(state.cmt().length).toBe(1);
 
-      state.updateCommitteeMember(0, 'name', 'Persisted Name');
-      state.saveCommitteeRoster();
+    await roster.unassign('secretary');
 
-      expect(roster.all()[0].name).toBe('Persisted Name');
-      expect(roster.all().length).toBe(state.cmt().length);
-    });
+    expect(state.cmt()).toEqual([]);
   });
 });
 
@@ -358,9 +311,9 @@ describe('AgendaStateService — resetAll', () => {
     expect(state.agItems().length).toBe(defaultLength);
   });
 
-  it('leaves the committee roster untouched', () => {
-    const { state } = makeService();
-    state.updateCommitteeMember(0, 'name', 'Persisted Name');
+  it('leaves the committee roster untouched — there is no separate state to reset', async () => {
+    const { state, roster } = makeService();
+    await roster.assign('president', 'Persisted Name', '', '');
     const cmtBefore = state.cmt();
 
     state.resetAll();
@@ -375,5 +328,72 @@ describe('AgendaStateService — resetAll', () => {
     state.resetAll();
 
     expect(state.logoLeft()).toBe('logo.png');
+  });
+});
+
+describe('AgendaStateService — committee-roster reseed vs loadSnapshot race', () => {
+  // Regression coverage for a real bug: AgendaViewerComponent (/preview),
+  // AdminAgendasComponent.open(), and JSON import all call
+  // setAgItemsFromSnapshot() (via AgendaImportExportService.loadSnapshot())
+  // to hydrate a specific agenda's real content. If CommitteeRosterService's
+  // ready() only flips true AFTER that load — a genuine race, since Firestore
+  // data always arrives asynchronously — the one-time reseed effect used to
+  // fire anyway and silently overwrite the just-loaded content with a fresh
+  // defaultAgenda() template. Caught by inspecting a live /preview tab: the
+  // published snapshot had a real role claim, but AgendaStateService.agItems()
+  // showed an unrelated id sequence with blank person fields, matching
+  // defaultAgenda()'s output exactly. See CLAUDE.md's "real gotcha" section
+  // on CommitteeRosterService/ready() for the seeding mechanism this guards.
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  function makeRaceService(): { state: AgendaStateService; roster: FakeCommitteeRosterService } {
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: RoleDefinitionService, useValue: fakeRoleDefinitionService },
+        { provide: CommitteeRosterService, useClass: FakeCommitteeRosterService },
+      ],
+    });
+    const roster = TestBed.inject(CommitteeRosterService) as unknown as FakeCommitteeRosterService;
+    roster.readySignal.set(false); // Firestore hasn't delivered committee data yet
+    return { state: TestBed.inject(AgendaStateService), roster };
+  }
+
+  it('does not clobber a loaded snapshot with a fresh default agenda when ready() flips true AFTER setAgItemsFromSnapshot()', () => {
+    const { state, roster } = makeRaceService();
+
+    const loadedItems: AgendaItem[] = [
+      {
+        id: 30,
+        type: 'row',
+        title: 'Introductions',
+        person: 'Admin',
+        roleId: 'toastmaster',
+        roleVisible: true,
+        customRoleLabel: null,
+        duration: 16,
+      } as AgendaItem,
+    ];
+    state.setAgItemsFromSnapshot(loadedItems);
+    expect(state.agItems()).toEqual(loadedItems);
+
+    // Committee-roster data arrives late — after the real snapshot was already loaded.
+    roster.readySignal.set(true);
+    TestBed.tick();
+
+    expect(state.agItems()).toEqual(loadedItems);
+  });
+
+  it('still performs the one-time reseed normally when ready() flips true BEFORE any snapshot is loaded', () => {
+    // Regression guard the other direction: confirms the fix only gates the
+    // reseed behind "has a snapshot been loaded," not disables it outright.
+    const { state, roster } = makeRaceService();
+    const beforeReseed = state.agItems();
+
+    roster.readySignal.set(true);
+    TestBed.tick();
+
+    expect(state.agItems()).not.toBe(beforeReseed);
   });
 });

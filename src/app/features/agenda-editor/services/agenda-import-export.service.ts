@@ -33,16 +33,22 @@ export class AgendaImportExportService {
     saveAs(blob, `${fileName}.json`);
   }
 
+  /**
+   * `cmt` is deliberately ignored on import — it's a historical record only
+   * (still populated by getSnapshot() for DOCX/saved-agenda purposes), never
+   * rehydrated back into live state. AgendaStateService.cmt is a live
+   * computed over the current committee roster, so a loaded agenda (a
+   * reopened draft or a published snapshot on /preview) always shows
+   * whoever currently holds each role, not whoever held it when the
+   * snapshot was taken.
+   */
   loadSnapshot(data: AgendaSnapshot): void {
-    const { agItems, spks, cmt, logoLeft, logoRight, overriddenRoles, ...meetingData } = data;
+    const { agItems, spks, cmt: _cmt, logoLeft, logoRight, overriddenRoles, ...meetingData } = data;
 
     this.state.meeting.set(meetingData as MeetingData);
     this.state.setAgItemsFromSnapshot(agItems);
     this.state.setSpeakersFromSnapshot(spks);
 
-    if (cmt) {
-      this.state.cmt.set(JSON.parse(JSON.stringify(cmt)));
-    }
     if (logoLeft !== undefined) {
       this.state.logoLeft.set(logoLeft);
     }

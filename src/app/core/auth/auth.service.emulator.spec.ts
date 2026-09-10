@@ -107,6 +107,20 @@ describe('AuthService (Firebase Auth emulator)', () => {
     expect(auth.currentUser?.displayName).toBe('New Name');
   });
 
+  it('hasAccount() returns true for an email that was just signed up, including a differently-cased/padded variant of it', async () => {
+    const service = createService();
+    const email = uniqueEmail('has-account');
+    await service.signUp(email, 'password123', 'Has Account');
+
+    expect(await service.hasAccount(email)).toBe(true);
+    expect(await service.hasAccount(`  ${email.toUpperCase()}  `)).toBe(true);
+  });
+
+  it('hasAccount() returns false for an email that was never signed up', async () => {
+    const service = createService();
+    expect(await service.hasAccount(uniqueEmail('never-registered'))).toBe(false);
+  });
+
   it('isAdmin() reads true only for an account whose ID token carries the admin claim — set via the Auth emulator\'s admin-bypass REST API, exactly like scripts/seed-admin-user.mjs uses the Admin SDK for', async () => {
     const service = createService();
     const email = uniqueEmail('admin-claim');

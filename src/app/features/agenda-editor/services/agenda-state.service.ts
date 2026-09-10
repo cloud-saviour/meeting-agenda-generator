@@ -34,6 +34,7 @@ function defaultMeeting(no: string, cmt: CommitteeMember[]): MeetingData {
     hotSeat: '',
     reserve: '',
     apologies: '',
+    apologySyncUids: {},
     period: 'Aug 2025 – February 2026',
     web: 'http://www.agoraspeakers.org/',
     fb: 'Agora Speakers South Africa',
@@ -60,13 +61,14 @@ export class AgendaStateService {
 
   readonly spks = signal<Speaker[]>([]);
 
-  // Seeded from the persistent committee roster so every agenda starts
-  // prepopulated with the admin-assigned members; from here on `cmt` is a
-  // per-agenda working copy (frozen at export time), kept in sync with the
-  // roster only through `updateCommitteeMember()`.
-  readonly cmt = signal<CommitteeMember[]>(
-    JSON.parse(JSON.stringify(this.committeeRoster.all()))
-  );
+  // Always mirrors the live committee roster — every agenda (draft or
+  // reopened) reflects whoever currently holds each role right now, not a
+  // per-agenda snapshot. The only place a static copy is ever taken is at
+  // DOCX-export time (AgendaImportExportService.getSnapshot() reads this
+  // computed's *current* value into the frozen AgendaSnapshot handed to
+  // DocxService) — assignment itself is managed centrally on
+  // /admin/committee-roles, never edited here.
+  readonly cmt = computed(() => this.committeeRoster.all());
 
   readonly agItems = signal<AgendaItem[]>(defaultAgenda(this.cmt(), () => ++this.agId));
 
@@ -95,25 +97,39 @@ export class AgendaStateService {
   // Guards the one-time catch-up seed below — set on its first (and only) run.
   private hasSeededFromCommitteeRoster = false;
 
+  // Set once setAgItemsFromSnapshot() has been called (via
+  // AgendaImportExportService.loadSnapshot() — used by AgendaViewerComponent
+  // for /preview, AdminAgendasComponent.open(), and JSON import). Once real
+  // agenda content has been explicitly loaded, the one-time committee-roster
+  // catch-up below must never fire, even if committeeRoster.ready() only
+  // flips true AFTER that load (a genuine race — Firestore data always
+  // arrives asynchronously): firing then would silently discard the
+  // just-loaded agenda and replace it with a fresh defaultAgenda() template.
+  // Caught live on /preview — the published snapshot had a real role claim,
+  // but agItems showed an unrelated id sequence with blank person fields,
+  // matching defaultAgenda()'s output exactly.
+  private hasLoadedSnapshot = false;
+
   constructor() {
     // committeeRoster.all() is read synchronously above (meeting/cmt/agItems
     // field initializers), but CommitteeRosterService is Firestore-backed —
     // its real data arrives asynchronously even on the very first read, so
     // those synchronous reads may have seeded from its pre-load placeholder.
-    // This effect catches up exactly once, the moment `ready()` flips true —
-    // NOT the moment `all()` first changes, since `all()`'s placeholder value
-    // is itself a defined, non-empty-looking array (7 blank slots), so the
-    // effect's own first (pre-Firestore) run would otherwise consume it and
-    // set the guard before real data ever arrives. After the real seed,
-    // `cmt` is the admin's independently-editable working copy, same as ever
-    // (see the `cmt` field comment above).
+    // `cmt` itself no longer needs catching up — it's a computed that always
+    // mirrors committeeRoster.all() live, placeholder or real, with nothing
+    // to seed. But agItems/meeting.vpe still take a one-time copy of that
+    // value at a specific moment, so this effect still exists purely to redo
+    // that one-time copy once real data arrives — the moment `ready()` flips
+    // true, NOT the moment `all()` first changes, since `all()`'s placeholder
+    // value is itself a defined, non-empty-looking array, so the effect's own
+    // first (pre-Firestore) run would otherwise consume it and set the guard
+    // before real data ever arrives.
     effect(() => {
       const ready = this.committeeRoster.ready();
       const roster = this.committeeRoster.all();
       untracked(() => {
-        if (!ready || this.hasSeededFromCommitteeRoster) return;
+        if (!ready || this.hasSeededFromCommitteeRoster || this.hasLoadedSnapshot) return;
         this.hasSeededFromCommitteeRoster = true;
-        this.cmt.set(JSON.parse(JSON.stringify(roster)));
         this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));
         const vpEducation = roster.find((m) => m.roleId === 'vpEducation');
         if (vpEducation?.name && !this.meeting().vpe) {
@@ -327,8 +343,8 @@ export class AgendaStateService {
    * SavedAgendaService/AgendaEditorComponent's auto-save guard) so the fresh
    * agenda stays un-addressable, and doesn't overwrite any other meeting's
    * saved copy, until the admin types a real number into the meeting-details
-   * form. `cmt` is intentionally left untouched — stays seeded from the
-   * persistent committee roster, same as construction.
+   * form. `cmt` needs no reset at all — it's a live computed over the
+   * persistent committee roster, not per-agenda state.
    */
   resetAll(): void {
     this.agId = 0;
@@ -343,6 +359,7 @@ export class AgendaStateService {
 
   /** Replaces agenda items wholesale (e.g. from an imported snapshot) and resets the id counter. */
   setAgItemsFromSnapshot(items: AgendaItem[]): void {
+    this.hasLoadedSnapshot = true;
     this.agId = items.reduce((max, i) => Math.max(max, i.id), 0);
     this.agItems.set(JSON.parse(JSON.stringify(items)));
   }
@@ -390,26 +407,6 @@ export class AgendaStateService {
         return updated;
       })
     );
-  }
-
-  // ── Committee methods ─────────────────────────────────────────────────────
-  // Addressed by array position, not roleId: cmt is a fixed-length, never-
-  // reordered list of edit-form rows, and multiple rows can legitimately
-  // share the same roleId (e.g. all unassigned, roleId === '') — a value
-  // lookup would be ambiguous there, while position never is. This is
-  // unrelated to (and doesn't reintroduce) the positional-index bug fixed
-  // elsewhere: readers like the preview/DOCX footer and default-agenda still
-  // resolve *who holds a given role* via roleId, never via array position —
-  // this method only identifies *which row the edit form is patching*.
-  updateCommitteeMember(index: number, field: keyof CommitteeMember, value: string): void {
-    this.cmt.update((members) =>
-      members.map((m, i) => (i === index ? { ...m, [field]: value } : m))
-    );
-  }
-
-  /** Persists the current committee list so future agendas start prepopulated with it. */
-  saveCommitteeRoster(): void {
-    this.committeeRoster.replaceAll(this.cmt());
   }
 
   // ── Logo methods ──────────────────────────────────────────────────────────

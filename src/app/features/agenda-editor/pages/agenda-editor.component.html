@@ -1,11 +1,7 @@
 <div class="d-flex flex-column vh-100 app-shell">
 
   <!-- APP BAR -->
-  <app-navbar title="Agora Agenda Writer" [printHidden]="true"
-    [links]="[
-      { label: '👥 Meeting Check-in', path: '/checkin', queryParams: { meeting: state.meeting().no } },
-      { label: '🏠 Home', path: '/' }
-    ]">
+  <app-navbar title="Agora Agenda Planner" [printHidden]="true" [links]="navLinks">
     <button class="btn btn-outline-light btn-sm" (click)="newAgenda()" title="Start a new agenda — the current one is already saved">
       🆕 New Agenda
     </button>
@@ -16,14 +12,18 @@
       {{ docxBusy ? 'Building…' : '⬇ DOCX' }}
     </button>
     <button class="btn btn-danger btn-sm" (click)="printAgenda()">&#128438; Print / PDF</button>
-    <button class="btn btn-outline-light btn-sm" [disabled]="!state.meeting().no" (click)="publishAgenda()"
-      title="Publish this agenda so members can preview it from the check-in page (publishing replaces any other currently-published meeting)">
-      {{ published ? '✓ Published' : '📤 Publish New Changes' }}
-    </button>
+    @if (isLivePublished) {
+      <span class="badge bg-success-subtle text-success-emphasis align-self-center"
+        title="This meeting is currently published — edits here reach /preview and check-in live, no publish step needed">
+        ● Live
+      </span>
+    }
     <a class="btn btn-outline-light btn-sm" routerLink="/admin/manage-roles">⚙ Manage Roles</a>
-    <button class="btn btn-outline-light btn-sm" [disabled]="!state.meeting().no" (click)="copyCheckinLink()">
-      {{ linkCopied ? '✓ Copied!' : '🔗 Share Check-in Link' }}
-    </button>
+    @if (isLivePublished) {
+      <button class="btn btn-outline-light btn-sm" (click)="copyCheckinLink()">
+        {{ linkCopied ? '✓ Copied!' : '🔗 Share Check-in Link' }}
+      </button>
+    }
     <button class="btn btn-outline-light btn-sm d-md-none" (click)="toggleMobilePreview()">
       {{ mobilePreviewMode ? '✎ Edit Form' : '👁 Preview Agenda' }}
     </button>
@@ -38,7 +38,6 @@
         <app-meeting-form></app-meeting-form>
         <app-agenda-items (roleOverrideChanged)="onRoleOverrideChanged($event)"></app-agenda-items>
         <app-speakers-form></app-speakers-form>
-        <app-committee-form></app-committee-form>
       </div>
     </div>
 

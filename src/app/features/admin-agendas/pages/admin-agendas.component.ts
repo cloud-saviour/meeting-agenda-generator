@@ -64,6 +64,16 @@ export class AdminAgendasComponent {
     }
   }
 
+  async unpublish(no: string) {
+    this.publishError = null;
+    this.pendingPublish.add(no);
+    try {
+      await this.publishedAgenda.unpublish(no);
+    } finally {
+      this.pendingPublish.delete(no);
+    }
+  }
+
   createNew() {
     this.state.resetAll();
     this.router.navigate(['/admin']);

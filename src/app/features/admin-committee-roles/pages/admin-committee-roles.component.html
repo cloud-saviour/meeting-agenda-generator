@@ -25,33 +25,85 @@
     <h3 class="section-title">All Committee Roles ({{ roles.length }})</h3>
     <div class="list-group list-group-flush">
       @for (r of roles; track r.id) {
-        <div class="list-group-item d-flex align-items-center gap-2" [class.opacity-50]="!r.active">
-          @if (r.active) {
-            <span class="badge bg-success-subtle text-success-emphasis">Active</span>
-          } @else {
-            <span class="badge bg-secondary-subtle text-secondary-emphasis">Archived</span>
-          }
-
-          @if (editingId === r.id) {
-            <div class="d-flex flex-grow-1 gap-2 align-items-center">
-              <input class="form-control form-control-sm" type="text" [(ngModel)]="editLabel" name="editLabel" placeholder="Label">
-              <input class="form-control form-control-sm" type="text" [(ngModel)]="editDescription" name="editDescription" placeholder="Description (optional)">
-              <button class="btn btn-danger btn-sm" (click)="saveEdit()">Save</button>
-              <button class="btn btn-outline-secondary btn-sm" (click)="cancelEdit()">Cancel</button>
-            </div>
-          } @else {
-            <span class="flex-grow-1 small fw-semibold">
-              {{ r.label }}
-              @if (r.description) {
-                <span class="text-muted fw-normal">— {{ r.description }}</span>
-              }
-            </span>
-            <button class="btn btn-outline-secondary btn-sm" (click)="startEdit(r.id, r.label, r.description)">Edit</button>
+        <div class="list-group-item" [class.opacity-50]="!r.active">
+          <div class="d-flex align-items-center gap-2">
             @if (r.active) {
-              <button class="btn btn-outline-secondary btn-sm" (click)="archive(r.id)">Archive</button>
+              <span class="badge bg-success-subtle text-success-emphasis">Active</span>
             } @else {
-              <button class="btn btn-danger btn-sm" (click)="restore(r.id)">Restore</button>
+              <span class="badge bg-secondary-subtle text-secondary-emphasis">Archived</span>
             }
+
+            @if (editingId === r.id) {
+              <div class="d-flex flex-grow-1 gap-2 align-items-center">
+                <input class="form-control form-control-sm" type="text" [(ngModel)]="editLabel" name="editLabel" placeholder="Label">
+                <input class="form-control form-control-sm" type="text" [(ngModel)]="editDescription" name="editDescription" placeholder="Description (optional)">
+                <button class="btn btn-danger btn-sm" (click)="saveEdit()">Save</button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="cancelEdit()">Cancel</button>
+              </div>
+            } @else {
+              <span class="flex-grow-1 small fw-semibold">
+                {{ r.label }}
+                @if (r.description) {
+                  <span class="text-muted fw-normal">— {{ r.description }}</span>
+                }
+                @if (!isPrinted(r.id)) {
+                  <span class="text-muted fw-normal small"> (not printed on agenda)</span>
+                }
+              </span>
+              <button class="btn btn-outline-secondary btn-sm" (click)="startEdit(r.id, r.label, r.description)">Edit</button>
+              @if (r.active) {
+                <button class="btn btn-outline-secondary btn-sm" (click)="archive(r.id)">Archive</button>
+              } @else {
+                <button class="btn btn-danger btn-sm" (click)="restore(r.id)">Restore</button>
+              }
+            }
+          </div>
+
+          @if (r.active) {
+            <div class="mt-2 ps-1">
+              @if (memberFor(r.id); as member) {
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <span class="badge bg-primary-subtle text-primary-emphasis">Assigned</span>
+                  <span class="small">
+                    <span class="fw-semibold">{{ member.name }}</span>
+                    @if (member.email) { <span class="text-muted"> · {{ member.email }}</span> }
+                    @if (member.phone) { <span class="text-muted"> · {{ member.phone }}</span> }
+                  </span>
+                  <button class="btn btn-outline-secondary btn-sm" [disabled]="isPending(r.id)" (click)="startAssign(r.id)">Reassign</button>
+                  <button class="btn btn-outline-danger btn-sm" [disabled]="isPending(r.id)" (click)="unassign(r.id)">
+                    {{ isPending(r.id) ? '…' : 'Unassign' }}
+                  </button>
+                </div>
+              } @else {
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge bg-secondary-subtle text-secondary-emphasis">Unassigned</span>
+                  <button class="btn btn-outline-primary btn-sm" [disabled]="isPending(r.id)" (click)="startAssign(r.id)">Assign</button>
+                </div>
+              }
+
+              @if (assigningRoleId === r.id) {
+                <div class="row g-2 mt-1" style="max-width:520px;">
+                  <div class="col-5">
+                    <input class="form-control form-control-sm" type="text" [(ngModel)]="assignName" name="assignName" placeholder="Name">
+                  </div>
+                  <div class="col-4">
+                    <input class="form-control form-control-sm" type="email" [(ngModel)]="assignEmail" name="assignEmail" placeholder="Email">
+                  </div>
+                  <div class="col-3">
+                    <input class="form-control form-control-sm" type="tel" [(ngModel)]="assignPhone" name="assignPhone" placeholder="Phone">
+                  </div>
+                  <div class="col-12 d-flex gap-2">
+                    <button class="btn btn-danger btn-sm" [disabled]="isPending(r.id) || !assignName.trim()" (click)="confirmAssign(r.id)">
+                      {{ isPending(r.id) ? 'Saving…' : 'Save' }}
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" (click)="cancelAssign()">Cancel</button>
+                  </div>
+                  @if (assignError) {
+                    <div class="col-12"><div class="alert alert-danger py-1 px-2 small mb-0">{{ assignError }}</div></div>
+                  }
+                </div>
+              }
+            </div>
           }
         </div>
       }

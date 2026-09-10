@@ -1,6 +1,7 @@
 import { Injectable, NgZone, inject, signal } from '@angular/core';
 import {
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
@@ -82,5 +83,28 @@ export class AuthService {
 
   resetPassword(email: string): Promise<void> {
     return sendPasswordResetEmail(this.auth, email);
+  }
+
+  /**
+   * True if `email` already has a Firebase Auth account (member or admin —
+   * this checks the Auth system generically, the same one both tiers share,
+   * not the `members` Firestore collection specifically). Used only by the
+   * check-in guest-email gate to redirect a guest to sign in instead of
+   * creating a disconnected anonymous identity for an email that already has
+   * a real account — see CLAUDE.md for why this is a deliberate, narrow
+   * exception to the anti-enumeration posture `resetPassword()`'s caller
+   * (login.component.ts) otherwise maintains.
+   *
+   * Fails open (returns false) on any error — a lookup failure must never
+   * block someone from checking in as a guest; worst case they proceed as
+   * guest even though they have an account, same as today's behavior.
+   */
+  async hasAccount(email: string): Promise<boolean> {
+    try {
+      const methods = await fetchSignInMethodsForEmail(this.auth, email.trim().toLowerCase());
+      return methods.length > 0;
+    } catch {
+      return false;
+    }
   }
 }

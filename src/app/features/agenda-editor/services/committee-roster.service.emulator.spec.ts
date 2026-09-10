@@ -3,16 +3,17 @@ import { Injector, NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import { doc, setDoc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { CommitteeRosterService } from './committee-roster.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
-import { CommitteeMember } from '../models/agenda.models';
 
 /**
  * CommitteeRosterService is Firestore-backed — a single document at
  * `committeeRoster/current` holding the whole roster array (not one doc per
- * role, since roleId isn't a unique key here — see the service's own doc
- * comment). Run via `npm run test:emulator` with the emulator already running.
+ * role, since it's a variable-length list of only the *assigned* roles — see
+ * the service's own doc comment). Run via `npm run test:emulator` with the
+ * emulator already running.
  *
  * isAdmin() requires the `admin` custom claim, not just an authenticated uid
  * (see firestore.rules) — authenticatedContext()'s second argument simulates
@@ -85,18 +86,19 @@ describe('CommitteeRosterService (Firestore emulator)', () => {
     return service;
   }
 
-  it('starts with 7 blank slots when Firestore has no roster document yet', async () => {
+  it('starts empty when Firestore has no roster document yet', async () => {
     const service = createService();
-    await waitFor(() => service.all().length === 7);
-    expect(service.all().every((m) => m.roleId === '' && m.name === '')).toBe(true);
+    await waitFor(() => service.ready());
+    expect(service.all()).toEqual([]);
   });
 
   it('ready() is false until Firestore delivers its first result, then stays true', async () => {
-    // Regression test: AgendaStateService's one-time catch-up seed depends on
-    // this — all()'s pre-load placeholder is itself a valid-looking 7-slot
-    // array, so a consumer can't tell "still loading" from "genuinely empty"
-    // by content alone. Caught a real bug where the guard consumed the
-    // placeholder before Firestore's real data ever arrived.
+    // Regression test: AgendaStateService's one-time catch-up seed (for
+    // agItems/meeting.vpe) depends on this — all()'s pre-load placeholder
+    // is itself a valid-looking (empty) array, so a consumer can't tell
+    // "still loading" from "genuinely empty" by content alone. Caught a real
+    // bug where the guard consumed the placeholder before Firestore's real
+    // data ever arrived.
     const service = createService();
     expect(service.ready()).toBe(false);
 
@@ -104,86 +106,82 @@ describe('CommitteeRosterService (Firestore emulator)', () => {
     expect(service.ready()).toBe(true);
   });
 
-  it('replaceAll() persists the roster and it appears live, padded back to 7 slots', async () => {
+  it('assign() adds an entry without disturbing other roles', async () => {
     const service = createService();
-    await waitFor(() => service.all().length === 7);
+    await waitFor(() => service.ready());
 
-    const members: CommitteeMember[] = [
-      { roleId: 'president', name: 'Naledi K.', email: 'naledi@example.com', phone: '' },
-      { roleId: 'secretary', name: 'Thabo M.', email: '', phone: '0821234567' },
-    ];
-    await service.replaceAll(members);
+    await service.assign('president', 'Naledi K.', 'naledi@example.com', '');
+    await waitFor(() => service.all().some((m) => m.roleId === 'president'));
+    await service.assign('secretary', 'Thabo M.', '', '0821234567');
+    await waitFor(() => service.all().some((m) => m.roleId === 'secretary'));
 
-    await waitFor(() => service.all()[0]?.name === 'Naledi K.');
-    expect(service.all().length).toBe(7);
-    expect(service.all()[1].name).toBe('Thabo M.');
-    expect(service.all().slice(2).every((m) => m.roleId === '' && m.name === '')).toBe(true);
+    expect(service.all().length).toBe(2);
+    expect(service.all().find((m) => m.roleId === 'president')?.name).toBe('Naledi K.');
+    expect(service.all().find((m) => m.roleId === 'secretary')?.name).toBe('Thabo M.');
   });
 
-  it('replaceAll() fully replaces rather than merging — stale slots from a longer roster do not carry over', async () => {
+  it('assign() on an already-assigned role replaces it rather than appending a duplicate', async () => {
     const service = createService();
-    await service.replaceAll([
-      { roleId: 'president', name: 'Naledi K.', email: '', phone: '' },
-      { roleId: 'secretary', name: 'Thabo M.', email: '', phone: '' },
-      { roleId: 'treasurer', name: 'Bongani S.', email: '', phone: '' },
-    ]);
-    await waitFor(() => service.all()[2]?.name === 'Bongani S.');
+    await service.assign('president', 'First Person', '', '');
+    await waitFor(() => service.all().find((m) => m.roleId === 'president')?.name === 'First Person');
 
-    await service.replaceAll([{ roleId: 'president', name: 'New President', email: '', phone: '' }]);
+    await service.assign('president', 'Second Person', '', '');
+    await waitFor(() => service.all().find((m) => m.roleId === 'president')?.name === 'Second Person');
 
-    await waitFor(() => service.all()[0]?.name === 'New President');
-    expect(service.all().length).toBe(7);
-    expect(service.all().some((m) => m.name === 'Thabo M.' || m.name === 'Bongani S.')).toBe(false);
+    expect(service.all().filter((m) => m.roleId === 'president').length).toBe(1);
   });
 
-  it("regression: manually deleting one array element in Firestore (not through the app) restores a blank slot instead of permanently losing it", async () => {
-    // This is exactly what happened in production: an admin deleted one
-    // committee member via the Firestore/Emulator UI directly (not through
-    // the app, which has no "remove a slot" action at all). That doesn't
-    // clear the slot — it removes the whole array element, shifting every
-    // later entry up by one index and leaving only 6. Without padding, the
-    // missing 7th slot — and the admin's ability to re-enter anyone into it
-    // — would be gone until someone hand-edited Firestore again.
+  it('unassign() removes the entry entirely — no leftover blank placeholder', async () => {
     const service = createService();
-    await service.replaceAll([
-      { roleId: 'president', name: 'Person A', email: '', phone: '' },
-      { roleId: 'secretary', name: 'Person B', email: '', phone: '' },
-      { roleId: 'vpEducation', name: 'Person C', email: '', phone: '' },
-      { roleId: 'communityManager', name: 'Person D', email: '', phone: '' },
-      { roleId: 'vpMembership', name: 'Person E', email: '', phone: '' },
-      { roleId: 'rsaAmbassador', name: 'Person F', email: '', phone: '' },
-      { roleId: 'treasurer', name: 'Person G', email: '', phone: '' },
-    ]);
-    await waitFor(() => service.all().length === 7);
+    await service.assign('president', 'Naledi K.', '', '');
+    await service.assign('secretary', 'Thabo M.', '', '');
+    await waitFor(() => service.all().length === 2);
 
-    // Simulate the manual deletion: write the array back with the
-    // vpEducation entry (index 2) removed outright, as the Emulator UI would.
-    const remaining = service.all().filter((m) => m.roleId !== 'vpEducation');
-    expect(remaining.length).toBe(6);
-    await service.replaceAll(remaining);
+    await service.unassign('president');
 
-    await waitFor(() => service.all().length === 7);
-    expect(service.all().filter((m) => m.name).map((m) => m.name)).toEqual([
-      'Person A',
-      'Person B',
-      'Person D',
-      'Person E',
-      'Person F',
-      'Person G',
-    ]);
-    // A blank slot is back, ready for the admin to pick "VP Education" and
-    // re-enter a name — the actual bug being fixed here.
-    expect(service.all()[6]).toEqual({ roleId: '', name: '', email: '', phone: '' });
+    await waitFor(() => service.all().length === 1);
+    expect(service.all().some((m) => m.roleId === 'president')).toBe(false);
+    expect(service.all()[0].roleId).toBe('secretary');
+  });
+
+  it('unassign() on a never-assigned role is a safe no-op', async () => {
+    const service = createService();
+    await service.assign('president', 'Naledi K.', '', '');
+    await waitFor(() => service.all().length === 1);
+
+    await service.unassign('treasurer');
+
+    expect(service.all().length).toBe(1);
+    expect(service.all()[0].roleId).toBe('president');
+  });
+
+  it('filters out legacy blank-roleId padded entries left over from the old fixed-slot model', async () => {
+    // Simulate old stored data: a previous version of this service padded
+    // the array with blank-roleId slots. An unassigned role is now
+    // "absent," not "present with roleId ''" — the service must tolerate
+    // finding old data shaped the old way.
+    await setDoc(doc(firestore, 'committeeRoster', 'current'), {
+      members: [
+        { roleId: 'president', name: 'Naledi K.', email: '', phone: '' },
+        { roleId: '', name: '', email: '', phone: '' },
+        { roleId: '', name: '', email: '', phone: '' },
+      ],
+    });
+
+    const service = createService();
+    await waitFor(() => service.ready());
+
+    expect(service.all()).toEqual([{ roleId: 'president', name: 'Naledi K.', email: '', phone: '' }]);
   });
 
   it('two independent instances see the same live roster', async () => {
     const svcA = createService();
     const svcB = createService();
-    await waitFor(() => svcA.all().length === 7 && svcB.all().length === 7);
+    await waitFor(() => svcA.ready() && svcB.ready());
 
-    await svcA.replaceAll([{ roleId: 'president', name: 'From A', email: '', phone: '' }]);
+    await svcA.assign('president', 'From A', '', '');
 
-    await waitFor(() => svcB.all()[0]?.name === 'From A');
-    expect(svcB.all().length).toBe(7);
+    await waitFor(() => svcB.all().some((m) => m.roleId === 'president'));
+    expect(svcB.all()[0].name).toBe('From A');
   });
 });

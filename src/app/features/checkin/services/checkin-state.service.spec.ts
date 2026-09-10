@@ -148,4 +148,66 @@ describe('CheckinStateService', () => {
     expect(service.currentUid).toBe('member-uid');
     expect(service.currentName()).toBe('Whatever Name');
   });
+
+  it('isGuestIdentified is false for a fresh anonymous instance', () => {
+    const service = createService();
+    expect(service.isGuestIdentified()).toBe(false);
+  });
+
+  it('identifyAsGuest() sets isGuestIdentified true and derives the same uid checkIn() would', async () => {
+    const service = createService();
+    const ok = await service.identifyAsGuest('Guest@Example.com ');
+    expect(ok).toBe(true);
+    expect(service.isGuestIdentified()).toBe(true);
+    const uidAfterIdentify = service.currentUid;
+
+    TestBed.resetTestingModule();
+    const other = createService();
+    await other.checkIn('Whoever', 'guest@example.com'); // normalized form
+    expect(other.currentUid).toBe(uidAfterIdentify);
+  });
+
+  it('identifyAsGuest() returns false and leaves isGuestIdentified false for an invalid-looking email', async () => {
+    const service = createService();
+    const ok = await service.identifyAsGuest('not-an-email');
+    expect(ok).toBe(false);
+    expect(service.isGuestIdentified()).toBe(false);
+  });
+
+  it('isGuestIdentified is always true for a signed-in account, without calling identifyAsGuest()', () => {
+    const service = createService({ uid: 'member-uid', displayName: null, email: 'member@example.com' });
+    expect(service.isGuestIdentified()).toBe(true);
+  });
+
+  it('checkIn(name) with no email succeeds once already identified via identifyAsGuest()', async () => {
+    const service = createService();
+    await service.identifyAsGuest('guest@example.com');
+    const success = await service.checkIn('Guest Name'); // no email arg
+    expect(success).toBe(true);
+    expect(service.currentName()).toBe('Guest Name');
+  });
+
+  it('resets isGuestIdentified back to false when a guest identity is followed by sign-out — no leaking forward', async () => {
+    const auth = fakeAuthService(); // starts anonymous
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: FIRESTORE, useValue: unusedFirestoreStub },
+        { provide: AuthService, useValue: auth },
+        { provide: CheckinContactsService, useValue: noopContacts },
+      ],
+    });
+    const service = TestBed.inject(CheckinStateService);
+
+    await service.identifyAsGuest('guest@example.com');
+    expect(service.isGuestIdentified()).toBe(true);
+
+    auth.currentUser.set({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' } as User);
+    TestBed.tick();
+    // Still true — but now via the signed-in branch, not the stale guest hash.
+    expect(service.isGuestIdentified()).toBe(true);
+
+    auth.currentUser.set(null);
+    TestBed.tick();
+    expect(service.isGuestIdentified()).toBe(false); // guest identity was reset by syncIdentity(), not leaked forward
+  });
 });

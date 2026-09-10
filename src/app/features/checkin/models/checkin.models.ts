@@ -38,6 +38,14 @@ export interface CheckinSnapshot {
   speakers: CheckinSpeaker[];
   /** Role ids the organizer has taken over in the Agenda Editor — hidden from claiming here. */
   lockedRoles: string[];
+  /**
+   * People who withdrew via CheckinStateService.uncheckIn() — reuses the
+   * Attendee shape (uid/name/joinedAt, joinedAt repurposed as "apologized
+   * at"). One-way imported into the agenda's own free-text
+   * MeetingData.apologies by AgendaEditorComponent's sync — see CLAUDE.md's
+   * "Check-in → editor is automatic" section.
+   */
+  apologies: Attendee[];
 }
 
 /**
