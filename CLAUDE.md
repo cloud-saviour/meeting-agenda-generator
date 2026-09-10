@@ -297,7 +297,13 @@ shown before any of the page's interactive content (name/check-in form,
 attendance list, role board, speaker signup, evaluator slots), via
 `CheckinStateService.identifyAsGuest()`, distinct from and called
 internally by `checkIn()` — see "How anonymous identity works" below. A
-signed-in member or admin never sees this gate.
+signed-in member or admin never sees this gate. Before establishing that
+guest identity, `CheckinComponent.identifyAsGuest()` first checks
+`AuthService.hasAccount(email)` — if the typed email already belongs to a
+real account, it redirects to `/login` (email pre-filled) instead of
+creating a disconnected guest identity for someone who already has one —
+see `AuthService.hasAccount()` under Authentication below for the
+enumeration/real-Firebase-migration tradeoffs this accepts.
 
 A checked-in attendee (admin, member, or guest, on their own check-in only)
 can also mark themselves **Not Attending** — a `confirm()`-gated button
@@ -703,6 +709,31 @@ is already signed in doesn't retroactively update their current session;
 they need to sign out and back in (or the SDK's periodic silent refresh) to
 see it.
 
+**`AuthService.hasAccount(email)`** — a deliberate, narrow exception to
+this file's own anti-enumeration posture (see `sendReset()`'s comment in
+`login.component.ts`, which goes out of its way to *never* reveal whether
+an email has an account). `hasAccount()` wraps Firebase Auth's
+`fetchSignInMethodsForEmail()` to do exactly that check, on purpose:
+`CheckinComponent`'s guest-email gate calls it before establishing an
+anonymous identity, and redirects to `/login?email=...&returnUrl=...`
+(email pre-filled, `LoginComponent`'s `prefilledFromCheckin`) if the typed
+email already belongs to a real account (member or admin — this checks
+Auth generically, not the `members` Firestore collection, which has no
+read path for an anonymous client at all per `firestore.rules`) — the goal
+is to stop a real member/admin from accidentally creating a disconnected
+guest identity for themselves. Fails open (`false`) on any error, so a
+lookup failure never blocks a guest from checking in. **Two accepted
+tradeoffs, not bugs**: it does leak account-existence, same category of
+signal `sendReset()` deliberately hides elsewhere in this file — accepted
+as worthwhile here since it only helps the person typing their own email,
+it doesn't expose anyone else's; and `fetchSignInMethodsForEmail()` is
+neutered by "email enumeration protection," on by default on real
+(non-emulator) Firebase projects created after ~mid-2023 — since standing
+up a real project is on this app's own roadmap (see Known gaps below),
+this check could silently stop detecting matches (always falling through
+to guest mode) after that migration, with nothing failing loudly. Not
+solved here — just something to remember if this stops working post-migration.
+
 **`AuthService`** (`core/auth/auth.service.ts`) exposes `currentUser`
 (`User | null`), `isAdmin` (`boolean`, derived from the claim — see above),
 and `ready` (`false` until the first `onAuthStateChanged` callback fires) —
@@ -896,3 +927,48 @@ dashboard), `http://localhost:4300/admin` (agenda editor),
 `http://localhost:4300/preview` (read-only published-agenda view, no sign-in needed), and
 `http://localhost:4300/admin/roles` / `/admin/committee-roles` / `/admin/manage-roles`
 (manage role definitions).
+
+**Reaching the app from a phone or another device on the same LAN**:
+`npm run serve:mobile` (`ng serve --host 0.0.0.0 --ssl --port 4300`)
+instead of `npm start` — binds the dev server to every network interface,
+not just loopback, and serves over HTTPS with an auto-generated
+self-signed cert (required for `navigator.clipboard.writeText()`, used by
+"🔗 Share Check-in Link", which browsers only allow in a secure context or
+on `localhost` itself — plain HTTP would silently break that one feature
+over LAN). Can't run alongside a plain `ng serve` on the same port; stop
+one before starting the other. `firebase.json`'s
+`emulators.firestore`/`auth`/`ui` entries all set `"host": "0.0.0.0"` for
+the same reason — a Firestore/Auth emulator bound to `127.0.0.1` only
+accepts connections *from that same machine*, which a phone isn't.
+
+**A real gotcha this setup hit, worth knowing about**: neither `start` nor
+`serve:mobile` in `package.json` used to pin `--port 4300` at all — plain
+`ng serve` silently falls back to Angular's own default, **4200**, not the
+4300 every route in this file (and `.claude/launch.json`, used by AI
+coding tools' own browser-preview tooling) assumes. This went unnoticed
+because `.claude/launch.json` passes `--port 4300` explicitly, so anything
+using that config (an AI assistant's own browser testing, say) always saw
+4300 and never hit the mismatch — a real terminal running plain `npm start`
+was quietly on 4200 the whole time, invisible until someone actually tried
+to reach it by a documented "4300" URL from a second device and it simply
+didn't respond. Both scripts now hardcode `--port 4300` explicitly so this
+can't silently drift again — if either ever needs a different port,
+change it in **both** `package.json` and `.claude/launch.json` together,
+not just one.
+
+**A real gotcha this setup hit**: `environment.ts`/`environment.production.ts`
+used to hardcode `firestoreEmulatorHost`/`authEmulatorHost` to `'127.0.0.1'`
+— works fine from this machine's own browser, but once the JS bundle loads
+on a *different* device, `127.0.0.1` inside that bundle means "loopback on
+the phone", not "this dev machine" — the page would load (served fine by
+`ng serve`) but every Firestore/Auth call would silently fail, since the
+phone would be trying to reach emulators running on itself. Both files now
+derive the emulator host from `window.location.hostname` instead — whatever
+host the browser actually used to load the page (`localhost` locally, the
+LAN IP like `192.168.x.x` from another device) is the same machine running
+the emulators either way, so this one change works for both cases with no
+separate "LAN mode" flag. Find this machine's LAN IP with `hostname -I` (or
+`ip -4 addr show`) to know what to type into the phone's browser (e.g.
+`https://192.168.x.x:4300`) — the self-signed cert will trigger a browser
+warning ("connection is not private"); that's expected, proceed through it.
+Both devices must be on the same LAN/Wi-Fi network for any of this to work.

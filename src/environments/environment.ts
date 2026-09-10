@@ -4,6 +4,21 @@
  * Firebase project exists yet, so `firebase.projectId` just needs to match `.firebaserc`
  * and `firebase.json`'s emulator config, not a real cloud project.
  */
+
+// The emulator host is derived from whatever host the browser actually used
+// to load this app, not hardcoded to '127.0.0.1' — that only ever means
+// "the emulator, from this same machine's dev session". Reached from a
+// phone over LAN (`npm run serve:mobile`, which serves on the machine's LAN
+// IP), '127.0.0.1' would resolve to the PHONE itself, not this machine, and
+// every Firestore/Auth call would silently fail even though the page loads
+// fine. `window.location.hostname` is 'localhost' for a normal `ng serve`
+// session and the LAN IP (e.g. 192.168.x.x) when opened from another
+// device — either way it's the same machine running the emulators, reached
+// however the browser itself got here. Falls back to '127.0.0.1' when
+// `window` doesn't exist yet (this module can be evaluated during a
+// server-side/build-time context before a browser is involved).
+const emulatorHost = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+
 export const environment = {
   firebase: {
     projectId: 'meeting-agenda-generator',
@@ -14,9 +29,9 @@ export const environment = {
     apiKey: 'emulator-placeholder-api-key',
   },
   useFirestoreEmulator: true,
-  firestoreEmulatorHost: '127.0.0.1',
+  firestoreEmulatorHost: emulatorHost,
   firestoreEmulatorPort: 8080, // must match firebase.json's emulators.firestore.port
   useAuthEmulator: true,
-  authEmulatorHost: '127.0.0.1',
+  authEmulatorHost: emulatorHost,
   authEmulatorPort: 9099, // must match firebase.json's emulators.auth.port
 };

@@ -29,6 +29,20 @@ export class LoginComponent {
   resetMessage: string | null = null;
   resetError: string | null = null;
 
+  /** True when `email` was seeded from a `?email=` query param (the check-in
+   *  guest gate redirects here when the typed email already has an account —
+   *  see CheckinComponent.identifyAsGuest()) — drives a small explanatory
+   *  banner so the redirect doesn't feel unexplained. */
+  prefilledFromCheckin = false;
+
+  constructor() {
+    const email = this.route.snapshot.queryParamMap.get('email');
+    if (email) {
+      this.email = email;
+      this.prefilledFromCheckin = true;
+    }
+  }
+
   /** Admin-only nav links (Agenda Editor, Manage Roles) only appear for actual admins — /login is reachable by anyone, including an already-signed-in non-admin member. */
   get navLinks(): NavLink[] {
     const links: NavLink[] = [{ label: '👁 Preview Agenda', path: '/preview' }];
@@ -70,6 +84,10 @@ export class LoginComponent {
     this.resetError = null;
   }
 
+  // Unlike sendReset() below, CheckinComponent's guest-email gate DOES
+  // reveal account existence via AuthService.hasAccount() before ever
+  // reaching this page — a deliberate, narrower exception to the
+  // anti-enumeration posture sendReset() otherwise maintains. See CLAUDE.md.
   async sendReset() {
     this.resetError = null;
     this.resetMessage = null;

@@ -1,6 +1,6 @@
 import { Component, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CheckinStateService } from '../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../services/attendance-confirmation.service';
 import { AttendanceListComponent } from '../components/attendance-list/attendance-list.component';
@@ -30,6 +30,7 @@ export class CheckinComponent {
   private readonly auth = inject(AuthService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   nameInput = '';
   checkInError: string | null = null;
   meetingId: string;
@@ -101,15 +102,29 @@ export class CheckinComponent {
     return !this.state.isGuestIdentified();
   }
 
+  /**
+   * Before establishing an anonymous guest identity, checks whether the
+   * typed email already belongs to a real account (member or admin) via
+   * AuthService.hasAccount() — if so, redirects to /login with the email
+   * pre-filled and this page as returnUrl, rather than creating a
+   * disconnected guest identity for someone who already has a real
+   * account. See CLAUDE.md for the deliberate anti-enumeration tradeoff
+   * this accepts.
+   */
   async identifyAsGuest() {
     this.guestEmailError = null;
-    if (!this.guestEmailInput.trim()) {
+    const email = this.guestEmailInput.trim();
+    if (!email) {
       this.guestEmailError = 'Enter your email.';
       return;
     }
     this.guestIdentifying = true;
     try {
-      const ok = await this.state.identifyAsGuest(this.guestEmailInput);
+      if (await this.auth.hasAccount(email)) {
+        this.router.navigate(['/login'], { queryParams: { email, returnUrl: this.router.url } });
+        return;
+      }
+      const ok = await this.state.identifyAsGuest(email);
       if (!ok) this.guestEmailError = 'Enter a valid email address.';
     } finally {
       this.guestIdentifying = false;

@@ -9,6 +9,11 @@
     </div>
 
     @if (mode === 'signIn') {
+      @if (prefilledFromCheckin) {
+        <div class="alert alert-info py-1 px-2 small mb-3">
+          This email is linked to an existing account — sign in to continue to check-in.
+        </div>
+      }
       <div class="mb-2">
         <label class="form-label small mb-1">Email</label>
         <input class="form-control form-control-sm" type="email" [(ngModel)]="email" name="email"
