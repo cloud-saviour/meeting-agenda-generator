@@ -4,7 +4,7 @@
   @if (speakers.length) {
     @for (s of speakers; track s.id) {
       <div class="card bg-body-tertiary p-2 mb-2">
-        <div class="d-flex justify-content-between align-items-center mb-1">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-1">
           <span class="fw-bold small">{{ s.name }}@if (isMine(s.uid)) { <span class="badge bg-warning-subtle text-warning-emphasis ms-1">You</span> }</span>
           <div class="d-flex align-items-center gap-1">
             @if (auth.isAdmin()) {
@@ -44,14 +44,16 @@
           <input class="form-control form-control-sm" type="text" [(ngModel)]="level" name="level" placeholder="e.g. CC5">
         </div>
         <div class="col-6">
-          <label class="form-label small mb-1">Time Preference</label>
-          <select class="form-select form-select-sm" [(ngModel)]="timePref" name="timePref">
-            <option value="5-7">5–7 mins</option>
-            <option value="7-10">7–10 mins</option>
-          </select>
+          <label class="form-label small mb-1">Time (mins)</label>
+          <div class="input-group input-group-sm">
+            <input class="form-control" type="number" min="1" max="60" [(ngModel)]="timeLo" name="timeLo" (ngModelChange)="onTimeLoChange()">
+            <span class="input-group-text">–</span>
+            <input class="form-control" type="number" min="1" max="60" [(ngModel)]="timeHi" name="timeHi" (ngModelChange)="onTimeHiChange()">
+          </div>
         </div>
       </div>
-      <button class="btn btn-danger btn-sm" (click)="submit()">+ Sign Up to Speak</button>
+      <button class="btn btn-danger btn-sm" [disabled]="!state.currentName()"
+        [title]="!state.currentName() ? 'Check in with your name first' : ''" (click)="submit()">+ Sign Up to Speak</button>
     </div>
   } @else if (isFull && !alreadySignedUp) {
     <div class="text-muted small mt-2">All speaker slots for this meeting are taken.</div>

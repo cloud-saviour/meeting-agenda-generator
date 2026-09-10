@@ -17,7 +17,15 @@ export class SpeakerSignupComponent {
 
   title = '';
   level = '';
-  timePref: '5-7' | '7-10' = '7-10';
+  /**
+   * Free-form min/max, matching the Agenda Editor's own "Time (mins)"
+   * input-group exactly (speakers-form.component.html) — this used to be a
+   * fixed 5-7/7-10 dropdown, the only two choices available. Defaults
+   * (7-10) match AgendaStateService.addSpeaker()'s own defaults for a new
+   * speaker.
+   */
+  timeLo = 7;
+  timeHi = 10;
   error: string | null = null;
   private readonly pendingSpeechConfirm = new Set<string>();
 
@@ -46,7 +54,7 @@ export class SpeakerSignupComponent {
     const ok = await this.state.addSpeakerSignup({
       title: this.title,
       level: this.level,
-      timePref: this.timePref,
+      timePref: `${this.timeLo}-${this.timeHi}`,
     });
     if (!ok) {
       this.error = this.isFull ? 'All speaker slots are full.' : 'You already signed up to speak.';
@@ -54,6 +62,15 @@ export class SpeakerSignupComponent {
     }
     this.title = '';
     this.level = '';
+  }
+
+  /** Mirrors AgendaStateService.updateSpeaker()'s own timeLo<=timeHi enforcement, for the same input-group UI. */
+  onTimeLoChange() {
+    if (this.timeLo > this.timeHi) this.timeHi = this.timeLo;
+  }
+
+  onTimeHiChange() {
+    if (this.timeHi < this.timeLo) this.timeLo = this.timeHi;
   }
 
   remove(id: string) {

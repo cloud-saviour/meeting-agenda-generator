@@ -28,7 +28,21 @@ export class NavbarComponent {
    * and login.component.ts's navLinks getters for the pattern.
    */
   @Input() links: NavLink[] = [];
-  /** checkin/admin-roles use position:fixed; agenda-editor's flex shell doesn't. */
+  /**
+   * checkin/admin-roles/etc. use `position:sticky` (Bootstrap's `.sticky-top`)
+   * so the nav stays pinned to the top of the viewport; agenda-editor's flex
+   * shell doesn't need this, since its own `vh-100`/`flex-shrink-0` layout
+   * already keeps the nav in place. Deliberately `sticky`, not `fixed`: a
+   * fixed nav is removed from document flow entirely, which is why this
+   * used to require every consuming page to hardcode a matching
+   * `margin-top`/`padding-top` guessing the nav's rendered height — that
+   * guess broke the moment the nav wrapped to more than one row (e.g. an
+   * admin's extra nav links on a narrow phone screen), silently hiding
+   * whatever content sat right below it. `sticky` keeps the nav in normal
+   * document flow — it still reserves its own real height, so content
+   * after it is pushed down by whatever that height actually is, with no
+   * hardcoded offset needed anywhere. See CLAUDE.md.
+   */
   @Input() fixed = false;
   /** agenda-editor only, for its existing d-print-none behavior. */
   @Input() printHidden = false;

@@ -63,7 +63,31 @@ src/app/
                 happens to have those open while signed in. Deliberately
                 gated on currentUser(), not isAdmin() — Sign Out should still
                 appear for a signed-in-but-non-admin account, since they need
-                a way out too. Home has no navbar
+                a way out too. Home has no navbar.
+
+                **`[fixed]="true"` uses `position: sticky` (Bootstrap's
+                `.sticky-top`), not `position: fixed`.** It used to be
+                `fixed`, which removes the nav from document flow entirely
+                — every one of the ~9 consuming pages had to hardcode a
+                matching `margin-top`/`padding-top` (64px/80px/96px,
+                whichever the page happened to need) on its own content to
+                avoid the nav covering it. That broke for real the moment
+                the nav's own row of links wrapped to more than one line —
+                e.g. an admin's extra nav links (Agenda Editor, Manage
+                Roles, Sign Out, ...) not fitting on one row at phone
+                width — since the hardcoded offset only ever accounted for
+                a single-row nav height. The nav would then render taller
+                than the page's guessed offset and silently cover whatever
+                content sat right below it (caught on `/checkin`: the
+                meeting-info card's top was hidden behind the nav).
+                `sticky` keeps the nav in normal document flow — content
+                after it is pushed down by whatever the nav's real
+                rendered height is, at any width, with nothing to keep in
+                sync. Every consuming page's hardcoded top offset was
+                removed for the same reason (a couple of hub pages kept a
+                small intentional `margin-top` for visual breathing room
+                beyond mere nav-clearance, just shrunk down since clearing
+                the nav itself is no longer their job).
 
   features/
     agenda-editor/    Route "/admin" — the agenda-building tool
