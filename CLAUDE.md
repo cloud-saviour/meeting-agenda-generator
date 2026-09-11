@@ -63,7 +63,31 @@ src/app/
                 happens to have those open while signed in. Deliberately
                 gated on currentUser(), not isAdmin() — Sign Out should still
                 appear for a signed-in-but-non-admin account, since they need
-                a way out too. Home has no navbar
+                a way out too. Home has no navbar.
+
+                **`[fixed]="true"` uses `position: sticky` (Bootstrap's
+                `.sticky-top`), not `position: fixed`.** It used to be
+                `fixed`, which removes the nav from document flow entirely
+                — every one of the ~9 consuming pages had to hardcode a
+                matching `margin-top`/`padding-top` (64px/80px/96px,
+                whichever the page happened to need) on its own content to
+                avoid the nav covering it. That broke for real the moment
+                the nav's own row of links wrapped to more than one line —
+                e.g. an admin's extra nav links (Agenda Editor, Manage
+                Roles, Sign Out, ...) not fitting on one row at phone
+                width — since the hardcoded offset only ever accounted for
+                a single-row nav height. The nav would then render taller
+                than the page's guessed offset and silently cover whatever
+                content sat right below it (caught on `/checkin`: the
+                meeting-info card's top was hidden behind the nav).
+                `sticky` keeps the nav in normal document flow — content
+                after it is pushed down by whatever the nav's real
+                rendered height is, at any width, with nothing to keep in
+                sync. Every consuming page's hardcoded top offset was
+                removed for the same reason (a couple of hub pages kept a
+                small intentional `margin-top` for visual breathing room
+                beyond mere nav-clearance, just shrunk down since clearing
+                the nav itself is no longer their job).
 
   features/
     agenda-editor/    Route "/admin" — the agenda-building tool
@@ -210,30 +234,23 @@ src/app/
                       `AuthService.signOut()` directly rather than
                       navigating — Home is otherwise the one page with no
                       other way to sign out.
-                      The "Meeting Check-in" tile is always shown — it was
-                      briefly gated on a meeting being currently published
-                      (`PublishedAgendaService.nearestEntry()` non-null),
-                      but that hid the app's only anonymous, no-session
-                      check-in entry point whenever nothing happened to be
-                      published, which defeats check-in's own
-                      anonymous-by-design intent (see Authentication below);
-                      reverted back to unconditional. It's the one
-                      non-admin, no-session entry point into check-in, so it
-                      can't rely on AgendaStateService (nothing's been
-                      loaded yet) — it links to
-                      `PublishedAgendaService.nearestEntry()` when non-null
-                      (heading becomes "Meeting #<no> Check-in", using the
-                      app's `#<no>` convention, see checkin.component.html)
-                      or degrades to a bare `/checkin` link with a generic
-                      "Meeting Check-in" heading otherwise. Whenever nobody
-                      is signed in, `checkinTileHeading()` appends
-                      " As Guest" to whichever of those two headings
-                      applies, so an anonymous visitor knows up front
-                      they're checking in as a guest, not their own account.
-                      `tileCount()` drives the grid's column count
-                      accordingly: `(isAdmin()?2:1) + 1 + (isSignedIn()?1:0)`
-                      — the middle `+1` is the Meeting Check-in tile,
-                      unconditional. Every other check-in link in the app
+                      The "Meeting Check-in" tile only appears when
+                      `PublishedAgendaService.nearestEntry()` is non-null —
+                      omitted entirely (not shown-disabled) when nothing's
+                      currently published, since there's nothing for a
+                      visitor to check into yet. It's the one non-admin,
+                      no-session entry point into check-in, so it can't
+                      rely on AgendaStateService (nothing's been loaded
+                      yet) — when shown, the heading reads "Meeting #<no>
+                      Check-in", using the app's `#<no>` convention (see
+                      checkin.component.html), with an inline
+                      `isSignedIn() ? '' : ' As Guest'` suffix so an
+                      anonymous visitor knows up front they're checking in
+                      as a guest, not their own account. `tileCount()`
+                      drives the grid's column count accordingly:
+                      `(isAdmin()?2:1) + (nextMeeting()?1:0) + (isSignedIn()?1:0)`
+                      — the middle term only counts the Meeting Check-in
+                      tile when it's actually rendered. Every other check-in link in the app
                       (editor navbar, admin-roles/-hub/-agendas navbars)
                       DOES have an admin session, so those pass
                       `queryParams: { meeting: state.meeting().no } }`
@@ -929,17 +946,44 @@ dashboard), `http://localhost:4300/admin` (agenda editor),
 (manage role definitions).
 
 **Reaching the app from a phone or another device on the same LAN**:
-`npm run serve:mobile` (`ng serve --host 0.0.0.0 --ssl --port 4300`)
-instead of `npm start` — binds the dev server to every network interface,
-not just loopback, and serves over HTTPS with an auto-generated
-self-signed cert (required for `navigator.clipboard.writeText()`, used by
-"🔗 Share Check-in Link", which browsers only allow in a secure context or
-on `localhost` itself — plain HTTP would silently break that one feature
-over LAN). Can't run alongside a plain `ng serve` on the same port; stop
-one before starting the other. `firebase.json`'s
+`npm run serve:mobile` (`ng serve --host 0.0.0.0 --port 4300`) instead of
+`npm start` — binds the dev server to every network interface, not just
+loopback. Plain HTTP, deliberately — see the mixed-content gotcha below
+for why this can't be HTTPS. Can't run alongside a plain `ng serve` on the
+same port; stop one before starting the other. `firebase.json`'s
 `emulators.firestore`/`auth`/`ui` entries all set `"host": "0.0.0.0"` for
 the same reason — a Firestore/Auth emulator bound to `127.0.0.1` only
 accepts connections *from that same machine*, which a phone isn't.
+
+**A real gotcha this setup hit — HTTPS + HTTP-only emulators = mixed
+content, breaking sign-in/sign-up/check-in on a phone**: `serve:mobile`
+briefly ran with `--ssl` (an auto-generated self-signed cert), specifically
+because `navigator.clipboard.writeText()` (`🔗 Share Check-in Link`, in
+`agenda-editor.component.ts`) only works in a secure context, and Safari on
+a phone treats a plain `http://192.168.x.x` LAN address as insecure. That
+broke everything else instead: neither the Firestore emulator nor the Auth
+emulator supports TLS, so `auth.provider.ts`/`firestore.provider.ts` always
+connect to them over plain HTTP — once the *app itself* loaded over HTTPS,
+every one of those HTTP calls became mixed active content, which mobile
+Safari blocks outright. Two concrete symptoms this produced, both traced
+back to the same root cause: sign-in/sign-up failed with a generic network
+error (the blocked Auth REST calls), and `HomeComponent`'s "Meeting
+Check-in" tile disappeared entirely — not disabled, gone — because it's
+coded to omit itself whenever `PublishedAgendaService.nearestEntry()` is
+null, and that Firestore read was blocked too, so it never resolved.
+Fixed by dropping `--ssl` from `serve:mobile` again — the whole chain (app,
+Firestore, Auth) is HTTP-to-HTTP over LAN now, same as `npm start` locally,
+so nothing is mixed content. `copyCheckinLink()` no longer assumes
+`navigator.clipboard` is available: it tries the Clipboard API first (works
+over `npm start`'s `localhost`, or any future real HTTPS deployment), and
+falls back to the legacy `document.execCommand('copy')` path — a
+synchronous, user-gesture-triggered DOM operation that doesn't require a
+secure context — before finally falling back to the existing "here's the
+link, copy it yourself" alert if both fail. An HTTPS-everywhere fix (a
+TLS-terminating proxy in front of the emulator ports too) was considered
+and rejected as unnecessary local-only tooling for a dev convenience
+feature — not worth it against "sign-in and check-in are completely broken
+on a phone."
 
 **A real gotcha this setup hit, worth knowing about**: neither `start` nor
 `serve:mobile` in `package.json` used to pin `--port 4300` at all — plain
@@ -969,6 +1013,6 @@ LAN IP like `192.168.x.x` from another device) is the same machine running
 the emulators either way, so this one change works for both cases with no
 separate "LAN mode" flag. Find this machine's LAN IP with `hostname -I` (or
 `ip -4 addr show`) to know what to type into the phone's browser (e.g.
-`https://192.168.x.x:4300`) — the self-signed cert will trigger a browser
-warning ("connection is not private"); that's expected, proceed through it.
-Both devices must be on the same LAN/Wi-Fi network for any of this to work.
+`http://192.168.x.x:4300` — plain HTTP, see the mixed-content gotcha
+above). Both devices must be on the same LAN/Wi-Fi network for any of this
+to work.

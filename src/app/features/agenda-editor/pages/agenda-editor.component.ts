@@ -304,13 +304,49 @@ export class AgendaEditorComponent {
     if (!meetingNo) return;
     const tree = this.router.createUrlTree(['/checkin'], { queryParams: { meeting: meetingNo } });
     const url = window.location.origin + this.router.serializeUrl(tree);
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await this.copyToClipboard(url)) {
       this.linkCopied = true;
       setTimeout(() => (this.linkCopied = false), 2000);
+    } else {
+      alert('Could not copy automatically — here is the check-in link:\n' + url);
+    }
+  }
+
+  /**
+   * navigator.clipboard requires a secure context (HTTPS or localhost) — the
+   * LAN dev server (`npm run serve:mobile`) is plain HTTP, since the Firebase
+   * emulators themselves are HTTP-only and an HTTPS page calling them is
+   * mixed content that mobile Safari blocks outright (see CLAUDE.md's LAN-
+   * access section) — so that API is unavailable when reached from a phone.
+   * Falls back to the legacy execCommand('copy') path, which works in an
+   * insecure context because it's a synchronous, user-gesture-triggered DOM
+   * operation rather than an async permission-gated one. Returns false
+   * (never throws) if both paths fail, so the caller can show the
+   * manual-copy alert as a last resort.
+   */
+  private async copyToClipboard(text: string): Promise<boolean> {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      return document.execCommand('copy');
     } catch (err) {
       console.error(err);
-      alert('Could not copy automatically — here is the check-in link:\n' + url);
+      return false;
+    } finally {
+      document.body.removeChild(textarea);
     }
   }
 

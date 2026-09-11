@@ -1,10 +1,18 @@
-// One-time dev bootstrap: populates the Firestore emulator's roleDefinitions
-// and committeeRoleDefinitions collections with this club's standard role
-// list. Run with `npm run seed:roles` against a running emulator
-// (`npm run emulators`). Safe to re-run — skips any collection that already
-// has documents, so it never clobbers roles you've since edited via the
-// admin UI. This is the only place these role lists exist now; the app
-// itself has no hardcoded fallback.
+// One-time bootstrap: populates the roleDefinitions and
+// committeeRoleDefinitions collections with this club's standard role
+// list. Two modes:
+//
+//   npm run seed:roles        — local emulator (default).
+//   npm run seed:roles:prod   — the real project (agenda-planner-101c4),
+//                                via Application Default Credentials (set
+//                                GOOGLE_APPLICATION_CREDENTIALS to the
+//                                downloaded service-account key JSON
+//                                first — never commit that file).
+//
+// Safe to re-run in either mode — skips any collection that already has
+// documents, so it never clobbers roles you've since edited via the admin
+// UI. This is the only place these role lists exist now; the app itself
+// has no hardcoded fallback.
 //
 // Uses firebase-admin, not the client SDK — firestore.rules requires
 // isAdmin() to write these collections (see scripts/seed-admin-user.mjs),
@@ -14,7 +22,13 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+const isProd = process.argv.includes('--prod');
+
+if (!isProd) {
+  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+}
+
+const PROJECT_ID = isProd ? 'agenda-planner-101c4' : 'meeting-agenda-generator';
 
 const MEETING_ROLES = [
   { id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true },
@@ -52,7 +66,7 @@ async function seedCollection(firestore, collectionName, roles) {
 }
 
 async function main() {
-  const app = initializeApp({ projectId: 'meeting-agenda-generator' });
+  const app = initializeApp({ projectId: PROJECT_ID });
   const firestore = getFirestore(app);
 
   await seedCollection(firestore, 'roleDefinitions', MEETING_ROLES);

@@ -11,6 +11,7 @@ import { CommitteeRoleDefinitionService } from '../../services/committee-role-de
   standalone: true,
   imports: [DragDropModule, NgClass],
   templateUrl: './agenda-items.component.html',
+  styleUrl: './agenda-items.component.css',
 })
 export class AgendaItemsComponent {
   readonly state = inject(AgendaStateService);
