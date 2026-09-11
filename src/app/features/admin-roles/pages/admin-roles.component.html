@@ -1,11 +1,11 @@
 <app-navbar title="Manage Meeting Roles" [fixed]="true"
   [links]="[
-    { label: '📝 Agenda Editor', path: '/admin' },
-    { label: '👥 Check-in', path: '/checkin', queryParams: { meeting: state.meeting().no } },
+    { label: '📋 My Agendas', path: '/admin/agendas' },
     { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
     { label: '🏠 Home', path: '/' }
   ]">
 </app-navbar>
+<input type="file" id="role-import-file" accept=".json" class="d-none" (change)="onImportJSON($event)">
 
 <div class="container py-4" style="max-width:760px;">
 
@@ -20,6 +20,10 @@
       <input class="form-control form-control-sm" type="text" [(ngModel)]="newDescription" name="newDescription" placeholder="Shown to admins only">
     </div>
     <button class="btn btn-danger btn-sm" (click)="create()">+ Add Role</button>
+    <div class="d-flex gap-2 mt-2">
+      <button class="btn btn-outline-secondary btn-sm" (click)="saveJSON()">&#128190; Export JSON</button>
+      <button class="btn btn-outline-secondary btn-sm" (click)="loadJSON()">&#128193; Import JSON</button>
+    </div>
   </div>
 
   <div class="card p-3 mb-3">

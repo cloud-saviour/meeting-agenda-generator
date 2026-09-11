@@ -184,4 +184,19 @@ describe('CommitteeRosterService (Firestore emulator)', () => {
     await waitFor(() => svcB.all().some((m) => m.roleId === 'president'));
     expect(svcB.all()[0].name).toBe('From A');
   });
+
+  it('replaceAll() overwrites the whole roster in one atomic write — for import, where the file is the new source of truth', async () => {
+    const service = createService();
+    await service.assign('president', 'Existing President', '', '');
+    await waitFor(() => service.all().length === 1);
+
+    await service.replaceAll([
+      { roleId: 'secretary', name: 'Imported Secretary', email: '', phone: '' },
+      { roleId: 'treasurer', name: 'Imported Treasurer', email: '', phone: '' },
+    ]);
+
+    await waitFor(() => service.all().length === 2);
+    expect(service.all().some((m) => m.roleId === 'president')).toBe(false);
+    expect(service.all().map((m) => m.roleId).sort()).toEqual(['secretary', 'treasurer']);
+  });
 });

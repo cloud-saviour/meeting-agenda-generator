@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommitteeRoleDefinitionService } from '../../agenda-editor/services/committee-role-definition.service';
 import { CommitteeRosterService } from '../../agenda-editor/services/committee-roster.service';
+import { CommitteeImportExportService } from '../services/committee-import-export.service';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
 /**
@@ -30,6 +31,7 @@ const PRINTED_ROLE_IDS = new Set([
 export class AdminCommitteeRolesComponent {
   readonly roleDefs = inject(CommitteeRoleDefinitionService);
   readonly roster = inject(CommitteeRosterService);
+  private readonly importExport = inject(CommitteeImportExportService);
 
   newLabel = '';
   newDescription = '';
@@ -142,5 +144,29 @@ export class AdminCommitteeRolesComponent {
     } finally {
       this.pendingRoles.delete(roleId);
     }
+  }
+
+  saveJSON() {
+    this.importExport.saveJSON();
+  }
+
+  loadJSON() {
+    document.getElementById('committee-import-file')?.click();
+  }
+
+  async onImportJSON(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const data = JSON.parse(ev.target!.result as string);
+        await this.importExport.loadSnapshot(data);
+      } catch (err) {
+        alert('Error loading JSON: ' + (err as Error).message);
+      }
+    };
+    reader.readAsText(file);
+    (event.target as HTMLInputElement).value = '';
   }
 }

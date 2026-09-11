@@ -131,4 +131,24 @@ describe('CommitteeRoleDefinitionService (Firestore emulator)', () => {
     await waitFor(() => service.all()[0]?.label === 'New Label');
     expect(service.all()[0].description).toBe('New description');
   });
+
+  it('setDefinition() creates a new role at the exact given id — for import, where stable ids must survive the round trip', async () => {
+    const service = createService();
+    await service.setDefinition({ id: 'president', label: 'President', order: 0, active: true });
+
+    await waitFor(() => service.all().some((r) => r.id === 'president'));
+    expect(service.all().find((r) => r.id === 'president')?.label).toBe('President');
+  });
+
+  it('setDefinition() overwrites an existing role at that id rather than duplicating it', async () => {
+    const service = createService();
+    await service.setDefinition({ id: 'president', label: 'Old Label', order: 0, active: true });
+    await waitFor(() => service.all().length === 1);
+
+    await service.setDefinition({ id: 'president', label: 'New Label', order: 2, active: false });
+
+    await waitFor(() => service.all()[0]?.label === 'New Label');
+    expect(service.all().length).toBe(1);
+    expect(service.all()[0].active).toBe(false);
+  });
 });

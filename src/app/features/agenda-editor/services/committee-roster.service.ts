@@ -80,6 +80,11 @@ export class CommitteeRosterService implements OnDestroy {
     return this.persist(this.roster().filter((m) => m.roleId !== roleId));
   }
 
+  /** Overwrites the whole roster in one atomic write — for JSON import, where the imported file is the new source of truth, not a merge into what's already there. */
+  replaceAll(members: CommitteeMember[]): Promise<void> {
+    return this.persist(members);
+  }
+
   private persist(members: CommitteeMember[]): Promise<void> {
     const payload: CommitteeRosterDoc = { members: JSON.parse(JSON.stringify(members)) };
     return setDoc(doc(this.firestore, COLLECTION, DOC_ID), payload).catch((err) => {

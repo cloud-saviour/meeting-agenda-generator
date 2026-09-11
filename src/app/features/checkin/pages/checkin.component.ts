@@ -131,16 +131,11 @@ export class CheckinComponent {
     }
   }
 
-  /** Admin-only nav links (Agenda Editor, Manage Roles) only appear for actual admins — /checkin is reachable by anonymous visitors and non-admin members alike. */
   get navLinks(): NavLink[] {
-    const links: NavLink[] = [
+    return [
       { label: '👁 Preview Agenda', path: '/preview', queryParams: { meeting: this.meetingId } },
+      { label: '🏠 Home', path: '/' },
     ];
-    if (this.auth.isAdmin()) {
-      links.push({ label: '📝 Agenda Editor', path: '/admin' }, { label: '⚙ Manage Roles', path: '/admin/manage-roles' });
-    }
-    links.push({ label: '🏠 Home', path: '/' });
-    return links;
   }
 
   get dateStr(): string {

@@ -67,6 +67,19 @@ export class CommitteeRoleDefinitionService implements OnDestroy {
     return role;
   }
 
+  /**
+   * Upserts a role at its exact given id, overwriting whatever's there —
+   * unlike create(), which always generates a fresh id. For JSON import: a
+   * restored role must land back on the same id it was exported with.
+   */
+  async setDefinition(role: RoleDefinition): Promise<void> {
+    const { id, ...data } = role;
+    await setDoc(doc(this.firestore, COLLECTION, id), data).catch((err) => {
+      console.error('committeeRoleDefinitions setDefinition failed', err);
+      throw err;
+    });
+  }
+
   async update(id: string, patch: Partial<Pick<RoleDefinition, 'label' | 'description'>>): Promise<void> {
     await updateDoc(doc(this.firestore, COLLECTION, id), patch).catch((err) =>
       console.error('committeeRoleDefinitions update failed', err)

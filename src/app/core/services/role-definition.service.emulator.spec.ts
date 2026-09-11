@@ -132,6 +132,27 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
     expect(service.all()[0].description).toBe('New description');
   });
 
+  it('setDefinition() creates a new role at the exact given id — for import, where stable ids must survive the round trip', async () => {
+    const service = createService();
+    await service.setDefinition({ id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true });
+
+    await waitFor(() => service.all().some((r) => r.id === 'toastmaster'));
+    expect(service.all().find((r) => r.id === 'toastmaster')?.label).toBe('Evening Chairman');
+  });
+
+  it('setDefinition() overwrites an existing role at that id rather than duplicating it', async () => {
+    const service = createService();
+    await service.setDefinition({ id: 'toastmaster', label: 'Old Label', order: 0, active: true });
+    await waitFor(() => service.all().length === 1);
+
+    await service.setDefinition({ id: 'toastmaster', label: 'New Label', order: 3, active: false });
+
+    await waitFor(() => service.all()[0]?.label === 'New Label');
+    expect(service.all().length).toBe(1);
+    expect(service.all()[0].order).toBe(3);
+    expect(service.all()[0].active).toBe(false);
+  });
+
   it('rejects writes from an authenticated uid with no admin custom claim — signed in alone is not enough', async () => {
     const nonAdminFirestore = testEnv
       .authenticatedContext('random-signed-up-uid')

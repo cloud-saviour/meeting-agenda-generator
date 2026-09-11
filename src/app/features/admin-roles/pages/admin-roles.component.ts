@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
-import { AgendaStateService } from '../../agenda-editor/services/agenda-state.service';
+import { RoleDefinitionImportExportService } from '../services/role-definition-import-export.service';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
 @Component({
@@ -12,7 +12,7 @@ import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 })
 export class AdminRolesComponent {
   readonly roleDefs = inject(RoleDefinitionService);
-  readonly state = inject(AgendaStateService);
+  private readonly importExport = inject(RoleDefinitionImportExportService);
 
   newLabel = '';
   newDescription = '';
@@ -59,5 +59,29 @@ export class AdminRolesComponent {
 
   restore(id: string) {
     this.roleDefs.restore(id);
+  }
+
+  saveJSON() {
+    this.importExport.saveJSON();
+  }
+
+  loadJSON() {
+    document.getElementById('role-import-file')?.click();
+  }
+
+  async onImportJSON(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const data = JSON.parse(ev.target!.result as string);
+        await this.importExport.loadSnapshot(data);
+      } catch (err) {
+        alert('Error loading JSON: ' + (err as Error).message);
+      }
+    };
+    reader.readAsText(file);
+    (event.target as HTMLInputElement).value = '';
   }
 }
