@@ -1,5 +1,16 @@
 {
   "projects": {
-    "default": "meeting-agenda-generator"
-  }
+    "default": "meeting-agenda-generator",
+    "production": "agenda-planner-101c4"
+  },
+  "targets": {
+    "agenda-planner-101c4": {
+      "hosting": {
+        "main": [
+          "agora-agenda-planner"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

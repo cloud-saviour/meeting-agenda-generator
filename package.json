@@ -1,6 +1,9 @@
 {
   "name": "meeting-agenda-generator",
   "version": "0.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "ng": "ng",
     "start": "ng serve --port 4300",
@@ -11,8 +14,12 @@
     "test:emulator": "ng run meeting-agenda-generator:test-emulator",
     "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit=./.emulator-data",
     "seed:roles": "node scripts/seed-role-definitions.mjs",
+    "seed:roles:prod": "node scripts/seed-role-definitions.mjs --prod",
     "seed:admin": "node scripts/seed-admin-user.mjs",
-    "seed:test-data": "node scripts/seed-test-data.mjs"
+    "seed:admin:prod": "node scripts/seed-admin-user.mjs --prod",
+    "seed:test-data": "node scripts/seed-test-data.mjs",
+    "deploy:rules": "firebase deploy --only firestore:rules --project production",
+    "deploy:hosting": "firebase deploy --only hosting:main --project production"
   },
   "prettier": {
     "printWidth": 100,
