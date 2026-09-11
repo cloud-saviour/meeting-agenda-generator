@@ -138,6 +138,27 @@ takes effect in a freshly issued ID token, so each person needs to sign
 out and back in (or wait for their session to silently refresh) before
 the app recognizes the change.
 
+### Creating member accounts on someone's behalf
+
+Normally people create their own account by visiting `/signup`. To
+provision accounts yourself instead — onboarding an existing roster
+without asking each person to sign up on their own — use
+`scripts/create-member-accounts.mjs`. Each person is `email:Display Name`
+(quote it so the space in the name stays one argument):
+
+```bash
+npm run create:members -- "a@example.com:Alice Smith" "b@example.com:Bob Jones"
+npm run create:members:prod -- "a@example.com:Alice Smith"
+```
+
+No real password is ever set, printed, or handled by you or the script —
+it creates the account with a random throwaway password internally (just
+to satisfy Firebase's API), then prints a password-reset link for each
+new person. You send that link to them (however you'd normally reach
+them) so **they** set their own real password. Re-running with an email
+that already has an account leaves it untouched (no new link, no
+overwritten profile) — safe to re-run over a growing list.
+
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
