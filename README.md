@@ -100,6 +100,44 @@ and a real admin account before the first deploy.
 use the [Console](https://console.firebase.google.com/project/agenda-planner-101c4/hosting/sites)
 to roll back to a previous release without needing to rebuild or redeploy.
 
+## Managing admin access
+
+Accounts are provisioned by self-service sign-up at `/signup` — nobody
+starts as an admin. To grant or remove admin access for one or more
+existing members, use `scripts/promote-to-admin.mjs`. It only ever sets
+the `admin` custom claim on their Firebase Auth account; it never
+creates or deletes an account, never touches their password, and never
+touches their `members/{uid}` profile in Firestore.
+
+```bash
+# one email
+npm run promote:admin -- their-email@example.com          # emulator
+npm run promote:admin:prod -- their-email@example.com      # real project
+
+# a list of emails, space-separated — each is processed independently
+npm run promote:admin -- a@example.com b@example.com c@example.com
+npm run promote:admin:prod -- a@example.com b@example.com c@example.com
+
+npm run revoke:admin -- their-email@example.com            # emulator
+npm run revoke:admin:prod -- their-email@example.com        # real project
+npm run revoke:admin -- a@example.com b@example.com c@example.com
+```
+
+The `--` before the email list is npm's own separator for "pass these
+through to the script" — it's required, not optional. Against `--prod`,
+set `GOOGLE_APPLICATION_CREDENTIALS` to a downloaded service-account key
+first (never commit that file).
+
+With a batch, one email that has no account (or otherwise fails) is
+reported and skipped — it doesn't stop the rest of the list — but the
+command still exits non-zero afterward if anything failed, so a script
+calling this can detect a partial failure. Both commands are safe to
+re-run: promoting an existing admin, or revoking someone who isn't one,
+just logs that there's nothing to do instead of erroring. A claim only
+takes effect in a freshly issued ID token, so each person needs to sign
+out and back in (or wait for their session to silently refresh) before
+the app recognizes the change.
+
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
