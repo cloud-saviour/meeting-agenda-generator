@@ -234,30 +234,23 @@ src/app/
                       `AuthService.signOut()` directly rather than
                       navigating — Home is otherwise the one page with no
                       other way to sign out.
-                      The "Meeting Check-in" tile is always shown — it was
-                      briefly gated on a meeting being currently published
-                      (`PublishedAgendaService.nearestEntry()` non-null),
-                      but that hid the app's only anonymous, no-session
-                      check-in entry point whenever nothing happened to be
-                      published, which defeats check-in's own
-                      anonymous-by-design intent (see Authentication below);
-                      reverted back to unconditional. It's the one
-                      non-admin, no-session entry point into check-in, so it
-                      can't rely on AgendaStateService (nothing's been
-                      loaded yet) — it links to
-                      `PublishedAgendaService.nearestEntry()` when non-null
-                      (heading becomes "Meeting #<no> Check-in", using the
-                      app's `#<no>` convention, see checkin.component.html)
-                      or degrades to a bare `/checkin` link with a generic
-                      "Meeting Check-in" heading otherwise. Whenever nobody
-                      is signed in, `checkinTileHeading()` appends
-                      " As Guest" to whichever of those two headings
-                      applies, so an anonymous visitor knows up front
-                      they're checking in as a guest, not their own account.
-                      `tileCount()` drives the grid's column count
-                      accordingly: `(isAdmin()?2:1) + 1 + (isSignedIn()?1:0)`
-                      — the middle `+1` is the Meeting Check-in tile,
-                      unconditional. Every other check-in link in the app
+                      The "Meeting Check-in" tile only appears when
+                      `PublishedAgendaService.nearestEntry()` is non-null —
+                      omitted entirely (not shown-disabled) when nothing's
+                      currently published, since there's nothing for a
+                      visitor to check into yet. It's the one non-admin,
+                      no-session entry point into check-in, so it can't
+                      rely on AgendaStateService (nothing's been loaded
+                      yet) — when shown, the heading reads "Meeting #<no>
+                      Check-in", using the app's `#<no>` convention (see
+                      checkin.component.html), with an inline
+                      `isSignedIn() ? '' : ' As Guest'` suffix so an
+                      anonymous visitor knows up front they're checking in
+                      as a guest, not their own account. `tileCount()`
+                      drives the grid's column count accordingly:
+                      `(isAdmin()?2:1) + (nextMeeting()?1:0) + (isSignedIn()?1:0)`
+                      — the middle term only counts the Meeting Check-in
+                      tile when it's actually rendered. Every other check-in link in the app
                       (editor navbar, admin-roles/-hub/-agendas navbars)
                       DOES have an admin session, so those pass
                       `queryParams: { meeting: state.meeting().no } }`
