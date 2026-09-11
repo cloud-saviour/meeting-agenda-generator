@@ -44,6 +44,9 @@ firestore-debug.log
 .cache/
 /.emulator-data/
 
+# Firebase CLI local deploy cache
+/.firebase/
+
 # System files
 .DS_Store
 Thumbs.db

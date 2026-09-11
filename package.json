@@ -18,6 +18,7 @@
     "seed:admin": "node scripts/seed-admin-user.mjs",
     "seed:admin:prod": "node scripts/seed-admin-user.mjs --prod",
     "seed:test-data": "node scripts/seed-test-data.mjs",
+    "deploy": "ng build --configuration production && firebase deploy --only hosting:main --project production",
     "deploy:rules": "firebase deploy --only firestore:rules --project production",
     "deploy:hosting": "firebase deploy --only hosting:main --project production"
   },
