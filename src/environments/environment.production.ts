@@ -8,7 +8,7 @@
 export const environment = {
   firebase: {
     apiKey: 'AIzaSyCpHVaAEbCDS6sFRXQcpCaVGT5bU_HtFHY',
-    authDomain: 'agenda-planner-101c4.firebaseapp.com',
+    authDomain: 'agora-agenda-planner.web.app',
     projectId: 'agenda-planner-101c4',
     storageBucket: 'agenda-planner-101c4.firebasestorage.app',
     messagingSenderId: '795918635364',

@@ -113,7 +113,11 @@ src/app/
                         default-agenda.ts, published-agenda.service.ts
                         (PublishedAgendaService — also Firestore-backed),
                         committee-roster.service.ts (CommitteeRosterService —
-                        also Firestore-backed), committee-role-definition.service.ts
+                        also Firestore-backed), committee-role-definition.service.ts,
+                        checkin-agenda-sync.service.ts
+                        (CheckinAgendaSyncService — the check-in → agenda
+                        merge, shared by the editor AND the /preview viewer,
+                        see "Check-in → agenda is automatic" below)
       models/          agenda.models.ts
       utils/           agenda-timeline.ts
 
@@ -383,6 +387,30 @@ creating a disconnected guest identity for someone who already has one —
 see `AuthService.hasAccount()` under Authentication below for the
 enumeration/real-Firebase-migration tradeoffs this accepts.
 
+**Taking part requires being checked in first.** `claimRole()`,
+`addSpeakerSignup()` and `claimEvaluatorSlot()` all reject anyone not
+present in `attendees` — checked inside each one's own `mutate()`
+transaction (via the private `isAttending(s)` helper) against the
+freshly-read snapshot, never against the `onSnapshot()`-driven
+`isCheckedIn()` signal, which lags and would let a member who withdrew on
+their phone still claim from a stale tab. The three boards also disable
+their Claim / Sign Up / Evaluate buttons and the page shows a prompt
+banner, but that's convenience — the transaction is the actual rule, same
+split as `lockedRoles`.
+
+These three guards used to check only `currentName()`, which **was a real
+hole**: a signed-in member or admin has `currentName` seeded from their
+Firebase `displayName` the moment the service constructs (see
+`syncIdentity()`), so they could claim roles and sign up to speak without
+ever tapping "I'm Attending" — only anonymous guests were actually gated,
+since their name is set by `checkIn()` itself. Releases
+(`releaseRole()`/`removeSpeakerSignup()`/`releaseEvaluatorSlot()`)
+deliberately carry **no** such guard: `uncheckIn()` already releases
+everything the person held, so requiring attendance to release would be
+both redundant and a trap. Covered by two regression tests in
+`checkin-state.service.emulator.spec.ts` — the signed-in-member case, and
+claiming again after `uncheckIn()`.
+
 A checked-in attendee (admin, member, or guest, on their own check-in only)
 can also mark themselves **Not Attending** — a `confirm()`-gated button
 next to "Update", since it's broader than a toggle:
@@ -430,7 +458,11 @@ started logging every call. Keeping a currently-published meeting's
 all — see "Saving used to be automatic" above; it's now part of the
 explicit Save button's own `save()` action instead.
 
-Check-in → editor is automatic, not a button: `AgendaEditorComponent`
+Check-in → agenda is automatic, not a button — and it applies on **both**
+the editor (`/admin`) and the read-only published-agenda viewer
+(`/preview`). The merge itself lives in one place,
+`CheckinAgendaSyncService.apply(meetingNo, state, checkin)`; both pages just
+call it from their own effects. `AgendaEditorComponent`
 calls `checkinState.loadMeeting(no)` (a) on load and whenever the meeting
 number field changes (an `effect()` over a `computed(() => state.meeting().no)`,
 so it only fires on an actual number change, not on every unrelated
@@ -464,9 +496,10 @@ verifying page-level effect wiring in the browser, not with a unit
 test), and keeps the agenda's own
 free-text `MeetingData.apologies` field synced with check-in's `apologies`
 list (populated by a member's Not Attending action, see above) in both
-directions: a name not yet present is appended (comma-split,
-case-insensitive comparison against whatever the admin has already typed,
-never rewriting the admin's own prose), and a name is removed again once
+directions: a name is appended **once, the first time that uid appears** in
+check-in's list (comma-split, case-insensitive comparison against whatever
+the admin has already typed, never rewriting the admin's own prose), and a
+name is removed again once
 its uid drops out of check-in's list (i.e. that person re-attended) —
 **but only if the agenda's text still holds exactly the token this sync
 itself added**, tracked per-uid in `MeetingData.apologySyncUids` (uid →
@@ -487,7 +520,25 @@ automatically, same as every other `MeetingData` field — never rendered
 anywhere (not in the meeting-form, DOCX, or preview), purely internal
 bookkeeping. A name the admin typed in by hand (or edited after the sync
 added it) is never touched by the retraction, since `apologySyncUids` only
-ever contains uids the sync itself added. This is still a heuristic over
+ever contains uids the sync itself added.
+
+**`apologySyncUids` is also what makes the field clearable** — the import
+skips any uid already in it, so once a person has been imported the text is
+the admin's to edit, including deleting a name or emptying the field
+outright. That's why the import is once-per-uid rather than the more
+obvious "append whenever the name isn't in the text": the latter meant
+clearing the Apologies field silently undid itself, because the very next
+sync (they fire on every check-in change) saw the name missing and put it
+straight back. Someone who apologizes *after* the admin clears is still
+imported normally — only already-seen uids are skipped. This is a
+deliberate difference from the role/person sync, which is intentionally
+always-on and does keep overwriting; apologies are free-form prose the
+admin composes, so a manual edit wins there. See
+`checkin-agenda-sync.service.spec.ts`, which pins down all of this
+(clear-stays-cleared, a later different person still imported, retraction,
+and re-apologizing after re-attending).
+
+This is still a heuristic over
 free text, not a structured list, so it has one accepted fragility: prose
 without commas (e.g. "Bob and Carol") won't register "Carol" as already
 present, so a later check-in apology from Carol could append a redundant
@@ -514,6 +565,36 @@ own phone reaches the admin's laptop live, no reload needed, because both
 sides are Firestore `onSnapshot()` listeners on the same document rather
 than a browser-local `storage` event. See Persistence below for the data
 model and what's still emulator-only.
+
+**`/preview` runs the same merge, which is what makes check-in activity
+visible to everyone else.** `publishedAgendas/{meetingId}` is frozen at
+publish time, so on its own the viewer would show whatever was published and
+nothing since — every role claim, signup and apology would stay invisible
+until an admin happened to reopen the Editor and hit Save. So
+`AgendaViewerComponent` also calls `checkinState.loadMeeting(meetingId)` and
+runs `CheckinAgendaSyncService.apply()` over the loaded snapshot, in two
+effects: one inside the `publishedAgenda.current()` effect (re-merging right
+after `loadSnapshot()`, which resets the agenda to exactly what was
+published and would otherwise discard the merge), and a second driven by
+check-in's own signals for live updates. The first is needed because
+nothing orders the two Firestore listeners — check-in data legitimately
+arrives either before or after the published snapshot — so waiting for
+check-in's *next* change could mean waiting forever.
+
+This is display-only: **nothing is written back to `publishedAgendas`**, which
+stays app-admin-write-only per `firestore.rules`. That's deliberate — a
+check-in client is usually anonymous, so letting check-in actions write the
+published document would mean opening an admin-controlled collection to
+public writes (or adding Cloud Functions, which this emulator-only project
+doesn't have). Reading `checkins/{meetingId}` needs no rule change: it's
+already public-read. The stored published document therefore still only
+changes when an admin re-publishes; what a viewer *sees* is the published
+snapshot plus live check-in merged on top.
+
+One inherited limitation, unchanged by this and shared with the editor: the
+speaker merge only adds and updates, never removes. A member who cancels a
+signup after it was imported stays on the agenda until an admin deletes the
+row by hand.
 
 ## Persistence — everything in Firestore, no localStorage
 
@@ -732,18 +813,64 @@ loaded, the entire premise of "the construction-time default needs
 correcting" is moot, so the reseed must never fire at all from that point
 on, regardless of what `ready()` does afterward.
 
-**Why emulator-only, not a real project:** no `firebase login`, no real
-Firebase/GCP project, no billing — `.firebaserc` uses project id
-`meeting-agenda-generator` purely as a label the local emulator answers to.
-`src/environments/environment.ts` and `environment.production.ts` currently
-hold **identical** values (same project id, `useFirestoreEmulator: true`,
-`127.0.0.1:8080`) — wired via `angular.json`'s `production` build
-configuration `fileReplacements`, so when a real project eventually exists,
-only `environment.production.ts`'s values need to change, no code changes.
-`src/app/core/firebase/firestore.provider.ts`'s `provideAppFirestore()`
-reads `environment.useFirestoreEmulator` to decide whether to call
-`connectFirestoreEmulator()` — the environments split is the source of
-truth, not `isDevMode()`.
+**Local dev is emulator-backed; production is a real Firebase project.**
+`.firebaserc` holds both: `default` = `meeting-agenda-generator`, which is
+*not* a real project at all — just a label the local emulator answers to —
+and `production` = `agenda-planner-101c4`, the real one, with hosting target
+`main` → site `agora-agenda-planner` (so the app is live at
+`https://agora-agenda-planner.web.app`). **Because `default` is the fake id,
+every `firebase` command aimed at production MUST pass `--project production`**
+— every `deploy:*` script in `package.json` already does; a bare
+`firebase deploy` would target a project that doesn't exist.
+
+`src/environments/environment.ts` (emulator: `useFirestoreEmulator`/
+`useAuthEmulator` true, hosts derived from `window.location.hostname`) and
+`environment.production.ts` (real project config, both emulator flags false)
+are swapped by `angular.json`'s `production` build configuration
+`fileReplacements`. `src/app/core/firebase/firestore.provider.ts`'s
+`provideAppFirestore()` reads `environment.useFirestoreEmulator` to decide
+whether to call `connectFirestoreEmulator()` — the environments split is the
+source of truth, not `isDevMode()`. The committed `apiKey` is not a secret
+(Firebase web API keys ship in the JS bundle by design); `firestore.rules` is
+what actually enforces access.
+
+**Deploying — use `npm run deploy:all` for a full deploy**:
+`ng build --configuration production && firebase deploy --only
+hosting:main,firestore:rules,firestore:indexes --project production` — build
+plus hosting plus rules plus indexes, in one command. The narrower scripts
+are all still there and unchanged, for when you knowingly want just one
+piece: `deploy` (build + hosting only), `deploy:hosting` (hosting only, no
+build), `deploy:rules` (rules only, no build).
+
+**Note that `deploy` is hosting-only, and that once caused a real production
+bug** — reach for `deploy:all` unless you specifically want otherwise. The
+`appAdmins`/`auditLog` work shipped via that hosting-only `deploy`, so the
+live rules still had no `auditLog` match at all while the newly-deployed
+bundle was already writing to it. A collection with no matching rule is
+deny-by-default, and `appendAuditEntry()` is always batched into the *same*
+`writeBatch()` as the change it audits — so the whole batch failed
+atomically and the Agenda Editor's Save button reported `FirebaseError:
+Missing or insufficient permissions` for a genuine admin, even though
+`savedAgendas`' own rule was perfectly correct. The misleading part is that
+the failing collection is never the one you're thinking about: the error
+names nothing, and `savedAgendas` looks innocent. **If a write that should
+be allowed returns "Missing or insufficient permissions", check whether
+every collection in that batch has a deployed rule before suspecting the
+caller's admin status.**
+
+**`authDomain` vs. the email action URL — two different settings.**
+`environment.production.ts`'s `authDomain` is `agora-agenda-planner.web.app`
+(not the default `agenda-planner-101c4.firebaseapp.com`) purely so users
+never see the raw project id during client-side auth redirects. It does
+**not** affect password-reset emails: those links are generated server-side
+by Firebase Auth, which never sees the client config, and use the project's
+*action URL* — configured in the Firebase Console under Authentication →
+Templates → (each template) → "Customize action URL", defaulting to
+`https://<projectId>.firebaseapp.com/__/auth/action`. Changing the link in
+reset emails is a Console change only; no code change will do it. Firebase
+Hosting auto-serves the `/__/auth/*` handler on every site in the project,
+and reserves `/__/*` ahead of rewrites, so `firebase.json`'s SPA catch-all
+(`**` → `/index.html`) doesn't shadow it.
 
 **Emulator data persists across restarts**: `npm run emulators` passes
 `--import=./.emulator-data --export-on-exit=./.emulator-data`, so stopping
@@ -800,13 +927,26 @@ action itself (see "Audit log" below). `/member` is gated by the
 separate `memberGuard` (`core/auth/member.guard.ts`) on `currentUser() !==
 null` alone — a member account never carries the admin claim (self-service
 sign-up can't grant one), so reusing `authGuard` there would wrongly reject
-every member. `/checkin` and `/preview` are still deliberately **not**
-guarded by either — check-in stays open to all three tiers: an anonymous
+every member. `/preview` uses that same `memberGuard`, for the same reason
+it isn't `authGuard`: a published agenda is for members to read, not only
+admins. It used to be unguarded, and was closed because the agenda exposes
+every role-holder's and speaker's name plus the committee footer's emails
+and phone numbers; `firestore.rules` locks `publishedAgendas` read to
+`request.auth != null` alongside it, since a route guard alone would leave
+the same data fetchable straight from the REST API (see Persistence above
+for the knock-on effects on Home's check-in tile and
+`PublishedAgendaService`'s listener).
+
+`/checkin` remains deliberately **unguarded** — it stays open to all three
+tiers: an anonymous
 visitor types a name+email (see "How anonymous identity works" under
 Persistence above), while a signed-in member or admin uses their real
 account instead (`CheckinStateService.currentUid` prefers
 `auth.currentUser()?.uid`, falling back to the anonymous email-hash only
-once signed out). Self-service member accounts were the "real
+once signed out). Closing `/preview` deliberately did **not** touch this —
+`checkins/**` stays fully public, and an anonymous guest still checks in,
+claims roles and signs up to speak exactly as before; they just can't read
+the assembled agenda. Self-service member accounts were the "real
 member-facing accounts" item this file used to list under Known gaps — they
 now exist alongside the admin-only auth and the anonymous check-in flow;
 multi-tenant support and paid subscriptions are still open (see Known gaps
@@ -1033,17 +1173,38 @@ exceptions that still check `isAdmin()` specifically:
   update/delete for anyone** — see "Audit log" above for why read stays
   real-claim-only even though any app-admin can create an entry (by
   performing the action it describes).
-- `roleDefinitions`, `committeeRoleDefinitions`, `committeeRoster`,
-  `publishedAgendas` — **public read, app-admin write**. All four are
+- `publishedAgendas` — **signed-in read (`request.auth != null`), app-admin
+  write**. The exception to the public-read group below: a published agenda
+  carries real personal information — every role-holder's and speaker's
+  name, plus the Executive Committee footer's emails and phone numbers — so
+  `/preview` is behind `memberGuard` and the rule enforces the same thing on
+  the data itself (a route guard alone would leave it fetchable straight from
+  the REST API). `request.auth != null`, not `isAppAdmin()`: ordinary members
+  are exactly who the page is for. Two knock-on effects, both deliberate:
+  `HomeComponent` can no longer read the collection when signed out, so a
+  signed-out visitor doesn't get the "Meeting Check-in" tile and reaches
+  check-in via the shared `/checkin?meeting=X` link instead (check-in itself
+  is untouched and still fully anonymous); and `PublishedAgendaService` opens
+  its collection listener **only while signed in** (an `effect()` over
+  `auth.currentUser()`, tearing the previous listener down first and clearing
+  `allEntries`/`snapshot` on sign-out) rather than unconditionally in its
+  constructor, so a signed-out visitor on the public Home route doesn't sit
+  retrying a read the rules now deny. `CheckinComponent` also hides its
+  "👁 Preview Agenda" nav link for anonymous visitors, since it would only
+  bounce them to `/login`.
+- `roleDefinitions`, `committeeRoleDefinitions`, `committeeRoster` —
+  **public read, app-admin write**. All three are
   public-read for a non-obvious reason worth remembering before tightening
   any of them further: every migrated Firestore-backed service subscribes
   via `onSnapshot()` **eagerly in its constructor**, so a collection is
   exposed to whoever the *service* is transitively injected by, not just
-  whoever the *page* visibly renders. `AgendaPreviewComponent` (used on the
-  public `/preview`) injects `AgendaStateService`, which itself injects
+  whoever the *page* visibly renders. `AgendaPreviewComponent` injects
+  `AgendaStateService`, which itself injects
   `CommitteeRosterService` — so `/preview` fires a live `committeeRoster`
   read on load even though nothing in `/preview`'s own template displays
-  roster data directly. `RoleDefinitionService` is the same story via
+  roster data directly (`/preview` is signed-in-only now, but `/checkin`
+  reaches the same service the same way and is not).
+  `RoleDefinitionService` is the same story via
   `RoleBoardComponent` on `/checkin`. Making any of these four admin-only
   would break the corresponding public page with a silent permission-denied,
   not a build error — trace real injection chains before ever tightening a
@@ -1151,19 +1312,20 @@ debug from the rendered output alone.
 
 ## Known gaps / next planned work
 
-1. Stand up a real Firebase project when ready to actually deploy —
-   currently emulator-only (see Persistence and Authentication above); this
-   needs `firebase login` and project creation. Security rules are already
-   scoped per-collection with real admin-write enforcement (see
-   Authentication above) — what's still missing is just a real project to
-   point them at. **Provisioning a production admin is one step harder than
-   it was under the old Firestore-doc allowlist**: creating the Firebase Auth
-   account is still a Console action, but the Console has no UI for setting
-   a custom claim — that step needs `scripts/seed-admin-user.mjs` (or
-   equivalent) run with real service-account credentials instead of pointed
-   at the emulator, since `setCustomUserClaims()` is Admin-SDK-only.
-   (`.emulator-data/` and the local `seed:admin` script cover dev/testing
-   only.)
+1. ~~Stand up a real Firebase project~~ — **done**: `agenda-planner-101c4`,
+   live at `https://agora-agenda-planner.web.app` (see Persistence above for
+   the environments/deploy split, and the warning that `npm run deploy` ships
+   hosting only, never rules). Still worth knowing: **provisioning a
+   production admin is one step harder than it was under the old
+   Firestore-doc allowlist** — the Console has no UI for setting a custom
+   claim, so `setCustomUserClaims()` must come from the Admin SDK via
+   `npm run promote:admin:prod -- someone@example.com` with
+   `GOOGLE_APPLICATION_CREDENTIALS` pointed at a downloaded service-account
+   key. A claim only lands in a *freshly issued* ID token, so the person must
+   sign out and back in before the app sees it. The in-app alternative that
+   avoids service-account keys entirely is granting `appAdmins/{uid}` from
+   `/admin/manage-admins` (live, no re-sign-in needed) — see "App-admin
+   grants" under Authentication.
 2. Multi-tenant support — multiple clubs under one deployment (separate
    rosters/roles/agendas) — plus admin-managed yearly subscriptions
    (manually flagged for now, modeled to slot in real payments later

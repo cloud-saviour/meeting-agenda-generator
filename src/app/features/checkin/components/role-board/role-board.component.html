@@ -23,8 +23,8 @@
           @if (isMine(def.id) || (auth.isAdmin() && isTaken(def.id))) {
             <button class="btn btn-outline-secondary btn-sm" (click)="release(def.id)">Release</button>
           } @else if (!isTaken(def.id)) {
-            <button class="btn btn-danger btn-sm" [disabled]="!state.currentName()"
-              [title]="!state.currentName() ? 'Check in with your name first' : ''" (click)="claim(def.id)">Claim</button>
+            <button class="btn btn-danger btn-sm" [disabled]="!state.isCheckedIn()"
+              [title]="attendanceTooltip" (click)="claim(def.id)">Claim</button>
           }
         }
         @if (auth.isAdmin() && roles[def.id]?.uid) {

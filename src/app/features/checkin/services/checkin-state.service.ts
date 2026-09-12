@@ -302,12 +302,27 @@ export class CheckinStateService implements OnDestroy {
     }).then(() => undefined);
   }
 
+  /**
+   * Taking part in the meeting — claiming a role, signing up to speak,
+   * evaluating someone — requires actually being checked in first. Read
+   * from the transaction's own freshly-read snapshot rather than from
+   * `isCheckedIn()`, which reads the `onSnapshot()`-driven signal and can
+   * lag: a member who withdrew on their phone could otherwise still claim
+   * from a stale tab. Same reasoning as `lockedRoles` being enforced here
+   * and not only in the UI — the boards disable these buttons too, but the
+   * button state is a convenience, this is the actual rule.
+   */
+  private isAttending(s: CheckinSnapshot): boolean {
+    return s.attendees.some((a) => a.uid === this.currentUid);
+  }
+
   // ── Roles: first-come locking ────────────────────────────────────────
-  /** Returns true if the claim succeeded, false if the role was already taken or is organizer-locked. */
+  /** Returns true if the claim succeeded, false if the caller isn't checked in, or the role was already taken or is organizer-locked. */
   claimRole(roleKey: string): Promise<boolean> {
     if (!this.currentName()) return Promise.resolve(false);
 
     return this.mutate((s) => {
+      if (!this.isAttending(s)) return { next: s, result: false };
       if (s.lockedRoles.includes(roleKey)) return { next: s, result: false };
       const existing = s.roles[roleKey];
       if (existing?.uid && existing.uid !== this.currentUid) return { next: s, result: false };
@@ -350,10 +365,12 @@ export class CheckinStateService implements OnDestroy {
   }
 
   // ── Speakers ──────────────────────────────────────────────────────────
+  /** Returns false if the caller isn't checked in, the slots are full, or they already signed up. */
   addSpeakerSignup(data: { title: string; level: string; timePref: string }): Promise<boolean> {
     if (!this.currentName()) return Promise.resolve(false);
 
     return this.mutate((s) => {
+      if (!this.isAttending(s)) return { next: s, result: false };
       if (s.speakers.length >= s.meeting.maxSpeakers) return { next: s, result: false };
       if (s.speakers.some((sp) => sp.uid === this.currentUid)) return { next: s, result: false };
 
@@ -381,10 +398,12 @@ export class CheckinStateService implements OnDestroy {
   }
 
   // ── Evaluators: one evaluation slot per speaker, one claim per member ──
+  /** Returns false if the caller isn't checked in, already evaluates another speech, or this is their own speech. */
   claimEvaluatorSlot(speakerId: string): Promise<boolean> {
     if (!this.currentName()) return Promise.resolve(false);
 
     return this.mutate((s) => {
+      if (!this.isAttending(s)) return { next: s, result: false };
       if (s.speakers.some((sp) => sp.evaluator?.uid === this.currentUid)) {
         return { next: s, result: false };
       }

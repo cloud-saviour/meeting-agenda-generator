@@ -131,11 +131,18 @@ export class CheckinComponent {
     }
   }
 
+  /**
+   * "Preview Agenda" only for a signed-in account — /preview is behind
+   * memberGuard (the agenda carries names and committee contact details), so
+   * showing it to an anonymous guest would just bounce them to /login.
+   */
   get navLinks(): NavLink[] {
-    return [
-      { label: '👁 Preview Agenda', path: '/preview', queryParams: { meeting: this.meetingId } },
-      { label: '🏠 Home', path: '/' },
-    ];
+    const links: NavLink[] = [];
+    if (this.auth.currentUser()) {
+      links.push({ label: '👁 Preview Agenda', path: '/preview', queryParams: { meeting: this.meetingId } });
+    }
+    links.push({ label: '🏠 Home', path: '/' });
+    return links;
   }
 
   get dateStr(): string {

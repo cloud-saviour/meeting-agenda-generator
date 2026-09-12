@@ -27,10 +27,16 @@ export class EvaluatorSlotsComponent {
     return speakerUid === this.state.currentUid;
   }
 
+  /** Explains the disabled Evaluate button. A getter, not an inline template expression —
+   *  the apostrophe in "I'm" can't survive Angular's template-expression parser. */
+  get attendanceTooltip(): string {
+    return this.state.isCheckedIn() ? '' : 'Tap "I\'m Attending" above first';
+  }
+
   async claim(speakerId: string) {
     this.error = null;
-    if (!this.state.currentName()) {
-      this.error = 'Check in with your name first.';
+    if (!this.state.isCheckedIn()) {
+      this.error = 'Tap "I\'m Attending" above before claiming an evaluation.';
       return;
     }
     const ok = await this.state.claimEvaluatorSlot(speakerId);

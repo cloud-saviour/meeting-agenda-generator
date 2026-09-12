@@ -5,6 +5,7 @@ import { AgendaImportExportService } from '../services/agenda-import-export.serv
 import { PublishedAgendaService } from '../services/published-agenda.service';
 import { SavedAgendaService } from '../services/saved-agenda.service';
 import { CheckinStateService } from '../../checkin/services/checkin-state.service';
+import { CheckinAgendaSyncService } from '../services/checkin-agenda-sync.service';
 import { DocxService } from '../services/docx.service';
 import { MeetingFormComponent } from '../components/meeting-form/meeting-form.component';
 import { AgendaItemsComponent } from '../components/agenda-items/agenda-items.component';
@@ -32,6 +33,7 @@ export class AgendaEditorComponent implements OnDestroy {
   private readonly publishedAgenda = inject(PublishedAgendaService);
   private readonly savedAgendas = inject(SavedAgendaService);
   private readonly checkinState = inject(CheckinStateService);
+  private readonly checkinSync = inject(CheckinAgendaSyncService);
   private readonly router = inject(Router);
 
   docxBusy = false;
@@ -47,13 +49,6 @@ export class AgendaEditorComponent implements OnDestroy {
   isDirty = false;
   saving = false;
   justSaved = false;
-
-  // Tracks, per roleId, the last name this component itself synced in from a
-  // check-in claim — lets a release be told apart from "never claimed" (both
-  // look like an empty claim otherwise), and lets a release clear the agenda
-  // ONLY when it still shows exactly what check-in put there, never a name
-  // the admin has since typed in by hand.
-  private readonly lastSyncedPersonByRole = new Map<string, string>();
 
   // The last snapshot JSON actually written via save() below (or, at
   // construction, whatever was already loaded — see the constructor) —
@@ -120,16 +115,15 @@ export class AgendaEditorComponent implements OnDestroy {
     // since it's real cross-device sync (see CLAUDE.md's Persistence section).
     effect(() => {
       // Only these three should drive this effect — everything
-      // `applyCheckinSnapshot()` reads/writes (spks, overriddenRoles,
-      // AgendaStateService's signals) must stay untracked, or the effect
-      // would re-trigger itself on every edit it makes, including ordinary
-      // manual admin edits.
+      // `CheckinAgendaSyncService.apply()` reads/writes (spks,
+      // overriddenRoles, AgendaStateService's signals) must stay untracked,
+      // or the effect would re-trigger itself on every edit it makes,
+      // including ordinary manual admin edits.
       this.checkinState.roles();
       this.checkinState.speakers();
       this.checkinState.apologies();
       untracked(() => {
-        if (!this.state.meeting().no) return;
-        this.applyCheckinSnapshot();
+        this.checkinSync.apply(this.state.meeting().no, this.state, this.checkinState);
       });
     });
 
@@ -260,124 +254,6 @@ export class AgendaEditorComponent implements OnDestroy {
     if (!meetingNo) return;
     this.checkinState.loadMeeting(meetingNo);
     this.checkinState.setRoleLocked(roleId, overridden);
-  }
-
-  /** Applies the currently-loaded checkinState snapshot onto the agenda — assumes checkinState.loadMeeting() already ran for the right meeting. */
-  private applyCheckinSnapshot() {
-    const overridden = this.state.overriddenRoles();
-    for (const [roleId, claim] of Object.entries(this.checkinState.roles())) {
-      if (overridden.has(roleId)) continue;
-      const name = claim?.name ?? '';
-      if (name) {
-        this.state.applyRolePerson(roleId, name);
-        this.lastSyncedPersonByRole.set(roleId, name);
-        continue;
-      }
-      const lastSynced = this.lastSyncedPersonByRole.get(roleId);
-      if (lastSynced !== undefined) {
-        if (this.state.getRolePerson(roleId) === lastSynced) {
-          this.state.applyRolePerson(roleId, '');
-        }
-        this.lastSyncedPersonByRole.delete(roleId);
-      }
-      // else: never synced and still empty — leave whatever's there alone.
-    }
-
-    // Keyed by name, not just a Set — an already-imported speaker still
-    // needs their evaluator field kept in sync below (a check-in evaluator
-    // claim/release almost always happens AFTER the speaker themselves was
-    // already imported, since evaluators claim a slot on an existing
-    // signup). A Set of names alone (the old shape here) could only ever
-    // tell "already imported" from "new", never re-sync anything for a
-    // speaker once imported — evaluator changes made after that point were
-    // silently dropped. See CLAUDE.md/feedback: role/person sync is
-    // intentionally always-on, not fill-blanks-only — the same principle
-    // applies here.
-    const spksByName = new Map(this.state.spks().map((s) => [s.name.trim().toLowerCase(), s]));
-    for (const sp of this.checkinState.speakers()) {
-      const key = sp.name.trim().toLowerCase();
-      if (!key) continue;
-      const checkinEvaluator = sp.evaluator?.name ?? '';
-
-      const existing = spksByName.get(key);
-      if (existing) {
-        if (existing.evaluator !== checkinEvaluator) {
-          this.state.updateSpeaker(existing.id, 'evaluator', checkinEvaluator);
-        }
-        continue;
-      }
-
-      const { timeLo, timeHi } = this.parseTimePref(sp.timePref);
-      this.state.addSpeaker({
-        name: sp.name,
-        title: sp.title,
-        level: sp.level,
-        evaluator: checkinEvaluator,
-        timeLo,
-        timeHi,
-      });
-    }
-
-    // Imports new check-in apology names (from uncheckIn()) into the
-    // agenda's own free-text apologies field — append-only, same
-    // dedup-by-name precedent as the speaker import above. This is a
-    // heuristic over free text, not a structured list: prose like "Bob and
-    // Carol" (no comma) won't register "Carol" as already present, so a
-    // later apology from Carol could append a redundant second "Carol" —
-    // an accepted fragility of keeping apologies a free-text field, not
-    // something this sync tries to solve.
-    //
-    // Also retracts a name once its uid drops out of checkinState.apologies()
-    // — i.e. they clicked "I'm Attending" again, which already removed them
-    // from check-in's own list — only removing the token if it still
-    // matches exactly what was synced in, never touching text the admin has
-    // since edited by hand. Unlike lastSyncedPersonByRole's in-memory-only
-    // tracking, which of these names were sync-added is tracked in
-    // `MeetingData.apologySyncUids` — part of the saved agenda itself, not
-    // just this component instance — specifically so a retraction still
-    // works after an Editor reload between "they apologized" and "they
-    // re-attended": an in-memory-only Map would start empty on the fresh
-    // instance and could never retract anything a PREVIOUS instance added.
-    let apologiesText = this.state.meeting().apologies;
-    const syncedUids: Record<string, string> = { ...(this.state.meeting().apologySyncUids ?? {}) };
-    const checkinApologies = this.checkinState.apologies();
-    const currentApologyUids = new Set(checkinApologies.map((a) => a.uid));
-
-    const existingApologyNames = new Set(
-      apologiesText.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
-    );
-    for (const a of checkinApologies) {
-      const name = a.name.trim();
-      if (!name) continue;
-      if (!existingApologyNames.has(name.toLowerCase())) {
-        apologiesText = [apologiesText, name].filter(Boolean).join(', ');
-        existingApologyNames.add(name.toLowerCase());
-      }
-      syncedUids[a.uid] = name;
-    }
-
-    for (const [uid, syncedName] of Object.entries(syncedUids)) {
-      if (currentApologyUids.has(uid)) continue;
-      const tokens = apologiesText.split(',').map((s) => s.trim());
-      const idx = tokens.findIndex((t) => t.toLowerCase() === syncedName.toLowerCase());
-      if (idx !== -1) {
-        tokens.splice(idx, 1);
-        apologiesText = tokens.filter(Boolean).join(', ');
-      }
-      delete syncedUids[uid];
-    }
-
-    if (
-      apologiesText !== this.state.meeting().apologies ||
-      JSON.stringify(syncedUids) !== JSON.stringify(this.state.meeting().apologySyncUids ?? {})
-    ) {
-      this.state.updateMeeting({ apologies: apologiesText, apologySyncUids: syncedUids });
-    }
-  }
-
-  private parseTimePref(pref: string): Partial<{ timeLo: number; timeHi: number }> {
-    const m = /^(\d+)\s*-\s*(\d+)$/.exec(pref?.trim() ?? '');
-    return m ? { timeLo: Number(m[1]), timeHi: Number(m[2]) } : {};
   }
 
   async copyCheckinLink() {

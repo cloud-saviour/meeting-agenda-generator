@@ -1,4 +1,4 @@
-import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, computed, effect, inject, signal, untracked } from '@angular/core';
 import { collection, doc, getDocFromServer, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 import { AgendaSnapshot } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
@@ -51,7 +51,7 @@ export class PublishedAgendaService implements OnDestroy {
   private readonly allEntries = signal<PublishedAgendaEntry[]>([]);
   private currentMeetingId: string | null = null;
   private unsubscribeMeeting: (() => void) | undefined;
-  private readonly unsubscribeIndex: () => void;
+  private unsubscribeIndex: (() => void) | undefined;
 
   readonly current = computed(() => this.snapshot());
 
@@ -75,25 +75,43 @@ export class PublishedAgendaService implements OnDestroy {
   });
 
   constructor() {
-    // Always-on, from construction — same pattern as RoleDefinitionService —
-    // since there's no "which meeting" context for Home's nearestEntry lookup.
-    this.unsubscribeIndex = onSnapshot(
-      collection(this.firestore, COLLECTION),
-      (snap) =>
-        this.zone.run(() => {
-          this.allEntries.set(
-            snap.docs.map((d) => {
-              const data = d.data() as PublishedAgendaDoc;
-              return { no: d.id, date: data.date, theme: data.theme, publishedAt: data.publishedAt };
-            })
-          );
-        }),
-      (err) => this.zone.run(() => console.error('publishedAgendas index listener failed', err))
-    );
+    // Only listen while signed in. Unlike RoleDefinitionService (public-read),
+    // `publishedAgendas` requires auth — see firestore.rules — so an always-on
+    // listener would sit retrying a permission-denied read for every
+    // signed-out visitor on the public Home route, which injects this service.
+    // Re-subscribed on each auth transition, previous listener torn down
+    // first, mirroring how AuthService re-subscribes its appAdmins listener.
+    effect(() => {
+      const signedIn = this.auth.currentUser() !== null;
+      untracked(() => {
+        this.unsubscribeIndex?.();
+        this.unsubscribeIndex = undefined;
+        if (!signedIn) {
+          // Drop anything the previous session could see, so nearestEntry()
+          // reports null rather than leaving a stale entry behind after sign-out.
+          this.allEntries.set([]);
+          this.snapshot.set(null);
+          return;
+        }
+        this.unsubscribeIndex = onSnapshot(
+          collection(this.firestore, COLLECTION),
+          (snap) =>
+            this.zone.run(() => {
+              this.allEntries.set(
+                snap.docs.map((d) => {
+                  const data = d.data() as PublishedAgendaDoc;
+                  return { no: d.id, date: data.date, theme: data.theme, publishedAt: data.publishedAt };
+                })
+              );
+            }),
+          (err) => this.zone.run(() => console.error('publishedAgendas index listener failed', err))
+        );
+      });
+    });
   }
 
   ngOnDestroy(): void {
-    this.unsubscribeIndex();
+    this.unsubscribeIndex?.();
     this.unsubscribeMeeting?.();
   }
 

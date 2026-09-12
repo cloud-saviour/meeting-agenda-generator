@@ -288,6 +288,50 @@ describe('CheckinStateService (Firestore emulator)', () => {
     expect(await service.claimRole('toastmaster')).toBe(false);
   });
 
+  // A signed-in member/admin has currentName seeded from their Firebase
+  // displayName the moment the service constructs — so a "do they have a
+  // name?" check passes for them without them ever tapping "I'm Attending".
+  // Taking part must require actual attendance, not merely having a name.
+  it('claimRole()/addSpeakerSignup()/claimEvaluatorSlot() all fail for a signed-in member who never checked in', async () => {
+    const member = createService({ uid: 'member-uid', displayName: 'Naledi K.', email: 'naledi@example.com' });
+    const speaker = createService();
+    member.loadMeeting('m3b');
+    speaker.loadMeeting('m3b');
+    await speaker.checkIn('Bongani', 'bongani@example.com');
+    await speaker.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+    await waitFor(() => member.speakers().length === 1);
+    const speakerId = member.speakers()[0].id;
+
+    expect(member.currentName()).toBe('Naledi K.'); // has a name…
+    expect(member.isCheckedIn()).toBe(false); // …but never attended
+
+    expect(await member.claimRole('toastmaster')).toBe(false);
+    expect(await member.addSpeakerSignup({ title: 'Talk 2', level: 'CC2', timePref: '5-7' })).toBe(false);
+    expect(await member.claimEvaluatorSlot(speakerId)).toBe(false);
+
+    expect(member.roles()['toastmaster']?.uid).toBeFalsy();
+    expect(member.speakers().length).toBe(1);
+    expect(member.speakers()[0].evaluator).toBeNull();
+
+    // …and all three start working the moment they actually check in.
+    await member.checkIn('Naledi K.');
+    expect(await member.claimRole('toastmaster')).toBe(true);
+    expect(await member.claimEvaluatorSlot(speakerId)).toBe(true);
+  });
+
+  it('claiming fails again after uncheckIn() — withdrawing revokes the ability to take part', async () => {
+    const service = createService();
+    service.loadMeeting('m3c');
+    await service.checkIn('Alice', 'alice@example.com');
+    expect(await service.claimRole('toastmaster')).toBe(true);
+
+    await service.uncheckIn();
+    await waitFor(() => !service.isCheckedIn());
+
+    expect(await service.claimRole('toastmaster')).toBe(false);
+    expect(await service.addSpeakerSignup({ title: 'Talk', level: 'CC1', timePref: '5-7' })).toBe(false);
+  });
+
   it('releaseRole() only releases a claim owned by the current uid', async () => {
     const svcA = createService();
     const svcB = createService();
