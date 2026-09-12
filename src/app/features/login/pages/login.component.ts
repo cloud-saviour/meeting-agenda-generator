@@ -43,9 +43,20 @@ export class LoginComponent {
     }
   }
 
-  /** Admin-only nav links (Agenda Editor, Manage Roles) only appear for actual admins — /login is reachable by anyone, including an already-signed-in non-admin member. */
+  /**
+   * Admin-only nav links (Agenda Editor, Manage Roles) only appear for actual
+   * admins — /login is reachable by anyone, including an already-signed-in
+   * non-admin member.
+   *
+   * No "Preview Agenda" link here: this page has no meeting context, so it
+   * could only link to a bare /preview, which resolves the missing
+   * `?meeting=` to the id 'default' and lands on the not-published fallback
+   * even when a meeting really is published. Same reason it's gone from
+   * /signup; /checkin and /member link to /preview with a real meeting number
+   * instead.
+   */
   get navLinks(): NavLink[] {
-    const links: NavLink[] = [{ label: '👁 Preview Agenda', path: '/preview' }];
+    const links: NavLink[] = [];
     if (this.auth.isAdmin()) {
       links.push({ label: '📝 Agenda Editor', path: '/admin' }, { label: '⚙ Manage Roles', path: '/admin/manage-roles' });
     }
