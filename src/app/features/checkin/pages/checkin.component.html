@@ -66,7 +66,7 @@
       @if (checkInError) {
         <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ checkInError }}</div>
       }
-      @if (!state.currentName()) {
+      @if (!state.isCheckedIn()) {
         <div class="alert alert-warning py-1 px-2 small mt-2 mb-0">
           Enter your name and tap "I'm Attending" above before you can claim a role, sign up to speak, or evaluate a speech below.
         </div>

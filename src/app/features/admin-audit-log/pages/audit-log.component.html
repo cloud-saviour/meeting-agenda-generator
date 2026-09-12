@@ -1,0 +1,54 @@
+<app-navbar title="Audit Log" [fixed]="true"
+  [links]="[
+    { label: '👑 Manage Admins', path: '/admin/manage-admins' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:760px;">
+
+  <div class="card p-3 mb-3">
+    <h3 class="section-title">Application Changes ({{ rows().length }})</h3>
+    <p class="text-muted small mb-0">
+      Meaningful admin actions across the app — roles, committee roster, agenda publishing, attendance
+      confirmation, and admin access grants — most recent first, made by any app-admin, not just you.
+      Repeated identical actions in a row are shown once with a count. This page is only visible to a
+      true (real-claim) admin.
+    </p>
+  </div>
+
+  <div class="card p-3 mb-3">
+    @if (!log.ready()) {
+      <p class="text-muted small mb-0">Loading…</p>
+    } @else if (rows().length === 0) {
+      <p class="text-muted small mb-0">No changes logged yet.</p>
+    } @else {
+      <div class="list-group list-group-flush">
+        @for (row of rows(); track row.latest.id) {
+          <div class="list-group-item d-flex align-items-center gap-2 flex-wrap">
+            @if (isNegative(row.latest.action)) {
+              <span class="badge bg-danger-subtle text-danger-emphasis">{{ formatAction(row.latest.action) }}</span>
+            } @else {
+              <span class="badge bg-primary-subtle text-primary-emphasis">{{ formatAction(row.latest.action) }}</span>
+            }
+            @if (row.count > 1) {
+              <span class="badge bg-secondary-subtle text-secondary-emphasis" title="Same action repeated this many times in a row">×{{ row.count }}</span>
+            }
+            <span class="flex-grow-1 small">
+              {{ row.latest.summary }}
+              <span class="text-muted"> — by {{ row.latest.actorEmail || 'Unknown' }}</span>
+            </span>
+            @if (row.count > 1) {
+              <span class="text-muted small" [title]="formatAt(row.first.at) + ' through ' + formatAt(row.latest.at)">
+                {{ formatAt(row.first.at) }} – {{ formatAt(row.latest.at) }}
+              </span>
+            } @else {
+              <span class="text-muted small">{{ formatAt(row.latest.at) }}</span>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+</div>

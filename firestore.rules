@@ -17,34 +17,100 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    // Granted admin power — a Firestore document, not a custom claim, so
+    // it can be assigned by the true admin from inside the app itself
+    // (no Admin SDK / service account needed for this one). See
+    // /appAdmins/{uid} below for the collection this checks and why
+    // read there is own-uid-scoped (that's what avoids the exact problem
+    // the old Firestore-allowlist admin design hit before it was replaced
+    // by the custom claim — see the top-of-file comment above).
+    function isGrantedAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid));
+    }
+    // Full parity with isAdmin() for every app-specific feature below,
+    // /appAdmins included — any app-admin (real claim or granted) can
+    // grant/revoke another member's app-admin power, not just a true
+    // claim-holder. The one thing still off-limits to everyone, real
+    // claim included, is granting/regranting YOUR OWN uid — see
+    // /appAdmins/{uid} below.
+    function isAppAdmin() {
+      return isAdmin() || isGrantedAdmin();
+    }
+
     // Check-in board: fully public, anonymous, first-come-first-served.
     // Unrelated to auth by design — do not gate this.
     match /checkins/{meetingId} {
       allow read, write: if true;
     }
 
+    // Who currently has granted (non-claim) app-admin power — see
+    // isGrantedAdmin() above. Own-uid read lets a granted admin's own
+    // client determine its own status without being able to browse the
+    // whole list; isAppAdmin() read is for the manage-admins screen's
+    // listing, needed by a granted admin too now that they can also
+    // grant/revoke. create/update require isAppAdmin() (either tier can
+    // manage another member's access) AND the target uid to differ from
+    // the caller's own uid — granting/regranting YOUR OWN uid is
+    // pointless (isAdmin() already implies isAppAdmin(), and a granted
+    // admin regranting themselves changes nothing) and creates a real
+    // footgun for a true admin specifically: it would make their access
+    // outlive their own claim, so revoking that claim later would
+    // silently fail to actually remove it. delete has no such
+    // restriction (including self — voluntarily stepping down, or
+    // cleaning up a legacy self-grant, is harmless).
+    match /appAdmins/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAppAdmin());
+      allow create, update: if isAppAdmin() && request.auth.uid != uid;
+      allow delete: if isAppAdmin();
+    }
+
+    // Append-only trail of meaningful admin actions across the app — role/
+    // committee-role create/archive/restore, committee roster assign/
+    // unassign, agenda publish/unpublish/delete, attendance confirm/
+    // unconfirm, and appAdmins grant/revoke — see
+    // core/audit/audit-log.util.ts's appendAuditEntry(), the only writer
+    // (always inside the same writeBatch() as the audited change itself).
+    // Any app-admin can create an entry (they're the ones who can perform
+    // an audited action in the first place), but read is isAdmin()-only:
+    // who did what should only be visible to a true claim-holder, not to
+    // every app-admin the log might itself be about. No update or delete
+    // via the client, ever, by anyone — an audit trail that can be edited
+    // after the fact isn't one. Validation only checks shape, not the
+    // exact `action` value — enumerating every action string here would
+    // need updating every time a new one is added, for no real safety gain.
+    match /auditLog/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isAppAdmin()
+        && request.resource.data.action is string
+        && request.resource.data.actorUid is string
+        && request.resource.data.at is string
+        && request.resource.data.summary is string;
+      allow update, delete: if false;
+    }
+
     // Public read (check-in role board + /preview both need these
     // unauthenticated); only the admin UI writes.
     match /roleDefinitions/{roleId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAppAdmin();
     }
     match /committeeRoleDefinitions/{roleId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAppAdmin();
     }
     match /committeeRoster/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAppAdmin();
     }
     match /publishedAgendas/{meetingId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAppAdmin();
     }
 
     // Admin's private drafts — nobody else ever reads or writes these.
     match /savedAgendas/{meetingId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAppAdmin();
     }
 
     // Self-service member accounts (separate from admin — see AuthService).
@@ -74,8 +140,8 @@ service cloud.firestore {
     // confirms someone ELSE'S involvement), so unlike members/{memberId}
     // there's no own-uid check on write, only on read.
     match /memberHistory/{recordId} {
-      allow read: if request.auth != null && (isAdmin() || request.auth.uid == resource.data.uid);
-      allow write: if isAdmin();
+      allow read: if request.auth != null && (isAppAdmin() || request.auth.uid == resource.data.uid);
+      allow write: if isAppAdmin();
     }
 
     // Real emails behind check-in identities — foundation for a planned
@@ -85,7 +151,7 @@ service cloud.firestore {
     // checkins/**, this collection exists specifically to hold PII that
     // must not be publicly readable.
     match /checkinContacts/{uid} {
-      allow read: if isAdmin();
+      allow read: if isAppAdmin();
       allow write: if true;
     }
   }

@@ -23,6 +23,12 @@ export class RoleBoardComponent {
     return this.state.roles();
   }
 
+  /** Explains the disabled Claim button. A getter, not an inline template expression —
+   *  the apostrophe in "I'm" can't survive Angular's template-expression parser. */
+  get attendanceTooltip(): string {
+    return this.state.isCheckedIn() ? '' : 'Tap "I\'m Attending" above first';
+  }
+
   isMine(roleId: string): boolean {
     return this.roles[roleId]?.uid === this.state.currentUid;
   }
@@ -38,8 +44,8 @@ export class RoleBoardComponent {
 
   async claim(roleId: string) {
     this.claimError = null;
-    if (!this.state.currentName()) {
-      this.claimError = 'Check in with your name first.';
+    if (!this.state.isCheckedIn()) {
+      this.claimError = 'Tap "I\'m Attending" above before claiming a role.';
       return;
     }
     const ok = await this.state.claimRole(roleId);

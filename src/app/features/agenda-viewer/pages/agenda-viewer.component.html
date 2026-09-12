@@ -3,8 +3,8 @@
     { label: '👥 Check-in', path: '/checkin', queryParams: { meeting: meetingId } },
     { label: '🏠 Home', path: '/' }
   ]">
-  <button class="btn btn-outline-light btn-sm" (click)="refresh()">
-    {{ refreshed ? '✓ Refreshed' : '🔄 Refresh' }}
+  <button class="btn btn-outline-light btn-sm" [disabled]="refreshing" (click)="refresh()">
+    {{ refreshing ? 'Refreshing…' : refreshError ? '⚠ Could not refresh' : refreshed ? '✓ Refreshed' : '🔄 Refresh' }}
   </button>
 </app-navbar>
 

@@ -3,9 +3,11 @@ import { Injector, NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { CommitteeRoleDefinitionService } from './committee-role-definition.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { AuthService } from '../../../core/auth/auth.service';
 
 /**
  * CommitteeRoleDefinitionService has no localStorage fallback anymore — the
@@ -15,7 +17,10 @@ import { FIRESTORE } from '../../../core/firebase/firestore.provider';
  *
  * isAdmin() requires the `admin` custom claim, not just an authenticated uid
  * (see firestore.rules) — authenticatedContext()'s second argument simulates
- * that claim directly, no Firestore fixture document needed.
+ * that claim directly, no Firestore fixture document needed. isAppAdmin()
+ * also recognizes a Firestore-granted appAdmins/{uid} entry (see
+ * AuthService/AppAdminService) — full parity with isAdmin() for this
+ * collection, per firestore.rules.
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
@@ -24,9 +29,25 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
+    function isGrantedAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid));
+    }
+    function isAppAdmin() {
+      return isAdmin() || isGrantedAdmin();
+    }
+    match /appAdmins/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
     match /committeeRoleDefinitions/{roleId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAppAdmin();
+    }
+    match /auditLog/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isAppAdmin();
+      allow update, delete: if false;
     }
   }
 }
@@ -38,6 +59,10 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void
     if (Date.now() - start > timeoutMs) throw new Error('waitFor() timed out');
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
+}
+
+function fakeAuth(uid: string, email: string): AuthService {
+  return { currentUser: () => ({ uid, email }) } as unknown as AuthService;
 }
 
 describe('CommitteeRoleDefinitionService (Firestore emulator)', () => {
@@ -70,12 +95,13 @@ describe('CommitteeRoleDefinitionService (Firestore emulator)', () => {
     createdServices.length = 0;
   });
 
-  function createService(): CommitteeRoleDefinitionService {
+  function createService(firestoreInstance: Firestore = firestore, authUid = 'test-admin-uid', authEmail = 'test-admin@example.com'): CommitteeRoleDefinitionService {
     const child = Injector.create({
       parent: parentInjector,
       providers: [
         CommitteeRoleDefinitionService,
-        { provide: FIRESTORE, useValue: firestore },
+        { provide: FIRESTORE, useValue: firestoreInstance },
+        { provide: AuthService, useValue: fakeAuth(authUid, authEmail) },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
       ],
     });
@@ -150,5 +176,41 @@ describe('CommitteeRoleDefinitionService (Firestore emulator)', () => {
     await waitFor(() => service.all()[0]?.label === 'New Label');
     expect(service.all().length).toBe(1);
     expect(service.all()[0].active).toBe(false);
+  });
+
+  it('rejects writes from an authenticated uid with no admin custom claim — signed in alone is not enough', async () => {
+    const nonAdminFirestore = testEnv.authenticatedContext('random-signed-up-uid').firestore() as unknown as Firestore;
+    const service = createService(nonAdminFirestore, 'random-signed-up-uid', 'random@example.com');
+
+    await expect(service.create('Should Be Rejected')).rejects.toThrow();
+  });
+
+  it('allows writes from a Firestore-granted admin with no real claim — isAppAdmin() takes effect, not just isAdmin()', async () => {
+    await setDoc(doc(firestore, 'appAdmins', 'granted-uid'), {
+      uid: 'granted-uid',
+      email: 'granted@example.com',
+      displayName: 'Granted Admin',
+      grantedAt: new Date().toISOString(),
+      grantedByEmail: 'test-admin@example.com',
+    });
+
+    const grantedFirestore = testEnv.authenticatedContext('granted-uid').firestore() as unknown as Firestore;
+    const service = createService(grantedFirestore, 'granted-uid', 'granted@example.com');
+
+    const role = await service.create('Granted Admin Created This');
+    await waitFor(() => service.all().some((r) => r.id === role.id));
+    expect(service.all().find((r) => r.id === role.id)?.label).toBe('Granted Admin Created This');
+  });
+
+  it('create() and archive() each write a matching auditLog entry in the same batch as the change itself', async () => {
+    const service = createService();
+    const role = await service.create('Sergeant at Arms');
+    await service.archive(role.id);
+
+    const snap = await getDocs(collection(firestore, 'auditLog'));
+    const entries = snap.docs.map((d) => d.data());
+
+    expect(entries.some((e) => e['action'] === 'committeeRole.create' && e['summary'].includes('Sergeant at Arms'))).toBe(true);
+    expect(entries.some((e) => e['action'] === 'committeeRole.archive' && e['summary'].includes('Sergeant at Arms'))).toBe(true);
   });
 });

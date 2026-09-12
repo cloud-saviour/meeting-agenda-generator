@@ -15,6 +15,10 @@ function fakeAuth(opts: { ready: boolean; isAdmin: boolean }) {
   return {
     ready: signal(opts.ready),
     isAdmin: signal(opts.isAdmin),
+    // authGuard checks isAppAdmin() (real claim OR Firestore grant) —
+    // these tests aren't exercising that distinction, so isAppAdmin just
+    // mirrors isAdmin here.
+    isAppAdmin: signal(opts.isAdmin),
     currentUser: signal(null),
   } as unknown as AuthService;
 }
@@ -45,7 +49,12 @@ describe('authGuard', () => {
 
   it('waits for ready() before deciding', async () => {
     const readySignal = signal(false);
-    const auth = { ready: readySignal, isAdmin: signal(true), currentUser: signal(null) } as unknown as AuthService;
+    const auth = {
+      ready: readySignal,
+      isAdmin: signal(true),
+      isAppAdmin: signal(true),
+      currentUser: signal(null),
+    } as unknown as AuthService;
     TestBed.configureTestingModule({ providers: [{ provide: AuthService, useValue: auth }] });
     const resultPromise = callGuard('/admin');
 

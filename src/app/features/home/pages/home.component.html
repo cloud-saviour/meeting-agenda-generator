@@ -3,74 +3,78 @@
   <div class="text-center mb-5">
     <img src="logo.png" alt="Agora" height="60" class="mb-2">
     <h1 class="fs-4 fw-bold" style="color:var(--dark)">Agora Agenda Planner</h1>
+    @if (currentUser(); as u) {
+      <p class="text-muted small mb-0">Signed in as <span class="fw-semibold">{{ u.displayName || 'Unnamed' }}</span> — {{ u.email }}</p>
+    }
   </div>
 
-  <div class="row row-cols-1 g-4 px-3"
-       [class.row-cols-md-2]="tileCount() === 2"
-       [class.row-cols-md-3]="tileCount() === 3"
-       [class.row-cols-md-4]="tileCount() === 4"
-       [style.max-width.px]="tileCount() === 1 ? 360 : 1100"
-       style="width:100%;">
+  <div class="d-flex flex-wrap justify-content-center gap-4 px-3" style="max-width:1100px;">
 
-    @if (isAdmin()) {
-      <div class="col">
-        <div class="card h-100 text-center p-4 shadow-sm position-relative">
-          <div class="fs-1 mb-2">&#128221;</div>
-          <h2 class="fs-6 fw-bold">Manage Agendas</h2>
-          <p class="text-muted small mb-0">Build a new agenda or reopen a saved one</p>
-          <a routerLink="/admin/manage-agendas" class="stretched-link" aria-label="Open Manage Agendas"></a>
-        </div>
+    @if (isAppAdmin()) {
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#128221;</div>
+        <h2 class="fs-6 fw-bold">Manage Agendas</h2>
+        <p class="text-muted small mb-0">Build a new agenda or reopen a saved one</p>
+        <a routerLink="/admin/manage-agendas" class="stretched-link" aria-label="Open Manage Agendas"></a>
       </div>
     } @else if (isSignedIn()) {
-      <div class="col">
-        <div class="card h-100 text-center p-4 shadow-sm position-relative">
-          <div class="fs-1 mb-2">&#128100;</div>
-          <h2 class="fs-6 fw-bold">Member Profile</h2>
-          <p class="text-muted small mb-0">View your profile and meeting history</p>
-          <a routerLink="/member" class="stretched-link" aria-label="Open Member Profile"></a>
-        </div>
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#128100;</div>
+        <h2 class="fs-6 fw-bold">Member Profile</h2>
+        <p class="text-muted small mb-0">View your profile and meeting history</p>
+        <a routerLink="/member" class="stretched-link" aria-label="Open Member Profile"></a>
       </div>
     } @else {
-      <div class="col">
-        <div class="card h-100 text-center p-4 shadow-sm position-relative">
-          <div class="fs-1 mb-2">&#128272;</div>
-          <h2 class="fs-6 fw-bold">Sign In</h2>
-          <p class="text-muted small mb-0">Admin: sign in to manage agendas and roles</p>
-          <a routerLink="/login" class="stretched-link" aria-label="Open Sign In"></a>
-        </div>
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#128272;</div>
+        <h2 class="fs-6 fw-bold">Sign In</h2>
+        <p class="text-muted small mb-0">Admin: sign in to manage agendas and roles</p>
+        <a routerLink="/login" class="stretched-link" aria-label="Open Sign In"></a>
       </div>
     }
 
     @if (nextMeeting(); as m) {
-      <div class="col">
-        <div class="card h-100 text-center p-4 shadow-sm position-relative">
-          <div class="fs-1 mb-2">&#128101;</div>
-          <h2 class="fs-6 fw-bold">Meeting #{{ m.no }} Check-in{{ isSignedIn() ? '' : ' As Guest' }}</h2>
-          <p class="text-muted small mb-0">{{ m.theme || 'Meeting ' + m.no }} — check in, claim a role, or sign up to speak</p>
-          <a routerLink="/checkin" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Open Meeting Check-in"></a>
-        </div>
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#128101;</div>
+        <h2 class="fs-6 fw-bold">Meeting #{{ m.no }} Check-in{{ isSignedIn() ? '' : ' As Guest' }}</h2>
+        <p class="text-muted small mb-0">{{ m.theme || 'Meeting ' + m.no }} — check in, claim a role, or sign up to speak</p>
+        <a routerLink="/checkin" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Open Meeting Check-in"></a>
+      </div>
+    }
+
+    @if (isAppAdmin()) {
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#9881;</div>
+        <h2 class="fs-6 fw-bold">Manage Roles</h2>
+        <p class="text-muted small mb-0">Admin: manage meeting roles and committee roles</p>
+        <a routerLink="/admin/manage-roles" class="stretched-link" aria-label="Open Manage Roles"></a>
+      </div>
+    }
+
+    @if (isAppAdmin()) {
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#128081;</div>
+        <h2 class="fs-6 fw-bold">Manage Admins</h2>
+        <p class="text-muted small mb-0">Grant or revoke admin access for existing members</p>
+        <a routerLink="/admin/manage-admins" class="stretched-link" aria-label="Open Manage Admins"></a>
       </div>
     }
 
     @if (isAdmin()) {
-      <div class="col">
-        <div class="card h-100 text-center p-4 shadow-sm position-relative">
-          <div class="fs-1 mb-2">&#9881;</div>
-          <h2 class="fs-6 fw-bold">Manage Roles</h2>
-          <p class="text-muted small mb-0">Admin: manage meeting roles and committee roles</p>
-          <a routerLink="/admin/manage-roles" class="stretched-link" aria-label="Open Manage Roles"></a>
-        </div>
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#128270;</div>
+        <h2 class="fs-6 fw-bold">Audit Log</h2>
+        <p class="text-muted small mb-0">Super admin: see who granted or revoked admin access, and when</p>
+        <a routerLink="/admin/audit-log" class="stretched-link" aria-label="Open Audit Log"></a>
       </div>
     }
 
     @if (isSignedIn()) {
-      <div class="col">
-        <div class="card h-100 text-center p-4 shadow-sm position-relative">
-          <div class="fs-1 mb-2">&#128682;</div>
-          <h2 class="fs-6 fw-bold">Sign Out</h2>
-          <p class="text-muted small mb-0">End your session on this device</p>
-          <button type="button" class="stretched-link" style="background:none;border:none;padding:0;" (click)="signOut()" aria-label="Sign Out"></button>
-        </div>
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#128682;</div>
+        <h2 class="fs-6 fw-bold">Sign Out</h2>
+        <p class="text-muted small mb-0">End your session on this device</p>
+        <button type="button" class="stretched-link" style="background:none;border:none;padding:0;" (click)="signOut()" aria-label="Sign Out"></button>
       </div>
     }
 

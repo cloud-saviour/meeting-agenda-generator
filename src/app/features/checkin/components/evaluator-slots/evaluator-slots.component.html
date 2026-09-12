@@ -29,8 +29,8 @@
           } @else if (isSpeakerSelf(s.uid)) {
             <span class="badge bg-success-subtle text-success-emphasis opacity-50">N/A</span>
           } @else {
-            <button class="btn btn-danger btn-sm" [disabled]="!state.currentName()"
-              [title]="!state.currentName() ? 'Check in with your name first' : ''" (click)="claim(s.id)">Evaluate</button>
+            <button class="btn btn-danger btn-sm" [disabled]="!state.isCheckedIn()"
+              [title]="attendanceTooltip" (click)="claim(s.id)">Evaluate</button>
           }
         </div>
       }

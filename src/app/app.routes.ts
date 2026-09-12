@@ -1,6 +1,8 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
 import { memberGuard } from './core/auth/member.guard';
+import { superAdminGuard } from './core/auth/super-admin.guard';
+import { agendaEditorCanDeactivateGuard } from './features/agenda-editor/pages/agenda-editor-can-deactivate.guard';
 
 export const routes: Routes = [
   {
@@ -23,6 +25,7 @@ export const routes: Routes = [
   {
     path: 'admin',
     canActivate: [authGuard],
+    canDeactivate: [agendaEditorCanDeactivateGuard],
     loadComponent: () => import('./features/agenda-editor/pages/agenda-editor.component').then((m) => m.AgendaEditorComponent),
   },
   {
@@ -49,6 +52,16 @@ export const routes: Routes = [
     path: 'admin/committee-roles',
     canActivate: [authGuard],
     loadComponent: () => import('./features/admin-committee-roles/pages/admin-committee-roles.component').then((m) => m.AdminCommitteeRolesComponent),
+  },
+  {
+    path: 'admin/manage-admins',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/admin-admins/pages/admin-admins.component').then((m) => m.AdminAdminsComponent),
+  },
+  {
+    path: 'admin/audit-log',
+    canActivate: [superAdminGuard],
+    loadComponent: () => import('./features/admin-audit-log/pages/audit-log.component').then((m) => m.AuditLogComponent),
   },
   {
     path: 'checkin',

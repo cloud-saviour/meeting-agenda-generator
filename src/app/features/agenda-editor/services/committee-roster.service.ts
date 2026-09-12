@@ -1,7 +1,10 @@
 import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { CommitteeMember } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { AuthService } from '../../../core/auth/auth.service';
+import { AuditAction } from '../../../core/audit/audit-log.models';
+import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
 const COLLECTION = 'committeeRoster';
 const DOC_ID = 'current';
@@ -31,6 +34,7 @@ interface CommitteeRosterDoc {
 @Injectable({ providedIn: 'root' })
 export class CommitteeRosterService implements OnDestroy {
   private readonly firestore = inject(FIRESTORE);
+  private readonly auth = inject(AuthService);
   private readonly zone = inject(NgZone);
 
   private readonly roster = signal<CommitteeMember[]>([]);
@@ -72,22 +76,31 @@ export class CommitteeRosterService implements OnDestroy {
   /** Assigns (or reassigns) roleId to the given person — replaces any existing entry for that role. */
   assign(roleId: string, name: string, email: string, phone: string): Promise<void> {
     const next = [...this.roster().filter((m) => m.roleId !== roleId), { roleId, name, email, phone }];
-    return this.persist(next);
+    return this.persist(next, 'committeeRoster.assign', `Assigned committee role "${roleId}" to ${name}`);
   }
 
   /** Clears whoever currently holds roleId — the role goes back to unassigned. */
   unassign(roleId: string): Promise<void> {
-    return this.persist(this.roster().filter((m) => m.roleId !== roleId));
+    const previous = this.roster().find((m) => m.roleId === roleId);
+    const summary = previous
+      ? `Unassigned committee role "${roleId}" (was ${previous.name})`
+      : `Unassigned committee role "${roleId}"`;
+    return this.persist(this.roster().filter((m) => m.roleId !== roleId), 'committeeRoster.unassign', summary);
   }
 
-  /** Overwrites the whole roster in one atomic write — for JSON import, where the imported file is the new source of truth, not a merge into what's already there. */
+  /** Overwrites the whole roster in one atomic write — for JSON import, where the imported file is the new source of truth, not a merge into what's already there. Not audited — see AuditAction's doc comment on why import upserts are out of scope. */
   replaceAll(members: CommitteeMember[]): Promise<void> {
     return this.persist(members);
   }
 
-  private persist(members: CommitteeMember[]): Promise<void> {
+  private persist(members: CommitteeMember[], auditAction?: AuditAction, auditSummary?: string): Promise<void> {
     const payload: CommitteeRosterDoc = { members: JSON.parse(JSON.stringify(members)) };
-    return setDoc(doc(this.firestore, COLLECTION, DOC_ID), payload).catch((err) => {
+    const batch = writeBatch(this.firestore);
+    batch.set(doc(this.firestore, COLLECTION, DOC_ID), payload);
+    if (auditAction && auditSummary) {
+      appendAuditEntry(this.firestore, batch, auditAction, auditSummary, this.auth.currentUser());
+    }
+    return batch.commit().catch((err) => {
       console.error('committeeRoster write failed', err);
       throw err;
     });

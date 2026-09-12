@@ -12,6 +12,18 @@
         "source": "**",
         "destination": "/index.html"
       }
+    ],
+    "headers": [
+      {
+        "comment": "Baseline: anything not matched by a LATER, more specific rule below resolves to index.html via the SPA rewrite above, and must NOT be cached. Firebase Hosting's default (max-age=3600) let a visitor hold an index.html referencing chunk hashes from a previous build; once those chunks are gone the rewrite serves index.html as text/html, the module import fails strict MIME checking, and the app never boots — a blank page for up to an hour after every deploy. Order matters: when several entries match, the LAST one wins (verified against the deployed site, not assumed), so this broad rule must come first.",
+        "source": "**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "comment": "Angular emits content-hashed filenames (main-QAOTS2KA.js), so a given URL's bytes never change — cache them hard. Last match wins, so this overrides the baseline above.",
+        "source": "**/*.@(js|css|woff|woff2|ttf|eot|otf|png|jpg|jpeg|gif|svg|webp|ico)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      }
     ]
   },
   "emulators": {

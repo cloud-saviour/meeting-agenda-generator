@@ -52,8 +52,8 @@
           </div>
         </div>
       </div>
-      <button class="btn btn-danger btn-sm" [disabled]="!state.currentName()"
-        [title]="!state.currentName() ? 'Check in with your name first' : ''" (click)="submit()">+ Sign Up to Speak</button>
+      <button class="btn btn-danger btn-sm" [disabled]="!state.isCheckedIn()"
+        [title]="attendanceTooltip" (click)="submit()">+ Sign Up to Speak</button>
     </div>
   } @else if (isFull && !alreadySignedUp) {
     <div class="text-muted small mt-2">All speaker slots for this meeting are taken.</div>

@@ -3,8 +3,10 @@ import { Injector, NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { FirebaseApp, deleteApp, initializeApp } from 'firebase/app';
 import { Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
+import { Firestore, connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { AuthService } from './auth.service';
 import { AUTH } from '../firebase/auth.provider';
+import { FIRESTORE } from '../firebase/firestore.provider';
 
 /**
  * First emulator spec for Auth in this project — same "test the real
@@ -37,6 +39,7 @@ async function setAdminClaim(uid: string): Promise<void> {
 describe('AuthService (Firebase Auth emulator)', () => {
   let app: FirebaseApp;
   let auth: Auth;
+  let firestore: Firestore;
   let parentInjector: Injector;
   let counter = 0;
 
@@ -44,6 +47,17 @@ describe('AuthService (Firebase Auth emulator)', () => {
     app = initializeApp({ projectId: 'meeting-agenda-generator-auth-test', apiKey: 'test-api-key' }, `auth-test-${++counter}`);
     auth = getAuth(app);
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+
+    // AuthService now also injects FIRESTORE (for its live appAdmins/{uid}
+    // grant listener — see AuthService's class doc). This spec doesn't
+    // exercise isAppAdmin()/grantedAdmin at all, so it's just here to
+    // satisfy the DI requirement — this per-run-unique project id has no
+    // Firestore rules configured (unlike the *.emulator.spec.ts files that
+    // use @firebase/rules-unit-testing), so the listener harmlessly fails
+    // closed (permission-denied), which AuthService already handles: it
+    // still resolves ready() and leaves grantedAdmin at its false default.
+    firestore = getFirestore(app);
+    connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
 
     TestBed.configureTestingModule({});
     parentInjector = TestBed.inject(Injector);
@@ -56,7 +70,12 @@ describe('AuthService (Firebase Auth emulator)', () => {
   function createService(): AuthService {
     const child = Injector.create({
       parent: parentInjector,
-      providers: [AuthService, { provide: AUTH, useValue: auth }, { provide: NgZone, useValue: TestBed.inject(NgZone) }],
+      providers: [
+        AuthService,
+        { provide: AUTH, useValue: auth },
+        { provide: FIRESTORE, useValue: firestore },
+        { provide: NgZone, useValue: TestBed.inject(NgZone) },
+      ],
     });
     return child.get(AuthService);
   }

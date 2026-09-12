@@ -1,7 +1,9 @@
 import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
-import { collection, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { RoleDefinition } from '../models/role-definition.models';
 import { FIRESTORE } from '../firebase/firestore.provider';
+import { AuthService } from '../auth/auth.service';
+import { appendAuditEntry } from '../audit/audit-log.util';
 
 const COLLECTION = 'roleDefinitions';
 
@@ -19,6 +21,7 @@ function makeId(): string {
 @Injectable({ providedIn: 'root' })
 export class RoleDefinitionService implements OnDestroy {
   private readonly firestore = inject(FIRESTORE);
+  private readonly auth = inject(AuthService);
   private readonly zone = inject(NgZone);
 
   private readonly definitions = signal<RoleDefinition[]>([]);
@@ -55,7 +58,11 @@ export class RoleDefinitionService implements OnDestroy {
       ...(description?.trim() ? { description: description.trim() } : {}),
     };
     const { id, ...data } = role;
-    await setDoc(doc(this.firestore, COLLECTION, id), data).catch((err) => {
+
+    const batch = writeBatch(this.firestore);
+    batch.set(doc(this.firestore, COLLECTION, id), data);
+    appendAuditEntry(this.firestore, batch, 'role.create', `Created meeting role "${trimmed}"`, this.auth.currentUser());
+    await batch.commit().catch((err) => {
       console.error('roleDefinitions create failed', err);
       throw err;
     });
@@ -84,14 +91,18 @@ export class RoleDefinitionService implements OnDestroy {
   }
 
   async archive(id: string): Promise<void> {
-    await updateDoc(doc(this.firestore, COLLECTION, id), { active: false }).catch((err) =>
-      console.error('roleDefinitions archive failed', err)
-    );
+    const label = this.definitions().find((r) => r.id === id)?.label ?? id;
+    const batch = writeBatch(this.firestore);
+    batch.update(doc(this.firestore, COLLECTION, id), { active: false });
+    appendAuditEntry(this.firestore, batch, 'role.archive', `Archived meeting role "${label}"`, this.auth.currentUser());
+    await batch.commit().catch((err) => console.error('roleDefinitions archive failed', err));
   }
 
   async restore(id: string): Promise<void> {
-    await updateDoc(doc(this.firestore, COLLECTION, id), { active: true }).catch((err) =>
-      console.error('roleDefinitions restore failed', err)
-    );
+    const label = this.definitions().find((r) => r.id === id)?.label ?? id;
+    const batch = writeBatch(this.firestore);
+    batch.update(doc(this.firestore, COLLECTION, id), { active: true });
+    appendAuditEntry(this.firestore, batch, 'role.restore', `Restored meeting role "${label}"`, this.auth.currentUser());
+    await batch.commit().catch((err) => console.error('roleDefinitions restore failed', err));
   }
 }

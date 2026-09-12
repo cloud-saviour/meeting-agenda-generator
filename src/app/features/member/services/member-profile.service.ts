@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { MemberProfile } from '../models/member.models';
 import { AuthService } from '../../../core/auth/auth.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
@@ -53,6 +53,18 @@ export class MemberProfileService {
       console.error('members getProfile failed', err);
       return null;
     }
+  }
+
+  /**
+   * One-time read of every member profile — admin-only per firestore.rules
+   * (own-uid read doesn't cover this, only isAppAdmin() does). Exists for
+   * the manage-admins screen's member directory; not a live subscription,
+   * same reasoning as getProfile() above — a one-off admin screen visit,
+   * not something that needs to react to every other member's edits live.
+   */
+  async listAll(): Promise<MemberProfile[]> {
+    const snap = await getDocs(collection(this.firestore, COLLECTION));
+    return snap.docs.map((d) => d.data() as MemberProfile);
   }
 
   /** Updates both the Firestore profile doc and the Auth user record's displayName in one call — see class doc. */
