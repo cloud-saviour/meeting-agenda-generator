@@ -2,49 +2,51 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { Router, UrlTree } from '@angular/router';
 import { signal } from '@angular/core';
-import { authGuard } from './auth.guard';
+import { superAdminGuard } from './super-admin.guard';
 import { AuthService } from './auth.service';
 
 function callGuard(url: string): Promise<boolean | UrlTree> {
-  return TestBed.runInInjectionContext(() => authGuard({} as never, { url } as never)) as Promise<
+  return TestBed.runInInjectionContext(() => superAdminGuard({} as never, { url } as never)) as Promise<
     boolean | UrlTree
   >;
 }
 
-function fakeAuth(opts: { ready: boolean; isAdmin: boolean }) {
+function fakeAuth(opts: { ready: boolean; isAdmin: boolean; isAppAdmin?: boolean }) {
   return {
     ready: signal(opts.ready),
     isAdmin: signal(opts.isAdmin),
-    // authGuard checks isAppAdmin() (real claim OR Firestore grant) —
-    // these tests aren't exercising that distinction, so isAppAdmin just
-    // mirrors isAdmin here.
-    isAppAdmin: signal(opts.isAdmin),
+    isAppAdmin: signal(opts.isAppAdmin ?? opts.isAdmin),
     currentUser: signal(null),
   } as unknown as AuthService;
 }
 
-describe('authGuard', () => {
+describe('superAdminGuard', () => {
   let router: Router;
 
   beforeEach(() => {
     TestBed.resetTestingModule();
   });
 
-  function run(auth: AuthService, url = '/admin') {
+  function run(auth: AuthService, url = '/admin/manage-admins') {
     TestBed.configureTestingModule({ providers: [{ provide: AuthService, useValue: auth }] });
     router = TestBed.inject(Router);
     return callGuard(url);
   }
 
-  it('allows navigation when ready and isAdmin', async () => {
+  it('allows navigation for a true (real-claim) admin', async () => {
     const result = await run(fakeAuth({ ready: true, isAdmin: true }));
     expect(result).toBe(true);
   });
 
-  it('redirects to /login when ready but not admin', async () => {
-    const result = await run(fakeAuth({ ready: true, isAdmin: false }), '/admin/roles');
+  it('redirects to /login for a Firestore-granted admin — isAppAdmin() alone is not enough here', async () => {
+    const result = await run(fakeAuth({ ready: true, isAdmin: false, isAppAdmin: true }));
     expect(String(result)).toContain('/login');
-    expect(String(result)).toContain(encodeURIComponent('/admin/roles'));
+    expect(String(result)).toContain(encodeURIComponent('/admin/manage-admins'));
+  });
+
+  it('redirects to /login when ready but not admin at all', async () => {
+    const result = await run(fakeAuth({ ready: true, isAdmin: false }));
+    expect(String(result)).toContain('/login');
   });
 
   it('waits for ready() before deciding', async () => {
@@ -56,7 +58,7 @@ describe('authGuard', () => {
       currentUser: signal(null),
     } as unknown as AuthService;
     TestBed.configureTestingModule({ providers: [{ provide: AuthService, useValue: auth }] });
-    const resultPromise = callGuard('/admin');
+    const resultPromise = callGuard('/admin/manage-admins');
 
     let resolved = false;
     resultPromise.then(() => (resolved = true));

@@ -171,8 +171,19 @@ export class CheckinStateService implements OnDestroy {
   async identifyAsGuest(email: string): Promise<boolean> {
     const normalized = normalizeEmail(email);
     if (!EMAIL_PATTERN.test(normalized)) return false;
-    this.emailIdentity.set(await sha256Hex(normalized));
+    const uid = await sha256Hex(normalized);
+    this.emailIdentity.set(uid);
     this.guestEmail.set(normalized);
+    // Restores a returning guest's name from their existing attendee record
+    // (same email -> same uid, deterministically) so re-entering the same
+    // email doesn't force them to retype it — see this method's own doc
+    // comment: "immediately sees their prior claims/attendance... with no
+    // separate resubmission of the name/check-in form required." Without
+    // this, currentName stayed whatever it was before (usually blank),
+    // since syncIdentity() only reacts to a signed-in Firebase uid changing,
+    // never to an anonymous guest's derived uid.
+    const existing = this.attendees().find((a) => a.uid === uid);
+    if (existing) this.currentName.set(existing.name);
     return true;
   }
 

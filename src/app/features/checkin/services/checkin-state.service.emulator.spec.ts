@@ -160,6 +160,32 @@ describe('CheckinStateService (Firestore emulator)', () => {
     expect(twoStep.attendees()[0]).toEqual(oneStep.attendees()[0]);
   });
 
+  it('identifyAsGuest() restores a returning guest\'s name from their existing attendee record — no retyping required', async () => {
+    const first = createService();
+    first.loadMeeting('m1c2');
+    await first.checkIn('Naledi K.', 'naledi@example.com');
+    await waitFor(() => first.attendees().length === 1);
+
+    // A later visit/device/reload: a fresh service instance, nothing checked in yet.
+    const returning = createService();
+    returning.loadMeeting('m1c2');
+    await waitFor(() => returning.attendees().length === 1); // let the live listener deliver Naledi's record first
+    expect(returning.currentName()).toBe(''); // not identified yet — no name should be assumed
+
+    const ok = await returning.identifyAsGuest('naledi@example.com');
+    expect(ok).toBe(true);
+    expect(returning.currentName()).toBe('Naledi K.');
+    expect(returning.isCheckedIn()).toBe(true);
+  });
+
+  it('identifyAsGuest() leaves currentName blank for a genuinely new guest — no existing attendee record to restore', async () => {
+    const service = createService();
+    service.loadMeeting('m1c3');
+
+    await service.identifyAsGuest('brand-new@example.com');
+    expect(service.currentName()).toBe('');
+  });
+
   it('uncheckIn() removes the attendee, releases their role claim and evaluator slot, cancels their own speaker signup, and records them in apologies', async () => {
     const svcA = createService();
     const svcB = createService();

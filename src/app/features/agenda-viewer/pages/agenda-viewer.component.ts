@@ -24,7 +24,9 @@ export class AgendaViewerComponent {
 
   meetingId: string;
   found = false;
+  refreshing = false;
   refreshed = false;
+  refreshError = false;
 
   constructor() {
     // `||`, not `??` — an empty-but-present `?meeting=` must fall back to 'default' too.
@@ -45,9 +47,25 @@ export class AgendaViewerComponent {
     });
   }
 
-  /** Data is already live via Firestore — this just reassures the viewer nothing's stale. */
-  refresh() {
-    this.refreshed = true;
-    setTimeout(() => (this.refreshed = false), 2000);
+  /**
+   * A genuine network round-trip (PublishedAgendaService.refetch(), which
+   * uses getDocFromServer() — bypasses the local cache), not just a
+   * reassurance no-op — data is already live via loadMeeting()'s listener
+   * in the normal case, but this gives a real way to force a fresh read if
+   * that listener ever silently stalls (e.g. a long-backgrounded tab).
+   */
+  async refresh() {
+    this.refreshing = true;
+    this.refreshError = false;
+    try {
+      await this.publishedAgenda.refetch(this.meetingId);
+      this.refreshed = true;
+      setTimeout(() => (this.refreshed = false), 2000);
+    } catch {
+      this.refreshError = true;
+      setTimeout(() => (this.refreshError = false), 2000);
+    } finally {
+      this.refreshing = false;
+    }
   }
 }

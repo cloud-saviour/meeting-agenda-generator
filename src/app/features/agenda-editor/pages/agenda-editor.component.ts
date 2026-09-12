@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, untracked } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AgendaStateService } from '../services/agenda-state.service';
 import { AgendaImportExportService } from '../services/agenda-import-export.service';
@@ -25,7 +25,7 @@ import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.componen
   ],
   templateUrl: './agenda-editor.component.html',
 })
-export class AgendaEditorComponent {
+export class AgendaEditorComponent implements OnDestroy {
   readonly state = inject(AgendaStateService);
   private readonly docxService = inject(DocxService);
   private readonly importExport = inject(AgendaImportExportService);
@@ -38,6 +38,16 @@ export class AgendaEditorComponent {
   linkCopied = false;
   mobilePreviewMode = false;
 
+  // Drives the navbar Save button — true whenever the in-memory agenda
+  // differs from what's actually persisted in savedAgendas. Saving is now
+  // an explicit action (see save() below), not automatic, so this is what
+  // tells the admin (and newAgenda()/beforeunload below) there's something
+  // that would be lost if they navigate away or close the tab without
+  // clicking Save.
+  isDirty = false;
+  saving = false;
+  justSaved = false;
+
   // Tracks, per roleId, the last name this component itself synced in from a
   // check-in claim — lets a release be told apart from "never claimed" (both
   // look like an empty claim otherwise), and lets a release clear the agenda
@@ -45,19 +55,45 @@ export class AgendaEditorComponent {
   // the admin has since typed in by hand.
   private readonly lastSyncedPersonByRole = new Map<string, string>();
 
-  // Last serialized snapshot JSON actually written per meeting number — lets
-  // the auto-save effect below skip a no-op re-save (see its comment).
-  private readonly lastSavedJsonByNo = new Map<string, string>();
+  // The last snapshot JSON actually written via save() below (or, at
+  // construction, whatever was already loaded — see the constructor) —
+  // isDirty is just "does the current snapshot still match this." Unlike
+  // the old auto-save's lastSavedJsonByNo, this doesn't need to be keyed
+  // per meeting number: newAgenda()/opening a different draft each replace
+  // this component's whole in-memory state, and isDirty's own `!!no` guard
+  // (see the dirty-tracking effect below) already treats a blank meeting
+  // number as "not dirty" regardless of what this holds.
+  private lastSavedJson: string;
+
+  // Same idea, for the meeting-fields push effect below — lets it skip a
+  // no-op checkinState.updateMeeting() call, keyed per meeting number.
+  private readonly lastPushedMeetingJsonByNo = new Map<string, string>();
 
   // Debounce timer for the meeting-fields push effect below — Firestore writes
   // are no longer free the way an in-memory/localStorage write was.
   private meetingSyncTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // Debounce timer for the auto-save effect below — same reasoning, now that
-  // SavedAgendaService writes to Firestore instead of localStorage.
-  private agendaSaveTimer: ReturnType<typeof setTimeout> | undefined;
+  // Warns on an actual tab close/refresh/external navigation with unsaved
+  // changes — in-app route changes (My Agendas, Home, etc.) go through
+  // Angular's router instead, which this listener can't intercept; see
+  // newAgenda()'s own confirm() for the one in-app action that would
+  // otherwise silently discard unsaved work.
+  private readonly beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+    if (!this.isDirty) return;
+    e.preventDefault();
+  };
 
   constructor() {
+    // Seeds the dirty baseline to whatever's already loaded at construction
+    // — a fresh blank agenda (resetAll() already ran before this component
+    // exists) or a draft AdminAgendasComponent.open() loaded via
+    // loadSnapshot() before navigating here. Either way, "what's on screen
+    // right now" is the correct starting point for "has it changed since
+    // the last save," not an empty string (which would show every freshly
+    // opened, unmodified agenda as dirty).
+    this.lastSavedJson = JSON.stringify(this.importExport.getSnapshot());
+    window.addEventListener('beforeunload', this.beforeUnloadHandler);
+
     // A dedicated computed so the effect only re-runs when the meeting NUMBER
     // string actually changes — `state.meeting()` is one combined signal for
     // the whole meeting-details form, so depending on it directly would
@@ -106,70 +142,94 @@ export class AgendaEditorComponent {
     // simplicity over narrowly scoping seven fields. Debounced, unlike
     // before: this is now a real Firestore write per call, not a free
     // in-memory one, so it shouldn't fire on every keystroke.
+    //
+    // Skips the write when none of the 7 pushed fields actually changed
+    // since the last push for this meeting number — same pattern as the
+    // auto-save effect's lastSavedJsonByNo below. Without this, ANY change
+    // to `meeting()` (e.g. apologySyncUids being updated by the check-in
+    // sync effect below, which is part of this same signal) re-triggers a
+    // real checkinState.updateMeeting() write even when none of these 7
+    // fields moved — and that write's own runTransaction() round-trip
+    // re-fires checkins' onSnapshot listener, which re-runs the check-in
+    // sync effect, which can touch `meeting()` again, sustaining a
+    // feedback loop through repeated real Firestore round-trips (caught by
+    // an auditLog entry storm: ~100 redundant agenda.publish entries for
+    // one meeting in under an hour, all with identical content).
     effect(() => {
       const m = this.state.meeting();
       if (!m.no) return;
       clearTimeout(this.meetingSyncTimer);
       this.meetingSyncTimer = setTimeout(() => {
+        const pushed = { date: m.date, theme: m.theme, word: m.word, start: m.st, club: m.club, sub: m.sub, addr: m.addr };
+        const json = JSON.stringify(pushed);
+        if (this.lastPushedMeetingJsonByNo.get(m.no) === json) return;
+        this.lastPushedMeetingJsonByNo.set(m.no, json);
         this.checkinState.loadMeeting(m.no);
-        this.checkinState.updateMeeting({
-          date: m.date,
-          theme: m.theme,
-          word: m.word,
-          start: m.st,
-          club: m.club,
-          sub: m.sub,
-          addr: m.addr,
-        });
+        this.checkinState.updateMeeting(pushed);
       }, 500);
     });
 
-    // Auto-save: the mirror image of the check-in-sync effect above — this one
-    // SHOULD react to every edit, so no untracked() wrapping. getSnapshot()
-    // reads every relevant signal (meeting, agItems, spks, cmt, logos,
-    // overriddenRoles), so this naturally re-saves on any change anywhere in
-    // the agenda. SavedAgendaService never touches AgendaStateService's own
-    // signals, so there's no self-trigger risk.
-    //
-    // Skips the write entirely when the serialized snapshot is byte-identical
-    // to what was last saved for that meeting number — otherwise merely
-    // opening an already-saved agenda (loadSnapshot sets every signal, this
-    // effect's first run would re-save the same content) bumps `updatedAt`
-    // and reorders the "last edited" list even though nothing changed. Keyed
-    // per meeting number, not globally, so switching between agendas doesn't
-    // false-positive against a different agenda's last-saved content.
-    // Debounced, same reasoning as the meeting-sync effect above — this is
-    // now a real Firestore write per call, not a free in-memory one.
-    //
-    // Also keeps the PUBLISHED copy live, replacing the old manual "Publish
-    // New Changes" button: once this meeting is the currently-published one
-    // (checked fresh inside the debounced callback, not as a tracked effect
-    // dependency, so this fires on THIS meeting's own content changing, not
-    // merely because publish status changed elsewhere), every edit —
-    // including a check-in role/speaker/apology sync applied above — reaches
-    // `publishedAgendas` too, via the same PublishedAgendaService.publish()
-    // AdminAgendasComponent's own Publish button already calls. First-time
-    // publishing a meeting is unchanged and still only happens from My
-    // Agendas — this only keeps an already-published meeting current.
+    // Dirty-tracking: the mirror image of the check-in-sync effect above —
+    // this one SHOULD react to every edit, so no untracked() wrapping.
+    // getSnapshot() reads every relevant signal (meeting, agItems, spks,
+    // cmt, logos, overriddenRoles), so this naturally re-evaluates on any
+    // change anywhere in the agenda. No debounce and no Firestore write
+    // here at all — saving is now an explicit action (see save() below);
+    // this effect only maintains the in-memory isDirty flag the Save
+    // button and newAgenda()'s confirm() read, which is cheap enough to
+    // recompute on every keystroke.
     effect(() => {
       const snapshot = this.importExport.getSnapshot();
-      if (!snapshot.no) return;
       const json = JSON.stringify(snapshot);
-      if (this.lastSavedJsonByNo.get(snapshot.no) === json) return;
-      clearTimeout(this.agendaSaveTimer);
-      this.agendaSaveTimer = setTimeout(() => {
-        this.lastSavedJsonByNo.set(snapshot.no, json);
-        this.savedAgendas.save(snapshot);
-        if (this.publishedAgenda.entries().some((e) => e.no === snapshot.no)) {
-          this.publishedAgenda.publish(snapshot.no, snapshot);
-        }
-      }, 500);
+      untracked(() => {
+        this.isDirty = !!snapshot.no && json !== this.lastSavedJson;
+      });
     });
   }
 
-  /** Nothing to confirm — the previous agenda (if any) is already auto-saved under its own meeting number. */
+  ngOnDestroy(): void {
+    window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+  }
+
+  /**
+   * Explicit save — replaces the old debounced auto-save. Persists the
+   * current in-memory agenda to savedAgendas, and, if this meeting is
+   * already the published one, republishes it too in the same action
+   * (otherwise clicking Save on a live meeting would leave the published
+   * copy silently stale until a separate trip to My Agendas — see
+   * isLivePublished/the "● Live" badge in the template).
+   */
+  async save(): Promise<void> {
+    const snapshot = this.importExport.getSnapshot();
+    if (!snapshot.no || this.saving) return;
+    this.saving = true;
+    try {
+      await this.savedAgendas.save(snapshot);
+      if (this.publishedAgenda.entries().some((e) => e.no === snapshot.no)) {
+        await this.publishedAgenda.publish(snapshot.no, snapshot);
+      }
+      this.lastSavedJson = JSON.stringify(snapshot);
+      this.isDirty = false;
+      this.justSaved = true;
+      setTimeout(() => (this.justSaved = false), 2000);
+    } catch (err) {
+      alert('Save failed:\n' + (err as Error).message);
+      console.error(err);
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /**
+   * Saving is no longer automatic (see save() above), so — unlike before,
+   * when the previous agenda was always already auto-saved under its own
+   * meeting number — resetAll() here really would silently discard
+   * whatever hasn't been saved yet. Confirm first if isDirty.
+   */
   newAgenda() {
+    if (this.isDirty && !confirm('Discard unsaved changes to the current agenda and start a new one?')) return;
     this.state.resetAll();
+    this.isDirty = false;
   }
 
   /** True once this open meeting is the currently-published one — drives the passive "● Live" badge that replaced the old Publish button. */
@@ -223,15 +283,36 @@ export class AgendaEditorComponent {
       // else: never synced and still empty — leave whatever's there alone.
     }
 
-    const existingNames = new Set(this.state.spks().map((s) => s.name.trim().toLowerCase()));
+    // Keyed by name, not just a Set — an already-imported speaker still
+    // needs their evaluator field kept in sync below (a check-in evaluator
+    // claim/release almost always happens AFTER the speaker themselves was
+    // already imported, since evaluators claim a slot on an existing
+    // signup). A Set of names alone (the old shape here) could only ever
+    // tell "already imported" from "new", never re-sync anything for a
+    // speaker once imported — evaluator changes made after that point were
+    // silently dropped. See CLAUDE.md/feedback: role/person sync is
+    // intentionally always-on, not fill-blanks-only — the same principle
+    // applies here.
+    const spksByName = new Map(this.state.spks().map((s) => [s.name.trim().toLowerCase(), s]));
     for (const sp of this.checkinState.speakers()) {
-      if (!sp.name.trim() || existingNames.has(sp.name.trim().toLowerCase())) continue;
+      const key = sp.name.trim().toLowerCase();
+      if (!key) continue;
+      const checkinEvaluator = sp.evaluator?.name ?? '';
+
+      const existing = spksByName.get(key);
+      if (existing) {
+        if (existing.evaluator !== checkinEvaluator) {
+          this.state.updateSpeaker(existing.id, 'evaluator', checkinEvaluator);
+        }
+        continue;
+      }
+
       const { timeLo, timeHi } = this.parseTimePref(sp.timePref);
       this.state.addSpeaker({
         name: sp.name,
         title: sp.title,
         level: sp.level,
-        evaluator: sp.evaluator?.name ?? '',
+        evaluator: checkinEvaluator,
         timeLo,
         timeHi,
       });

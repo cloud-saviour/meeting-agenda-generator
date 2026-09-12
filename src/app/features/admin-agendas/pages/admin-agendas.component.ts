@@ -59,6 +59,8 @@ export class AdminAgendasComponent {
         return;
       }
       await this.publishedAgenda.publish(no, snapshot);
+    } catch {
+      this.publishError = 'Could not publish this agenda — try again.';
     } finally {
       this.pendingPublish.delete(no);
     }

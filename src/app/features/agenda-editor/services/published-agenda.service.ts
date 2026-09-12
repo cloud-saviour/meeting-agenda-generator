@@ -1,7 +1,9 @@
 import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
-import { collection, deleteDoc, doc, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocFromServer, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 import { AgendaSnapshot } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { AuthService } from '../../../core/auth/auth.service';
+import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
 const COLLECTION = 'publishedAgendas';
 
@@ -42,6 +44,7 @@ interface PublishedAgendaDoc extends AgendaSnapshot {
 @Injectable({ providedIn: 'root' })
 export class PublishedAgendaService implements OnDestroy {
   private readonly firestore = inject(FIRESTORE);
+  private readonly auth = inject(AuthService);
   private readonly zone = inject(NgZone);
 
   private readonly snapshot = signal<AgendaSnapshot | null>(null);
@@ -99,7 +102,10 @@ export class PublishedAgendaService implements OnDestroy {
    * Reads the whole collection, deletes every doc whose id isn't the one
    * being published, then sets the new one — all inside a single
    * writeBatch() so viewers never observe a transient "nothing published"
-   * or "two published" state between the deletes and the set.
+   * or "two published" state between the deletes and the set. Rethrows on
+   * failure — both call sites (AdminAgendasComponent.publish(),
+   * AgendaEditorComponent.save()) need to know whether it actually landed,
+   * not just see it logged to the console.
    */
   publish(meetingId: string, data: AgendaSnapshot): Promise<void> {
     const payload: PublishedAgendaDoc = { ...data, publishedAt: new Date().toISOString() };
@@ -111,9 +117,19 @@ export class PublishedAgendaService implements OnDestroy {
           if (d.id !== meetingId) batch.delete(d.ref);
         }
         batch.set(doc(this.firestore, COLLECTION, meetingId), payload);
+        appendAuditEntry(
+          this.firestore,
+          batch,
+          'agenda.publish',
+          `Published agenda #${meetingId} (${data.theme || 'untitled'})`,
+          this.auth.currentUser()
+        );
         return batch.commit();
       })
-      .catch((err) => console.error('publish failed', err));
+      .catch((err) => {
+        console.error('publish failed', err);
+        throw err;
+      });
   }
 
   /**
@@ -126,9 +142,43 @@ export class PublishedAgendaService implements OnDestroy {
    * exists anywhere else.
    */
   unpublish(meetingId: string): Promise<void> {
-    return deleteDoc(doc(this.firestore, COLLECTION, meetingId)).catch((err) =>
-      console.error('unpublish failed', err)
-    );
+    const entry = this.allEntries().find((e) => e.no === meetingId);
+    const batch = writeBatch(this.firestore);
+    batch.delete(doc(this.firestore, COLLECTION, meetingId));
+    // Only log when it was genuinely published — a no-op unpublish (already
+    // gone) isn't a meaningful admin action worth recording.
+    if (entry) {
+      appendAuditEntry(
+        this.firestore,
+        batch,
+        'agenda.unpublish',
+        `Unpublished agenda #${meetingId}${entry.theme ? ` (${entry.theme})` : ''}`,
+        this.auth.currentUser()
+      );
+    }
+    return batch.commit().catch((err) => console.error('unpublish failed', err));
+  }
+
+  /**
+   * One-time, real network read of this meeting's published doc —
+   * `getDocFromServer()`, not `getDoc()`, so it bypasses Firestore's local
+   * cache and genuinely round-trips to the server. Backs the "🔄 Refresh"
+   * button on /preview: `loadMeeting()`'s `onSnapshot` listener already
+   * keeps this live in the normal case, but a listener that silently
+   * dropped (e.g. after a long-backgrounded mobile tab) wouldn't show that
+   * to the viewer — this gives them a real way to force a fresh read on
+   * demand instead of just a reassurance no-op. Updates the same
+   * `snapshot` signal `current()` reads, so the result renders through the
+   * exact same path as a live update.
+   */
+  async refetch(meetingId: string): Promise<void> {
+    try {
+      const snap = await getDocFromServer(doc(this.firestore, COLLECTION, meetingId));
+      this.snapshot.set(snap.exists() ? (snap.data() as AgendaSnapshot) : null);
+    } catch (err) {
+      console.error('publishedAgendas refetch failed', err);
+      throw err;
+    }
   }
 
   /**

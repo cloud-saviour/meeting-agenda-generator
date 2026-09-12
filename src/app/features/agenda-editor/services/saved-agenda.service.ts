@@ -1,7 +1,9 @@
 import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
-import { collection, deleteDoc, doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { AgendaSnapshot } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { AuthService } from '../../../core/auth/auth.service';
+import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
 const COLLECTION = 'savedAgendas';
 
@@ -28,6 +30,7 @@ interface SavedAgendaDoc extends AgendaSnapshot {
 @Injectable({ providedIn: 'root' })
 export class SavedAgendaService implements OnDestroy {
   private readonly firestore = inject(FIRESTORE);
+  private readonly auth = inject(AuthService);
   private readonly zone = inject(NgZone);
 
   private readonly allEntries = signal<SavedAgendaEntry[]>([]);
@@ -58,13 +61,32 @@ export class SavedAgendaService implements OnDestroy {
     this.unsubscribe();
   }
 
-  /** No-ops when snapshot.no is blank — a saved agenda must have a real meeting number. */
+  /**
+   * No-ops when snapshot.no is blank — a saved agenda must have a real
+   * meeting number. Rethrows on failure (unlike this file's other
+   * mutators used to) — save() backs the Agenda Editor's explicit Save
+   * button (saving is no longer automatic), so a caller genuinely needs to
+   * know whether it actually landed, not just see it logged to the
+   * console. Audited (`agenda.save`) for the same reason: a deliberate
+   * button click is exactly as meaningful as publish()/delete(), unlike
+   * the old auto-save this replaced (see AuditAction's own doc comment).
+   */
   save(snapshot: AgendaSnapshot): Promise<void> {
     if (!snapshot.no) return Promise.resolve();
     const payload: SavedAgendaDoc = { ...snapshot, updatedAt: new Date().toISOString() };
-    return setDoc(doc(this.firestore, COLLECTION, snapshot.no), payload).catch((err) =>
-      console.error('savedAgendas save failed', err)
+    const batch = writeBatch(this.firestore);
+    batch.set(doc(this.firestore, COLLECTION, snapshot.no), payload);
+    appendAuditEntry(
+      this.firestore,
+      batch,
+      'agenda.save',
+      `Saved agenda #${snapshot.no}${snapshot.theme ? ` (${snapshot.theme})` : ''}`,
+      this.auth.currentUser()
     );
+    return batch.commit().catch((err) => {
+      console.error('savedAgendas save failed', err);
+      throw err;
+    });
   }
 
   /** One-time read, not a live subscription — opening a draft hydrates the editor once, it doesn't stay watching Firestore afterward. */
@@ -79,8 +101,16 @@ export class SavedAgendaService implements OnDestroy {
   }
 
   delete(no: string): Promise<void> {
-    return deleteDoc(doc(this.firestore, COLLECTION, no)).catch((err) =>
-      console.error('savedAgendas delete failed', err)
+    const theme = this.allEntries().find((e) => e.no === no)?.theme;
+    const batch = writeBatch(this.firestore);
+    batch.delete(doc(this.firestore, COLLECTION, no));
+    appendAuditEntry(
+      this.firestore,
+      batch,
+      'agenda.delete',
+      `Deleted saved agenda #${no}${theme ? ` (${theme})` : ''}`,
+      this.auth.currentUser()
     );
+    return batch.commit().catch((err) => console.error('savedAgendas delete failed', err));
   }
 }

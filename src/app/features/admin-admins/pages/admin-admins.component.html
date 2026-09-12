@@ -1,0 +1,67 @@
+<app-navbar title="Manage Admins" [fixed]="true"
+  [links]="[
+    { label: '📋 My Agendas', path: '/admin/agendas' },
+    { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:760px;">
+
+  <div class="card p-3 mb-3">
+    <h3 class="section-title">Granted Admins ({{ appAdmins.all().length }})</h3>
+    <p class="text-muted small mb-0">
+      Anyone granted here gets the same access as a real admin for every app feature — but only you can grant or revoke it.
+      New member accounts are still created via <code>/signup</code> or the scripts in the README, not here.
+    </p>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h3 class="section-title">Members ({{ members().length }})</h3>
+    <input class="form-control form-control-sm mb-3" type="text" [ngModel]="filter()" (ngModelChange)="filter.set($event)"
+      name="filter" placeholder="Filter by name or email">
+
+    @if (loading()) {
+      <p class="text-muted small mb-0">Loading members…</p>
+    } @else if (loadError()) {
+      <div class="alert alert-danger py-1 px-2 small mb-0">{{ loadError() }}</div>
+    } @else if (visibleMembers.length === 0) {
+      <p class="text-muted small mb-0">No members match.</p>
+    } @else {
+      <div class="list-group list-group-flush">
+        @for (m of visibleMembers; track m.uid) {
+          <div class="list-group-item d-flex align-items-center gap-2 flex-wrap">
+            @if (isGranted(m.uid)) {
+              <span class="badge bg-primary-subtle text-primary-emphasis">Granted admin</span>
+            } @else {
+              <span class="badge bg-secondary-subtle text-secondary-emphasis">Member</span>
+            }
+            <span class="flex-grow-1 small">
+              <span class="fw-semibold">{{ m.displayName }}</span>
+              <span class="text-muted"> — {{ m.email }}</span>
+              @if (isSelf(m.uid)) {
+                <span class="text-muted"> (you)</span>
+              }
+            </span>
+            @if (isGranted(m.uid)) {
+              <button class="btn btn-outline-danger btn-sm" [disabled]="isPending(m.uid)" (click)="revoke(m)">
+                {{ isPending(m.uid) ? '…' : 'Revoke' }}
+              </button>
+            } @else if (!isSelf(m.uid)) {
+              <button class="btn btn-outline-primary btn-sm" [disabled]="isPending(m.uid)" (click)="grant(m)">
+                {{ isPending(m.uid) ? '…' : 'Grant admin' }}
+              </button>
+            } @else {
+              <span class="text-muted small" title="You already have full admin access via your real claim — granting it to yourself here would only create a way for that access to outlive it.">Already an admin</span>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    @if (actionError()) {
+      <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ actionError() }}</div>
+    }
+  </div>
+
+</div>

@@ -3,10 +3,11 @@ import { Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { AttendanceConfirmationService } from './attendance-confirmation.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { AuthService } from '../../../core/auth/auth.service';
 
 /**
  * Admin-only "mark register"/confirm actions — run against the real
@@ -15,7 +16,9 @@ import { FIRESTORE } from '../../../core/firebase/firestore.provider';
  * mock. isAdmin() requires the `admin` custom claim, not just an
  * authenticated uid (see firestore.rules) — authenticatedContext()'s
  * second argument simulates that claim directly, same pattern as
- * role-definition.service.emulator.spec.ts.
+ * role-definition.service.emulator.spec.ts. isAppAdmin() also recognizes a
+ * Firestore-granted appAdmins/{uid} entry — full parity with isAdmin() for
+ * this collection, per firestore.rules.
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
@@ -24,15 +27,35 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
-    match /memberHistory/{recordId} {
-      allow read: if request.auth != null && (isAdmin() || request.auth.uid == resource.data.uid);
+    function isGrantedAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid));
+    }
+    function isAppAdmin() {
+      return isAdmin() || isGrantedAdmin();
+    }
+    match /appAdmins/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
       allow write: if isAdmin();
+    }
+    match /memberHistory/{recordId} {
+      allow read: if request.auth != null && (isAppAdmin() || request.auth.uid == resource.data.uid);
+      allow write: if isAppAdmin();
+    }
+    match /auditLog/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isAppAdmin();
+      allow update, delete: if false;
     }
   }
 }
 `;
 
 const META = { date: '2026-01-01', theme: 'Test Meeting' };
+
+function fakeAuth(uid: string, email: string): AuthService {
+  return { currentUser: () => ({ uid, email }) } as unknown as AuthService;
+}
 
 describe('AttendanceConfirmationService (Firestore emulator)', () => {
   let testEnv: RulesTestEnvironment;
@@ -57,10 +80,18 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
     await testEnv.clearFirestore();
   });
 
-  function createService(firestore: Firestore): AttendanceConfirmationService {
+  function createService(
+    firestore: Firestore,
+    authUid = 'admin-uid',
+    authEmail = 'admin@example.com'
+  ): AttendanceConfirmationService {
     const child = Injector.create({
       parent: parentInjector,
-      providers: [AttendanceConfirmationService, { provide: FIRESTORE, useValue: firestore }],
+      providers: [
+        AttendanceConfirmationService,
+        { provide: FIRESTORE, useValue: firestore },
+        { provide: AuthService, useValue: fakeAuth(authUid, authEmail) },
+      ],
     });
     return child.get(AttendanceConfirmationService);
   }
@@ -132,5 +163,34 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
     // a different signed-in member cannot read someone else's record
     const strangerFirestore = testEnv.authenticatedContext('stranger-uid').firestore() as unknown as Firestore;
     await expect(getDoc(doc(strangerFirestore, 'memberHistory', 'm1_member-1'))).rejects.toThrow();
+  });
+
+  it('allows writes from a Firestore-granted admin with no real claim — isAppAdmin() takes effect, not just isAdmin()', async () => {
+    await setDoc(doc(adminFirestore, 'appAdmins', 'granted-uid'), {
+      uid: 'granted-uid',
+      email: 'granted@example.com',
+      displayName: 'Granted Admin',
+      grantedAt: new Date().toISOString(),
+      grantedByEmail: 'admin@example.com',
+    });
+
+    const grantedFirestore = testEnv.authenticatedContext('granted-uid').firestore() as unknown as Firestore;
+    const service = createService(grantedFirestore, 'granted-uid', 'granted@example.com');
+
+    await service.confirmAttendance('m1', 'member-1', META);
+    const snap = await getDoc(doc(adminFirestore, 'memberHistory', 'm1_member-1'));
+    expect(snap.data()?.['attended']).toBe(true);
+  });
+
+  it('confirmAttendance()/unconfirmAttendance() each write a matching auditLog entry', async () => {
+    const service = createService(adminFirestore);
+    await service.confirmAttendance('m1', 'member-1', META);
+    await service.unconfirmAttendance('m1', 'member-1');
+
+    const snap = await getDocs(collection(adminFirestore, 'auditLog'));
+    const entries = snap.docs.map((d) => d.data());
+
+    expect(entries.some((e) => e['action'] === 'attendance.confirm' && e['summary'].includes('member-1'))).toBe(true);
+    expect(entries.some((e) => e['action'] === 'attendance.unconfirm' && e['summary'].includes('member-1'))).toBe(true);
   });
 });

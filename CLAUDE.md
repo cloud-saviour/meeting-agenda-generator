@@ -39,18 +39,29 @@ src/app/
     services/   role-definition.service.ts (Firestore-backed — see
                 Persistence below) (+ specs)
     models/     role-definition.models.ts
+    audit/      audit-log.models.ts (AuditAction, AuditLogEntry — lives
+                here, not the admin-audit-log feature, since several
+                core/services and other features' services need the type to
+                call appendAuditEntry() and core must not depend on a
+                feature), audit-log.util.ts (appendAuditEntry() — the only
+                writer to the `auditLog` collection, always called inside
+                the same writeBatch() as the change being audited) — see
+                "Audit log" under Authentication below
     firebase/   firestore.provider.ts — FIRESTORE injection token +
                 provideAppFirestore(); auth.provider.ts — AUTH injection
                 token + provideAppAuth(), same getOrCreateApp()-shares-one-
                 FirebaseApp pattern as firestore.provider.ts. Both read
                 src/environments/environment.ts
-    auth/       auth.service.ts (AuthService — currentUser/isAdmin/ready
-                signals, signIn()/signUp()/signOut()/resetPassword()/
-                updateDisplayName()), auth.guard.ts (authGuard —
-                CanActivateFn gating every /admin* route on isAdmin(), not
-                just currentUser()), member.guard.ts (memberGuard — gates
-                /member on currentUser() alone, since any signed-in account
-                counts as a member) — see Authentication below
+    auth/       auth.service.ts (AuthService — currentUser/isAdmin/
+                isAppAdmin/ready signals, signIn()/signUp()/signOut()/
+                resetPassword()/updateDisplayName()), auth.guard.ts
+                (authGuard — CanActivateFn gating most /admin* routes on
+                isAppAdmin(), not just currentUser()), super-admin.guard.ts
+                (superAdminGuard — same shape, but checks isAdmin()
+                specifically; guards only /admin/audit-log),
+                member.guard.ts (memberGuard — gates /member on
+                currentUser() alone, since any signed-in account counts as
+                a member) — see Authentication below
     utils/      locale.ts (APP_LOCALE)
 
   layout/
@@ -191,6 +202,37 @@ src/app/
                       redesigning that fixed table to be dynamic.
       pages/           admin-committee-roles.component.ts
 
+    admin-admins/     Route "/admin/manage-admins" — guarded by `authGuard`:
+                      any app-admin (real claim or Firestore-granted) can
+                      reach it and grant/revoke another member's access, not
+                      just a true claim-holder — see "App-admin grants"
+                      under Authentication below for the full design. The
+                      one thing the UI itself still blocks is granting
+                      yourself (`AdminAdminsComponent.isSelf()`, mirroring
+                      firestore.rules' own restriction) — shows "Already an
+                      admin" instead of a Grant button on your own row.
+                      Lists every member (via MemberProfileService.listAll())
+                      with a Grant/Revoke control per row backed by
+                      AppAdminService, which also writes a matching
+                      core/audit/audit-log.util.ts entry for every
+                      grant/revoke — see "Audit log" under Authentication
+                      below. Doesn't create accounts; that's still /signup
+                      or scripts/create-member-accounts.mjs.
+      pages/           admin-admins.component.ts
+      services/        app-admin.service.ts (AppAdminService)
+      models/          app-admin.models.ts
+
+    admin-audit-log/  Route "/admin/audit-log" — guarded by
+                      `superAdminGuard`, not `authGuard`: unlike every other
+                      admin-gated route, a Firestore-granted admin cannot
+                      reach this one, only a true claim-holder — see "Audit
+                      log" under Authentication below for why. Read-only
+                      list of every logged action, most recent first
+                      (AuditLogService, a live `onSnapshot` capped at the
+                      200 most recent entries).
+      pages/           audit-log.component.ts
+      services/        audit-log.service.ts (AuditLogService)
+
     login/            Route "/login", the only route the auth guard doesn't
                       protect — email/password sign-in form. On success,
                       navigates to ?returnUrl= (defaulting to "/") — see
@@ -266,12 +308,13 @@ src/app/
 
 **Agenda editor** (`/admin`) — single-user authoring tool. Build an agenda, preview
 it as a live A4 page, export to DOCX or print. Live state is `AgendaStateService`
-(in memory), but every edit is **auto-saved** to a per-meeting-number library —
+(in memory); persisting it to a per-meeting-number library —
 `SavedAgendaService` (`agenda-editor/services/saved-agenda.service.ts`,
-Firestore-backed) persists a full `AgendaSnapshot` (via the existing
+Firestore-backed, `AgendaSnapshot` via the existing
 `AgendaImportExportService.getSnapshot()`, the same serialization
 Export/Import JSON already uses) to one document per meeting number at
-`savedAgendas/{meetingId}`. No hand-maintained index needed for the
+`savedAgendas/{meetingId}` — is an **explicit action** (`AgendaEditorComponent.save()`,
+bound to the navbar's Save button), not automatic. No hand-maintained index needed for the
 "📋 My Agendas" list at `/admin/agendas`
 (`admin-agendas/pages/admin-agendas.component.ts`) — unlike the old
 `localStorage` version (`StorageService` has no key-enumeration API, which
@@ -282,24 +325,42 @@ button (mirroring the Agenda Editor's own Publish button, see Persistence
 below) that calls `SavedAgendaService.load()` — the same one-time
 `getDoc()` `open()` already uses — to get the full snapshot before calling
 `PublishedAgendaService.publish()`, so publishing works from either page
-without a trip through the editor. Auto-save is driven by an untracked-free `effect()`
-in `AgendaEditorComponent`'s constructor that calls `getSnapshot()`
-directly — since that reads every relevant signal, the effect naturally
-re-runs on any edit anywhere in the agenda, with no manual dependency list
-— but is now **debounced** (500ms), since a Firestore write per keystroke
-is a real network call, not the free in-memory write it used to be. A blank
-meeting number is never saved (`SavedAgendaService.save()` no-ops), which
-is also why "🆕 New Agenda" (`AgendaStateService.resetAll()`) blanks
-`meeting.no` rather than reusing a default — it keeps a fresh agenda
-un-addressable, and safe from colliding with another saved meeting, until
-the admin types a real number into the existing Meeting Details field.
-"New"/"Open" never need an unsaved-changes warning, since whatever was open
-is already persisted under its own meeting number the moment it had one.
-`SavedAgendaService.load(no)` is a one-time `getDoc()`, not a live
-subscription — `AdminAgendasComponent.open()` is `async` and `await`s it —
-opening a draft hydrates the editor once, it doesn't keep watching
-Firestore afterward (the live-editing session is `AgendaStateService`'s own
-in-memory state from then on, same as ever). See Persistence below for why
+without a trip through the editor. A blank meeting number is never saved
+(`SavedAgendaService.save()` no-ops), which is also why "🆕 New Agenda"
+(`AgendaStateService.resetAll()`) blanks `meeting.no` rather than reusing
+a default — it keeps a fresh agenda un-addressable, and safe from
+colliding with another saved meeting, until the admin types a real number
+into the existing Meeting Details field. `SavedAgendaService.load(no)` is
+a one-time `getDoc()`, not a live subscription — `AdminAgendasComponent.open()`
+is `async` and `await`s it — opening a draft hydrates the editor once, it
+doesn't keep watching Firestore afterward (the live-editing session is
+`AgendaStateService`'s own in-memory state from then on, same as ever).
+
+**Saving used to be automatic (a debounced `effect()` re-saving on every
+edit) — it's explicit now, on purpose.** `AgendaEditorComponent` tracks
+`isDirty` (a plain field, kept current by an untracked-free `effect()`
+over `getSnapshot()` — same "reads every relevant signal, no manual
+dependency list" shape the old auto-save effect had, just without any
+Firestore write or debounce, since it's now a cheap in-memory comparison
+against the JSON last actually written by `save()`). The Save button
+reflects it directly: solid red with a `*` while dirty, outlined once
+saved, `Saving…` mid-flight. `save()` does both halves of what the old
+effect did in one action — `SavedAgendaService.save()`, and, if this
+meeting is already the published one, `PublishedAgendaService.publish()`
+too (checked fresh at click time, not tracked reactively) — so a live
+meeting's published copy never goes stale behind an editor session the
+way it would if Save only touched the draft. Both of those now **rethrow**
+on failure (they used to swallow and just `console.error`) — that was
+fine for a fire-and-forget auto-save no one was watching, but an explicit
+button needs to tell the admin it didn't work (`save()` `alert()`s on
+failure, `AdminAgendasComponent.publish()` sets its own `publishError`).
+Since navigating away no longer implies "already saved," three things
+now guard against silently losing work: `newAgenda()` `confirm()`s first
+if `isDirty`; a `canDeactivate` guard on the `/admin` route
+(`agenda-editor-can-deactivate.guard.ts`) catches every other in-app way
+of leaving (Home/My Agendas/Manage Roles nav links, browser back inside
+the SPA); and a `beforeunload` listener catches an actual tab close/
+refresh/external navigation, which `canDeactivate` can't. See Persistence below for why
 this migrated despite being a genuinely single-admin workload.
 
 **Check-in page** (`/checkin`) — meant to be a *shared* sheet multiple members
@@ -341,12 +402,33 @@ meeting number (`CheckinStateService.loadMeeting()`, keyed by `?meeting=`),
 so different meetings don't share a sheet. A separate, always-on `effect()`
 in `AgendaEditorComponent` also pushes the agenda's `date`/`theme`/`word`/`st`
 into `CheckinStateService.updateMeeting()` on any change (guarded on a
-non-blank meeting number, same as auto-save below) — `CheckinMeeting` is its
+non-blank meeting number) — `CheckinMeeting` is its
 own independent record (id/date/theme/word/start/maxSpeakers), not a
 reference to the agenda, so without this push the header members see at
 `/checkin` would just show `CheckinMeeting`'s own untouched defaults
 regardless of what the admin set. One-way only — check-in's `maxSpeakers`
-and nothing else agenda-side ever reads from `CheckinMeeting` back.
+and nothing else agenda-side ever reads from `CheckinMeeting` back. Debounced
+(500ms) — this is a real Firestore write per call, not a free
+in-memory one — and skips the write
+entirely when none of the 7 pushed fields actually changed since the last
+push for that meeting number (`lastPushedMeetingJsonByNo`) — **this guard
+was missing for a while and caused a real, self-sustaining bug**, back
+when saving the agenda itself was also still automatic (see below): any
+change to `state.meeting()` at all (including `apologySyncUids` being
+updated by the check-in→editor apology sync below, part of the same
+signal) re-triggered this push unconditionally; that write's own
+`runTransaction()` round-trip re-fired `checkins/{no}`'s `onSnapshot`
+listener with fresh object references for `roles`/`speakers`/`apologies`,
+which re-ran the check-in→editor sync effect below, which could touch
+`state.meeting()` again — sustaining a loop through real Firestore
+round-trips (roughly one cycle every few seconds) for as long as the
+Agenda Editor stayed open on a currently-published meeting. Caught via the
+audit log: ~100 redundant `agenda.publish` entries for one meeting inside
+an hour, all identical content, once `PublishedAgendaService.publish()`
+started logging every call. Keeping a currently-published meeting's
+`publishedAgendas` copy current is no longer tied to this effect at
+all — see "Saving used to be automatic" above; it's now part of the
+explicit Save button's own `save()` action instead.
 
 Check-in → editor is automatic, not a button: `AgendaEditorComponent`
 calls `checkinState.loadMeeting(no)` (a) on load and whenever the meeting
@@ -364,7 +446,22 @@ current check-in claim (via `AgendaStateService.applyRolePerson()`, reusing
 the same role/person group-sync mechanism agenda items already use
 internally), leaving a role's existing value untouched if check-in has no
 claim for it yet, imports any check-in speaker signup not already present
-in the Prepared Speakers list by name, and keeps the agenda's own
+in the Prepared Speakers list by name — and, matched by that same name,
+keeps an already-imported speaker's `evaluator` field synced too (a
+check-in evaluator claim/release almost always happens *after* the
+speaker themselves was already imported, since an evaluator claims a slot
+on an existing signup — **this was a real bug** until this field-sync
+pass was added: the loop used to only check a `Set<string>` of existing
+names to decide "skip vs. add new," with no path to ever update a
+speaker already in the set, so an evaluator claim made post-import was
+silently dropped forever, even though the effect itself was correctly
+re-firing on the change. Fixed by keying off a `Map` of name → existing
+`Speaker` instead, so an already-present speaker still gets
+`state.updateSpeaker(id, 'evaluator', ...)` called when check-in's value
+differs — verified live against the emulator, no dedicated spec file
+since `AgendaEditorComponent` has none, per this repo's convention of
+verifying page-level effect wiring in the browser, not with a unit
+test), and keeps the agenda's own
 free-text `MeetingData.apologies` field synced with check-in's `apologies`
 list (populated by a member's Not Attending action, see above) in both
 directions: a name not yet present is appended (comma-split,
@@ -521,8 +618,9 @@ model and what's still emulator-only.
   the way check-in/published-agenda were — this is a genuinely single-admin
   workload, migrated anyway once the pattern was well-established. `load()`
   is a one-time `getDoc()`, not a live subscription (see the Agenda editor
-  section above); the auto-save effect that calls `save()` is debounced for
-  the same reason as check-in's meeting-fields push.
+  section above); `save()` itself is a plain, undebounced write now that
+  it's called explicitly from the navbar's Save button rather than from an
+  effect reacting to every keystroke.
 - `MemberProfileService` — one document per self-service member account at
   `members/{uid}` (uid/email/displayName/createdAt/updatedAt). Own-uid
   read/write only, plus admin read for a future member directory — never
@@ -558,7 +656,18 @@ entered — so a returning guest re-establishes the *same* uid, and
 therefore immediately sees their prior claims/attendance (`isCheckedIn()`,
 role-board's `isMine()`, etc. all key off `currentUid`), just by retyping
 the same email at the gate, with no separate resubmission of the name/
-check-in form required. `checkIn(name, email?)` also calls
+check-in form required. **This last part was a real bug for a while**:
+`identifyAsGuest()` derived the right uid (so claims/attendance already
+matched correctly, since those all key off `currentUid` directly against
+live Firestore data), but never touched `currentName` — that signal only
+ever got reset by `syncIdentity()`, which watches `AuthService.currentUser()`
+and therefore never fires for an anonymous guest at all. So a returning
+guest's name field stayed blank, forcing them to retype it before they
+could do anything ("Update", claim a role, etc. all require a non-blank
+name). Fixed by having `identifyAsGuest()` look up the existing attendee
+record for the newly-derived uid (if any) and seed `currentName` from it
+— see `checkin-state.service.emulator.spec.ts`'s "restores a returning
+guest's name" test. `checkIn(name, email?)` also calls
 `identifyAsGuest()` internally, but only as a fallback when not already
 identified — kept so the many existing test call sites that still pass
 name+email together in one call (chiefly in
@@ -673,12 +782,21 @@ service, since neither suite is testing Firestore behavior itself.
 
 Three independent tiers share one `AuthService` / one Firebase Auth
 instance: **admin** (signed in + the `admin` custom claim, provisioned
-manually), **member** (any signed-in account — self-service, provisioned
-via `/signup`, no claim involved), and **anonymous** (no account at all —
-check-in's original, still-fully-supported mode). Every `/admin*` route (6
-total: `admin`, `admin/agendas`, `admin/manage-agendas`, `admin/manage-roles`,
-`admin/roles`, `admin/committee-roles`) is gated by `authGuard`
-(`core/auth/auth.guard.ts`) on `isAdmin()`; `/member` is gated by the
+manually — or, since the app-admin grants feature below, a Firestore-
+granted equivalent), **member** (any signed-in account — self-service,
+provisioned via `/signup`, no claim involved), and **anonymous** (no
+account at all — check-in's original, still-fully-supported mode). Every
+`/admin*` route except one (8 total: `admin`, `admin/agendas`,
+`admin/manage-agendas`, `admin/manage-roles`, `admin/roles`,
+`admin/committee-roles`, `admin/manage-admins`, `admin/audit-log`) is
+gated by `authGuard` (`core/auth/auth.guard.ts`) on `isAppAdmin()` (real
+claim OR Firestore grant — see "App-admin grants" below), including
+`admin/manage-admins` itself: any app-admin can grant/revoke another
+member's access, not just a true claim-holder. `admin/audit-log` alone is
+gated by the stricter `superAdminGuard` (`core/auth/super-admin.guard.ts`)
+on `isAdmin()` specifically — who granted/revoked what should only be
+visible to a true claim-holder, even though any app-admin can perform the
+action itself (see "Audit log" below). `/member` is gated by the
 separate `memberGuard` (`core/auth/member.guard.ts`) on `currentUser() !==
 null` alone — a member account never carries the admin claim (self-service
 sign-up can't grant one), so reusing `authGuard` there would wrongly reject
@@ -766,6 +884,124 @@ refresh on any admin page would flash-redirect a signed-in admin to
 without the claim could still reach an admin page and only fail once it hit
 an actual Firestore read/write, instead of being redirected immediately.
 
+**App-admin grants (`appAdmins/{uid}`)** — a second, Firestore-based way
+to get admin-equivalent access, deliberately kept separate from the real
+`admin` custom claim so an admin can grant it to someone else without
+ever touching the Admin SDK/a service-account key (setting the real claim
+still requires that — see `scripts/promote-to-admin.mjs`). A document's
+mere existence at `appAdmins/{uid}` means that uid has full parity with
+`isAdmin()` for every app feature (`AuthService.isAppAdmin` — a computed
+`isAdmin() || grantedAdmin()`), enforced the same way everywhere in
+`firestore.rules` via an `isAppAdmin()` helper that itself calls
+`isAdmin() || isGrantedAdmin()`. This now extends to `appAdmins/{uid}`
+itself: `allow create, update: if isAppAdmin() && request.auth.uid !=
+uid` (`allow delete: if isAppAdmin()`, no such restriction) — **any**
+app-admin, real claim or granted, can grant or revoke ANOTHER member's
+access via `/admin/manage-admins` (`AdminAdminsComponent`,
+`AppAdminService`, guarded by `authGuard` like every other admin route —
+this was originally `superAdminGuard`-only, real-claim-only, loosened
+deliberately so it doesn't bottleneck on one person). **The one thing
+still off-limits to everyone**, real claim included, is granting or
+regranting your OWN uid — see the self-grant paragraph below. This is
+also why `appAdmins/{uid}` read is own-uid-scoped (`request.auth.uid ==
+uid || isAppAdmin()`) rather than locked down entirely — unlike the very
+first, rejected version of admin-as-a-Firestore-doc (see "Why a custom
+claim..." above), a granted admin's own client needs to be able to ask "am
+I one?" for its own UI, and now also needs to browse the full list to use
+the manage-admins screen itself.
+
+**A true admin cannot grant (or regrant) app-admin power to their own
+uid** — `request.auth.uid != uid` on create/update, mirrored client-side
+in `AdminAdminsComponent.isSelf()` (hides the Grant button and shows
+"Already an admin" on the signed-in admin's own row instead, if it even
+appears — it only would if that admin also has a self-service
+`members/{uid}` profile, which `scripts/seed-admin-user.mjs`-provisioned
+accounts don't). This isn't just pointless (`isAdmin()` already implies
+`isAppAdmin()`) — it's a real footgun: a self-grant makes access outlive
+the claim it was redundant with, so revoking that claim later (`npm run
+revoke:admin`, or by hand) would silently fail to actually remove access.
+Delete has no such restriction, so a true admin can still clean up a
+self-grant that predates this rule (e.g. seeded directly, or created
+before this restriction existed).
+
+Unlike the real claim (which needs a fresh ID token — sign out and back
+in, or the SDK's periodic silent refresh — to reflect a change),
+`grantedAdmin` is populated by a **live** `onSnapshot` on the signed-in
+user's own `appAdmins/{uid}` document, re-subscribed on every
+`onAuthStateChanged` transition (the previous listener is explicitly
+unsubscribed first, so a stale one never keeps running against a
+signed-out or switched-away uid). `ready()` now also waits for that
+listener's first result, same reasoning as it already waits for
+`getIdTokenResult()` — without it, `authGuard` could flash-redirect a
+granted (non-claim) admin on a hard refresh, before their grant has been
+read. Net effect: revoking someone's granted access takes effect in their
+already-open session immediately, no sign-out required — a genuine
+usability advantage over the claim, on top of not needing the Admin SDK
+to grant it in the first place.
+
+This is deliberately unrelated to the committee roster
+(`committeeRoster`/`admin/committee-roles` — see Structure and Two
+independent features above), which describes what someone does at the
+club (President, Secretary, ...) for agenda-printing purposes. Holding a
+committee title implies nothing about app-admin access, and vice versa —
+conflating the two was considered and explicitly rejected.
+
+**Audit log (`auditLog`)** — a direct consequence of loosening
+`appAdmins` grant/revoke to every app-admin: with more than one person
+able to make these changes, you need a record of who actually did what.
+An append-only trail of *meaningful* admin actions across the app, not
+every write — `core/audit/audit-log.models.ts`'s `AuditAction` union is
+the exhaustive list: `admin.grant`/`admin.revoke`, `role.create`/
+`archive`/`restore` and the same three for `committeeRole`,
+`committeeRoster.assign`/`unassign`, `agenda.save`/`publish`/`unpublish`/
+`delete`, `attendance.confirm`/`unconfirm`. Deliberately **excluded**:
+role/committee-role label edits (`update()`) and JSON-import upserts
+(`setDefinition()`/`CommitteeRosterService.replaceAll()`).
+`SavedAgendaService.save()` used to be excluded for the same reason as
+those — it fired automatically on every keystroke (debounced ~500ms),
+which would have flooded the log — but now that saving is an explicit
+Save-button click (see "Saving used to be automatic" under Two
+independent features above), each one is `agenda.save`, exactly as
+meaningful as `agenda.publish`/`agenda.delete`. Every instrumented service
+(`AppAdminService`, `RoleDefinitionService`, `CommitteeRoleDefinitionService`,
+`CommitteeRosterService`, `PublishedAgendaService`, `SavedAgendaService`,
+`AttendanceConfirmationService`) now also injects `AuthService` purely to
+attribute the entry it writes — `core/audit/audit-log.util.ts`'s
+`appendAuditEntry(firestore, batch, action, summary, actor)` is the only
+way an entry is ever created, and it's never called outside a
+`writeBatch()` that also contains the actual change, so the trail can
+never drift out of sync with reality: either both writes land, or
+neither does. `summary` is a plain human-readable string built by the
+writer at write time (e.g. `Archived meeting role "Grammarian"`) —
+`AuditLogComponent` just renders it directly, so a new `AuditAction`
+never needs a matching change in the UI's rendering logic.
+`firestore.rules`' `auditLog` rule only validates shape (`action`/
+`actorUid`/`at`/`summary` all present as the right type), not the exact
+`action` value — enumerating every action string there would need
+updating on every new action added, for no real safety gain.
+
+**Read is `isAdmin()`-only, not `isAppAdmin()`** — the one place in this
+feature that's deliberately *not* loosened: any app-admin can perform an
+audited action, but only a true claim-holder can see the trail of who did
+what (`AuditLogService`, injected only by `AuditLogComponent` at
+`/admin/audit-log`, guarded by `superAdminGuard`). `allow update, delete:
+if false` for everyone, always — an audit trail that can be edited after
+the fact isn't one; there's no admin UI or script that touches an
+existing entry, only ever creates new ones. `AuditLogService` is a live
+`onSnapshot` (`orderBy('at', 'desc')`, capped at the 200 most recent
+entries — a small club's admin-grant/role/agenda activity will never come
+close to that; the cap exists purely to bound the read, not because older
+entries stop mattering).
+
+`AuditLogComponent.rows` (a `computed`) collapses a run of *consecutive*
+entries sharing the same action/summary/actor into one displayed row with
+a `×N` badge and a first–latest time range, rather than rendering every
+raw entry — this is what actually surfaced the republish-loop bug above
+in the first place (a wall of ~100 identical "Published agenda #164"
+lines was the first visible symptom) and keeps the page readable if a
+similar burst ever happens again for any reason, without hiding genuinely
+distinct activity (different meetings/actors/actions are never merged).
+
 **Member accounts (`/signup`, `/member`)** — genuinely self-service: anyone
 can create one, no admin action required, which is exactly why it carries
 no privilege beyond "is signed in" (see `memberGuard` above).
@@ -782,10 +1018,23 @@ own "Edit Name" instead) but deliberately exempts admins, who need the
 flexibility to type any name while running a meeting.
 
 **Firestore rules are now per-collection, not a single blanket `allow read,
-write: if true`** (`firestore.rules`):
+write: if true`** (`firestore.rules`). Everywhere below that says
+"app-admin" means `isAppAdmin()` — real claim OR Firestore grant, see
+"App-admin grants" above; `members` and `auditLog` read are the deliberate
+exceptions that still check `isAdmin()` specifically:
 - `checkins/**` — untouched, fully open (see above).
+- `appAdmins/{uid}` — **own-uid-or-app-admin read, app-admin write (except
+  your own uid)** — any app-admin can grant/revoke ANOTHER member's
+  access; the one thing still real-claim-only nowhere in this rule at all
+  is granting yourself, enforced via `request.auth.uid != uid` on
+  create/update specifically, not via `isAdmin()` — see "App-admin
+  grants" above.
+- `auditLog/{entryId}` — **isAdmin()-only read, app-admin create, no
+  update/delete for anyone** — see "Audit log" above for why read stays
+  real-claim-only even though any app-admin can create an entry (by
+  performing the action it describes).
 - `roleDefinitions`, `committeeRoleDefinitions`, `committeeRoster`,
-  `publishedAgendas` — **public read, admin-only write**. All four are
+  `publishedAgendas` — **public read, app-admin write**. All four are
   public-read for a non-obvious reason worth remembering before tightening
   any of them further: every migrated Firestore-backed service subscribes
   via `onSnapshot()` **eagerly in its constructor**, so a collection is
@@ -799,20 +1048,23 @@ write: if true`** (`firestore.rules`):
   would break the corresponding public page with a silent permission-denied,
   not a build error — trace real injection chains before ever tightening a
   rule here, don't assume from what a page's template shows.
-- `savedAgendas` — **admin-only for both read and write**. Confirmed safe
+- `savedAgendas` — **app-admin for both read and write**. Confirmed safe
   because `SavedAgendaService` is only ever injected by `AgendaEditorComponent`
   and `AdminAgendasComponent`, both already behind the guard — nothing on
   `/preview` or `/checkin` transitively touches it.
 - `members` — **own-uid read/write, plus admin read** (for a future member
   directory) — but never admin *write*, which would defeat the point of
-  self-service. `firestore.rules` also enforces `displayName` can never be
-  blank server-side, mirroring `MemberProfileService`'s own
+  self-service. Deliberately stays `isAdmin()`, not `isAppAdmin()` — no
+  particular reason a granted admin couldn't read it too, it just hasn't
+  come up; tighten this comment if that's ever deliberately extended.
+  `firestore.rules` also enforces `displayName` can never be blank
+  server-side, mirroring `MemberProfileService`'s own
   `requireDisplayName()` guard client-side.
-- `memberHistory` — **admin-only write, read gated to the record's own
-  subject or an admin**. The opposite ownership split from `members`: an
+- `memberHistory` — **app-admin write, read gated to the record's own
+  subject or an app-admin**. The opposite ownership split from `members`: an
   admin confirms someone ELSE'S attendance/role/speech, so there's no
   own-uid check on write, only on read.
-- `checkinContacts` — **admin-only read, open write** (same accepted-risk
+- `checkinContacts` — **app-admin read, open write** (same accepted-risk
   write model as `checkins/**` itself) — see Persistence above for why this
   is the one place raw check-in email/PII is allowed to live at all.
 
@@ -836,6 +1088,26 @@ regression test for the security property itself:
 be rejected on write — being signed in is not enough.
 `checkin-state.service.emulator.spec.ts` is untouched, since `checkins`
 rules didn't change.
+
+`AppAdminService`'s own `app-admin.service.emulator.spec.ts` covers the
+`appAdmins` collection itself, including the key regression tests for the
+loosened model: a *granted* admin (present in `appAdmins`, no real claim)
+CAN grant/revoke a DIFFERENT member, but both a true admin AND a granted
+admin are rejected granting THEMSELVES — the self-grant restriction
+applies to both tiers equally. Six of the specs across the app
+(`role-definition`, `committee-role-definition`, `committee-roster`,
+`published-agenda`, `saved-agenda`, `attendance-confirmation`) each got a
+"granted admin can write" test (seeding an `appAdmins/{uid}` doc for an
+otherwise-unclaimed uid, confirming that uid can now write) plus a
+dedicated "writes a matching auditLog entry" test asserting the exact
+`action`/`summary` shape `appendAuditEntry()` produced, all via a plain
+`getDocs()` against the emulator's `auditLog` collection (no
+`AuditLogService` needed in these — that's exercised directly in
+`audit-log.service.emulator.spec.ts`, which drives the pattern through
+`AppAdminService.grant()`/`revoke()` specifically since it's the simplest
+audited mutator, and covers the collection's own rules: `isAdmin()`-only
+read even for a granted admin who performed the audited action, and
+`allow update, delete: if false` for everyone).
 
 **Emulator-only, same as Firestore** — `firebase.json` now also configures
 an `auth` emulator (port 9099, alongside Firestore's 8080), and both
@@ -943,7 +1215,9 @@ dashboard), `http://localhost:4300/admin` (agenda editor),
 `http://localhost:4300/checkin` (check-in page, no sign-in needed),
 `http://localhost:4300/preview` (read-only published-agenda view, no sign-in needed), and
 `http://localhost:4300/admin/roles` / `/admin/committee-roles` / `/admin/manage-roles`
-(manage role definitions).
+(manage role definitions), and `http://localhost:4300/admin/manage-admins`
+(grant/revoke app-admin access — only reachable by a true, real-claim
+admin, not a Firestore-granted one).
 
 **Reaching the app from a phone or another device on the same LAN**:
 `npm run serve:mobile` (`ng serve --host 0.0.0.0 --port 4300`) instead of

@@ -6,24 +6,20 @@
 </app-navbar>
 
 <div class="d-flex flex-column align-items-center" style="margin-top:32px;">
-  <div class="row row-cols-1 row-cols-md-2 g-4 px-3" style="max-width:640px;width:100%;">
+  <div class="d-flex flex-wrap justify-content-center gap-4 px-3" style="max-width:640px;">
 
-    <div class="col">
-      <div class="card h-100 text-center p-4 shadow-sm position-relative">
-        <div class="fs-1 mb-2">⚙</div>
-        <h2 class="fs-6 fw-bold">Manage Meeting Roles</h2>
-        <p class="text-muted small mb-0">Roles claimed live via check-in (Toastmaster, Grammarian, Timekeeper, ...)</p>
-        <a routerLink="/admin/roles" class="stretched-link" aria-label="Open Manage Meeting Roles"></a>
-      </div>
+    <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+      <div class="fs-1 mb-2">⚙</div>
+      <h2 class="fs-6 fw-bold">Manage Meeting Roles</h2>
+      <p class="text-muted small mb-0">Roles claimed live via check-in (Toastmaster, Grammarian, Timekeeper, ...)</p>
+      <a routerLink="/admin/roles" class="stretched-link" aria-label="Open Manage Meeting Roles"></a>
     </div>
 
-    <div class="col">
-      <div class="card h-100 text-center p-4 shadow-sm position-relative">
-        <div class="fs-1 mb-2">🗂️</div>
-        <h2 class="fs-6 fw-bold">Manage Committee Roles</h2>
-        <p class="text-muted small mb-0">Executive committee titles assigned by the admin (President, Secretary, ...)</p>
-        <a routerLink="/admin/committee-roles" class="stretched-link" aria-label="Open Manage Committee Roles"></a>
-      </div>
+    <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+      <div class="fs-1 mb-2">🗂️</div>
+      <h2 class="fs-6 fw-bold">Manage Committee Roles</h2>
+      <p class="text-muted small mb-0">Executive committee titles assigned by the admin (President, Secretary, ...)</p>
+      <a routerLink="/admin/committee-roles" class="stretched-link" aria-label="Open Manage Committee Roles"></a>
     </div>
 
   </div>

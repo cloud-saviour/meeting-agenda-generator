@@ -159,6 +159,63 @@ them) so **they** set their own real password. Re-running with an email
 that already has an account leaves it untouched (no new link, no
 overwritten profile) — safe to re-run over a growing list.
 
+### Letting other admins manage users without sharing your key
+
+The scripts above need real project access to run against `--prod`.
+Rather than handing another admin your downloaded service-account JSON
+key (a single shared secret — hard to revoke for just one person without
+rotating it for everyone using it), give them their own access on the
+Firebase/Google Cloud project instead, tied to their own Google account.
+Both scripts already support this with **no code changes**: in `--prod`
+mode they call `initializeApp({ projectId })` with no explicit
+credential, so they automatically pick up whatever Application Default
+Credentials (ADC) are available — a downloaded key file (your current
+setup) or a signed-in `gcloud` identity (theirs), whichever is present.
+
+**You grant access once, per person**: Firebase Console → Project
+Settings → Users and permissions (or Google Cloud Console → IAM) on
+`agenda-planner-101c4` → add their Google account with a role that can
+manage Auth users and write Firestore:
+
+- Simplest: the **Firebase Admin** (`roles/firebase.admin`) role — broad,
+  covers everything both scripts do.
+- Tighter: **Firebase Authentication Admin**
+  (`roles/firebaseauth.admin` — covers `setCustomUserClaims`/`createUser`)
+  together with **Cloud Datastore User** (`roles/datastore.user` — covers
+  the `members/{uid}` Firestore profile write `create-member-accounts.mjs`
+  does).
+
+**What they do once, on their own machine**: install the
+[Google Cloud CLI](https://cloud.google.com/sdk/docs/install), then run
+
+```bash
+gcloud auth application-default login
+gcloud auth application-default set-quota-project agenda-planner-101c4
+```
+
+signing in with the Google account you just granted access to. That's
+it — no `GOOGLE_APPLICATION_CREDENTIALS` env var, no key file to send
+them at all.
+
+**Then they run the exact same commands you do**, from their own clone
+of the repo (`npm install` first):
+
+```bash
+npm run promote:admin:prod -- their-email@example.com
+npm run create:members:prod -- "their-email@example.com:Their Name"
+```
+
+**Revoking access later** is just removing them from Users and
+permissions — takes effect immediately, and doesn't touch anyone else's
+access the way rotating a shared key file would.
+
+**One distinction worth keeping straight**: this IAM access (who can
+operate the Firebase project itself) is separate from the `admin` custom
+claim (who can use the app's own `/admin*` routes) — granting someone
+IAM access doesn't by itself make them an app-admin. Either you run
+`promote:admin:prod` for them, or once they have IAM access they can run
+it themselves.
+
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

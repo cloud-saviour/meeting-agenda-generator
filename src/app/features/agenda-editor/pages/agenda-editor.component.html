@@ -2,7 +2,13 @@
 
   <!-- APP BAR -->
   <app-navbar title="Agora Agenda Planner" [printHidden]="true" [links]="navLinks">
-    <button class="btn btn-outline-light btn-sm" (click)="newAgenda()" title="Start a new agenda — the current one is already saved">
+    <button class="btn btn-sm" [class.btn-danger]="isDirty" [class.btn-outline-light]="!isDirty"
+      [disabled]="saving || !state.meeting().no"
+      [title]="!state.meeting().no ? 'Set a meeting number before saving' : ''"
+      (click)="save()">
+      {{ saving ? 'Saving…' : isDirty ? '💾 Save*' : justSaved ? '✓ Saved' : '💾 Save' }}
+    </button>
+    <button class="btn btn-outline-light btn-sm" (click)="newAgenda()" title="Start a new agenda — you'll be asked to confirm if the current one has unsaved changes">
       🆕 New Agenda
     </button>
     <a class="btn btn-outline-light btn-sm" routerLink="/admin/agendas">📋 My Agendas</a>
