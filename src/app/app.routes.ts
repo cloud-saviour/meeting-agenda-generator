@@ -68,12 +68,7 @@ export const routes: Routes = [
     loadComponent: () => import('./features/checkin/pages/checkin.component').then((m) => m.CheckinComponent),
   },
   {
-    // memberGuard, not authGuard — a published agenda is for members to read,
-    // not only admins. Guarded (unlike /checkin, which stays anonymous by
-    // design) because the agenda exposes names plus committee contact details;
-    // firestore.rules enforces the same thing on the data itself.
     path: 'preview',
-    canActivate: [memberGuard],
     loadComponent: () => import('./features/agenda-viewer/pages/agenda-viewer.component').then((m) => m.AgendaViewerComponent),
   },
   { path: '**', redirectTo: '' },

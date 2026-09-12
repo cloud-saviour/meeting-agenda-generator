@@ -103,23 +103,8 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAppAdmin();
     }
-    // The one collection in this group that is NOT public-read. A published
-    // agenda carries real personal information — every role-holder's and
-    // speaker's name, plus the Executive Committee footer's emails and phone
-    // numbers — so reading it requires being signed in (any account: member
-    // or admin), matching memberGuard on /preview. Deliberately
-    // `request.auth != null` rather than isAppAdmin(): ordinary members are
-    // exactly who this page is for.
-    //
-    // Consequence worth knowing: HomeComponent reads this collection to
-    // decide whether to show its "Meeting Check-in" tile, and Home is a
-    // public route — so a signed-out visitor can't see that tile and reaches
-    // check-in via the shared /checkin?meeting=X link instead.
-    // PublishedAgendaService only opens its collection listener while signed
-    // in for this reason (see its constructor), so signing out doesn't leave
-    // a listener retrying against a rule that now denies it.
     match /publishedAgendas/{meetingId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if isAppAdmin();
     }
 

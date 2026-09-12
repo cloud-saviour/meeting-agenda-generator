@@ -43,7 +43,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /publishedAgendas/{meetingId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if isAppAdmin();
     }
     match /auditLog/{entryId} {
@@ -105,6 +105,9 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
     firestore = testEnv.authenticatedContext('test-admin-uid', { admin: true }).firestore() as unknown as Firestore;
+
+    TestBed.configureTestingModule({});
+    parentInjector = TestBed.inject(Injector);
   });
 
   afterAll(async () => {
@@ -113,15 +116,6 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
 
   beforeEach(async () => {
     await testEnv.clearFirestore();
-
-    // Fetched fresh per test, not once in beforeAll: TestBed destroys its
-    // environment injector after every test, and PublishedAgendaService's
-    // effect() (opening/closing the collection listener as auth changes)
-    // needs a live DestroyRef from this injector's ancestor chain — a stale
-    // parentInjector throws NG0205 from the second test onward. Same
-    // reasoning as checkin-state.service.emulator.spec.ts.
-    TestBed.configureTestingModule({});
-    parentInjector = TestBed.inject(Injector);
   });
 
   afterEach(() => {
@@ -165,23 +159,6 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     expect(service.current()).toBeNull();
     await service.refetch('160');
     expect(service.current()).toMatchObject(snapshot);
-  });
-
-  // A published agenda carries names plus the committee footer's emails and
-  // phone numbers, so reading it requires being signed in — /preview is behind
-  // memberGuard for the same reason. This is the rule-level half of that: the
-  // guard alone would still leave the data fetchable straight from the API.
-  it('rejects reads from an unauthenticated client, but allows any signed-in account', async () => {
-    const service = createService();
-    await service.publish('160', makeSnapshot({ no: '160', theme: 'Members Only' }));
-
-    const anonDb = testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
-    await expect(getDocs(collection(anonDb, 'publishedAgendas'))).rejects.toThrow();
-
-    // A plain member — no admin claim, no appAdmins grant — can still read.
-    const memberDb = testEnv.authenticatedContext('plain-member-uid').firestore() as unknown as Firestore;
-    const readable = await getDocs(collection(memberDb, 'publishedAgendas'));
-    expect(readable.docs.map((d) => d.id)).toEqual(['160']);
   });
 
   it('refetch() for a meeting that was never published sets current() to null', async () => {

@@ -842,6 +842,30 @@ are all still there and unchanged, for when you knowingly want just one
 piece: `deploy` (build + hosting only), `deploy:hosting` (hosting only, no
 build), `deploy:rules` (rules only, no build).
 
+**Hosting cache headers (`firebase.json`'s `hosting.headers`) exist because
+of a real production outage mode, and their ORDER is load-bearing.**
+Firebase Hosting's default is `max-age=3600` on everything, including
+`index.html`. Angular emits content-hashed chunk names that change per
+build, so a visitor holding a cached `index.html` from a previous deploy
+requests chunk hashes that no longer exist; those 404s hit the SPA catch-all
+rewrite and come back as `index.html` with `text/html`, the dynamic
+`import()` fails strict MIME checking, and the app never boots — a blank
+page, for up to an hour after every deploy. The config now sets
+`no-cache, no-store, must-revalidate` on `**` (which is what every SPA route
+resolves to) and `public, max-age=31536000, immutable` on hashed assets
+(`**/*.@(js|css|woff|woff2|…)`), which are safe to cache forever precisely
+because their URL changes whenever their bytes do.
+
+**When several `headers` entries match one request, the LAST one wins** —
+verified by deploying and reading the live response headers, not assumed.
+The first attempt had the asset rule first and `**` second, which silently
+gave `main-*.js` `no-cache` too. So the broad `**` baseline must come
+first and the specific asset rule after it. Check with
+`curl -sI https://agora-agenda-planner.web.app/<path>` after changing this;
+a wrong order fails silently (the site still works, it just stops caching
+anything). Note this fix only prevents *future* poisoning — a browser that
+already cached a bad response keeps it until that entry expires.
+
 **Note that `deploy` is hosting-only, and that once caused a real production
 bug** — reach for `deploy:all` unless you specifically want otherwise. The
 `appAdmins`/`auditLog` work shipped via that hosting-only `deploy`, so the
@@ -927,26 +951,13 @@ action itself (see "Audit log" below). `/member` is gated by the
 separate `memberGuard` (`core/auth/member.guard.ts`) on `currentUser() !==
 null` alone — a member account never carries the admin claim (self-service
 sign-up can't grant one), so reusing `authGuard` there would wrongly reject
-every member. `/preview` uses that same `memberGuard`, for the same reason
-it isn't `authGuard`: a published agenda is for members to read, not only
-admins. It used to be unguarded, and was closed because the agenda exposes
-every role-holder's and speaker's name plus the committee footer's emails
-and phone numbers; `firestore.rules` locks `publishedAgendas` read to
-`request.auth != null` alongside it, since a route guard alone would leave
-the same data fetchable straight from the REST API (see Persistence above
-for the knock-on effects on Home's check-in tile and
-`PublishedAgendaService`'s listener).
-
-`/checkin` remains deliberately **unguarded** — it stays open to all three
-tiers: an anonymous
+every member. `/checkin` and `/preview` are still deliberately **not**
+guarded by either — check-in stays open to all three tiers: an anonymous
 visitor types a name+email (see "How anonymous identity works" under
 Persistence above), while a signed-in member or admin uses their real
 account instead (`CheckinStateService.currentUid` prefers
 `auth.currentUser()?.uid`, falling back to the anonymous email-hash only
-once signed out). Closing `/preview` deliberately did **not** touch this —
-`checkins/**` stays fully public, and an anonymous guest still checks in,
-claims roles and signs up to speak exactly as before; they just can't read
-the assembled agenda. Self-service member accounts were the "real
+once signed out). Self-service member accounts were the "real
 member-facing accounts" item this file used to list under Known gaps — they
 now exist alongside the admin-only auth and the anonymous check-in flow;
 multi-tenant support and paid subscriptions are still open (see Known gaps
@@ -1173,38 +1184,17 @@ exceptions that still check `isAdmin()` specifically:
   update/delete for anyone** — see "Audit log" above for why read stays
   real-claim-only even though any app-admin can create an entry (by
   performing the action it describes).
-- `publishedAgendas` — **signed-in read (`request.auth != null`), app-admin
-  write**. The exception to the public-read group below: a published agenda
-  carries real personal information — every role-holder's and speaker's
-  name, plus the Executive Committee footer's emails and phone numbers — so
-  `/preview` is behind `memberGuard` and the rule enforces the same thing on
-  the data itself (a route guard alone would leave it fetchable straight from
-  the REST API). `request.auth != null`, not `isAppAdmin()`: ordinary members
-  are exactly who the page is for. Two knock-on effects, both deliberate:
-  `HomeComponent` can no longer read the collection when signed out, so a
-  signed-out visitor doesn't get the "Meeting Check-in" tile and reaches
-  check-in via the shared `/checkin?meeting=X` link instead (check-in itself
-  is untouched and still fully anonymous); and `PublishedAgendaService` opens
-  its collection listener **only while signed in** (an `effect()` over
-  `auth.currentUser()`, tearing the previous listener down first and clearing
-  `allEntries`/`snapshot` on sign-out) rather than unconditionally in its
-  constructor, so a signed-out visitor on the public Home route doesn't sit
-  retrying a read the rules now deny. `CheckinComponent` also hides its
-  "👁 Preview Agenda" nav link for anonymous visitors, since it would only
-  bounce them to `/login`.
-- `roleDefinitions`, `committeeRoleDefinitions`, `committeeRoster` —
-  **public read, app-admin write**. All three are
+- `roleDefinitions`, `committeeRoleDefinitions`, `committeeRoster`,
+  `publishedAgendas` — **public read, app-admin write**. All four are
   public-read for a non-obvious reason worth remembering before tightening
   any of them further: every migrated Firestore-backed service subscribes
   via `onSnapshot()` **eagerly in its constructor**, so a collection is
   exposed to whoever the *service* is transitively injected by, not just
-  whoever the *page* visibly renders. `AgendaPreviewComponent` injects
-  `AgendaStateService`, which itself injects
+  whoever the *page* visibly renders. `AgendaPreviewComponent` (used on the
+  public `/preview`) injects `AgendaStateService`, which itself injects
   `CommitteeRosterService` — so `/preview` fires a live `committeeRoster`
   read on load even though nothing in `/preview`'s own template displays
-  roster data directly (`/preview` is signed-in-only now, but `/checkin`
-  reaches the same service the same way and is not).
-  `RoleDefinitionService` is the same story via
+  roster data directly. `RoleDefinitionService` is the same story via
   `RoleBoardComponent` on `/checkin`. Making any of these four admin-only
   would break the corresponding public page with a silent permission-denied,
   not a build error — trace real injection chains before ever tightening a
