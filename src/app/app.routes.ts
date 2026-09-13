@@ -23,45 +23,51 @@ export const routes: Routes = [
     loadComponent: () => import('./features/member/pages/member-dashboard.component').then((m) => m.MemberDashboardComponent),
   },
   {
+    // Every /admin* route shares authGuard — declared once here on the
+    // parent rather than on each child, since Angular runs a parent route's
+    // guards for every navigation into any of its children. admin/audit-log
+    // still layers its own superAdminGuard on top (see below) — redundant
+    // with authGuard today (isAdmin() already implies isAppAdmin()), but
+    // kept explicit since audit-log's access rule is deliberately stricter
+    // and shouldn't silently depend on that implication holding forever.
     path: 'admin',
     canActivate: [authGuard],
-    canDeactivate: [agendaEditorCanDeactivateGuard],
-    loadComponent: () => import('./features/agenda-editor/pages/agenda-editor.component').then((m) => m.AgendaEditorComponent),
-  },
-  {
-    path: 'admin/agendas',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/admin-agendas/pages/admin-agendas.component').then((m) => m.AdminAgendasComponent),
-  },
-  {
-    path: 'admin/manage-agendas',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/admin-agendas-hub/pages/admin-agendas-hub.component').then((m) => m.AdminAgendasHubComponent),
-  },
-  {
-    path: 'admin/manage-roles',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/admin-roles-hub/pages/admin-roles-hub.component').then((m) => m.AdminRolesHubComponent),
-  },
-  {
-    path: 'admin/roles',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/admin-roles/pages/admin-roles.component').then((m) => m.AdminRolesComponent),
-  },
-  {
-    path: 'admin/committee-roles',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/admin-committee-roles/pages/admin-committee-roles.component').then((m) => m.AdminCommitteeRolesComponent),
-  },
-  {
-    path: 'admin/manage-admins',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/admin-admins/pages/admin-admins.component').then((m) => m.AdminAdminsComponent),
-  },
-  {
-    path: 'admin/audit-log',
-    canActivate: [superAdminGuard],
-    loadComponent: () => import('./features/admin-audit-log/pages/audit-log.component').then((m) => m.AuditLogComponent),
+    children: [
+      {
+        path: '',
+        canDeactivate: [agendaEditorCanDeactivateGuard],
+        loadComponent: () => import('./features/agenda-editor/pages/agenda-editor.component').then((m) => m.AgendaEditorComponent),
+      },
+      {
+        path: 'agendas',
+        loadComponent: () => import('./features/admin-agendas/pages/admin-agendas.component').then((m) => m.AdminAgendasComponent),
+      },
+      {
+        path: 'manage-agendas',
+        loadComponent: () => import('./features/admin-agendas-hub/pages/admin-agendas-hub.component').then((m) => m.AdminAgendasHubComponent),
+      },
+      {
+        path: 'manage-roles',
+        loadComponent: () => import('./features/admin-roles-hub/pages/admin-roles-hub.component').then((m) => m.AdminRolesHubComponent),
+      },
+      {
+        path: 'roles',
+        loadComponent: () => import('./features/admin-roles/pages/admin-roles.component').then((m) => m.AdminRolesComponent),
+      },
+      {
+        path: 'committee-roles',
+        loadComponent: () => import('./features/admin-committee-roles/pages/admin-committee-roles.component').then((m) => m.AdminCommitteeRolesComponent),
+      },
+      {
+        path: 'manage-admins',
+        loadComponent: () => import('./features/admin-admins/pages/admin-admins.component').then((m) => m.AdminAdminsComponent),
+      },
+      {
+        path: 'audit-log',
+        canActivate: [superAdminGuard],
+        loadComponent: () => import('./features/admin-audit-log/pages/audit-log.component').then((m) => m.AuditLogComponent),
+      },
+    ],
   },
   {
     path: 'checkin',
