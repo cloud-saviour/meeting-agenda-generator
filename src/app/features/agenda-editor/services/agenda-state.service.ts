@@ -147,7 +147,7 @@ export class AgendaStateService {
   // ── AgendaItem methods ────────────────────────────────────────────────────
   addAgItem(type: AgendaItem['type']): void {
     const id = ++this.agId;
-    const defaultRoleId = this.roleDefs.activeRoles()[0]?.id ?? '';
+    const defaultRoleId = this.roleDefs.activeMeetingRoles()[0]?.id ?? '';
     let item: AgendaItem;
 
     switch (type) {

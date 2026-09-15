@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { saveAs } from 'file-saver';
-import { CommitteeRoleDefinitionService } from '../../agenda-editor/services/committee-role-definition.service';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { CommitteeRosterService } from '../../agenda-editor/services/committee-roster.service';
 import { RoleDefinition } from '../../../core/models/role-definition.models';
 import { CommitteeMember } from '../../agenda-editor/models/agenda.models';
@@ -25,12 +25,12 @@ export interface CommitteeSnapshot {
  */
 @Injectable({ providedIn: 'root' })
 export class CommitteeImportExportService {
-  private readonly roleDefs = inject(CommitteeRoleDefinitionService);
+  private readonly roleDefs = inject(RoleDefinitionService);
   private readonly roster = inject(CommitteeRosterService);
 
   getSnapshot(): CommitteeSnapshot {
     return {
-      roleDefinitions: JSON.parse(JSON.stringify(this.roleDefs.all())),
+      roleDefinitions: JSON.parse(JSON.stringify(this.roleDefs.committeeRoles())),
       roster: JSON.parse(JSON.stringify(this.roster.all())),
     };
   }
@@ -64,6 +64,7 @@ export class CommitteeImportExportService {
         label: role.label,
         order: role.order ?? 0,
         active: role.active ?? true,
+        kind: 'committee',
         ...(role.description ? { description: role.description } : {}),
       });
     }

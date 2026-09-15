@@ -12,7 +12,8 @@ import { AuthService } from '../auth/auth.service';
 /**
  * RoleDefinitionService has no localStorage fallback anymore — the role list
  * lives entirely in Firestore's `roleDefinitions` collection (seeded via
- * scripts/seed-role-definitions.mjs, not hardcoded in the app). Run via
+ * scripts/seed-role-definitions.mjs, not hardcoded in the app), covering
+ * BOTH meeting roles and committee roles, discriminated by `kind`. Run via
  * `npm run test:emulator` with the emulator already running.
  *
  * isAdmin() requires the `admin` custom claim, not just an authenticated uid
@@ -116,51 +117,82 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
     expect(service.all()).toEqual([]);
   });
 
-  it('create() adds a role and it appears live once Firestore delivers it', async () => {
+  it('create() adds a meeting role and it appears live once Firestore delivers it', async () => {
     const service = createService();
-    const role = await service.create('Table Topics Master');
+    const role = await service.create('meeting', 'Table Topics Master');
     expect(role.order).toBe(0);
+    expect(role.kind).toBe('meeting');
 
-    await waitFor(() => service.all().some((r) => r.id === role.id));
-    expect(service.all().find((r) => r.id === role.id)?.label).toBe('Table Topics Master');
+    await waitFor(() => service.meetingRoles().some((r) => r.id === role.id));
+    expect(service.meetingRoles().find((r) => r.id === role.id)?.label).toBe('Table Topics Master');
   });
 
   it('create() assigns increasing order indices', async () => {
     const service = createService();
-    const first = await service.create('Role A');
-    await waitFor(() => service.all().length === 1);
-    const second = await service.create('Role B');
+    const first = await service.create('meeting', 'Role A');
+    await waitFor(() => service.meetingRoles().length === 1);
+    const second = await service.create('meeting', 'Role B');
 
     expect(second.order).toBe(first.order + 1);
   });
 
+  it('create() scopes order to the same kind — a committee role does not inflate a meeting role\'s order, or vice versa', async () => {
+    const service = createService();
+    await service.create('meeting', 'Meeting Role A');
+    await service.create('meeting', 'Meeting Role B');
+    await waitFor(() => service.meetingRoles().length === 2);
+
+    const committeeRole = await service.create('committee', 'First Committee Role');
+    expect(committeeRole.order).toBe(0);
+  });
+
+  it('meeting and committee roles stay isolated from each other in meetingRoles()/committeeRoles(), but both appear in all()', async () => {
+    const service = createService();
+    const meeting = await service.create('meeting', 'Grammarian');
+    const committee = await service.create('committee', 'Treasurer');
+    await waitFor(() => service.all().length === 2);
+
+    expect(service.meetingRoles().map((r) => r.id)).toEqual([meeting.id]);
+    expect(service.committeeRoles().map((r) => r.id)).toEqual([committee.id]);
+    expect(service.all().map((r) => r.id).sort()).toEqual([committee.id, meeting.id].sort());
+  });
+
+  it('a document with no "kind" field (pre-merge legacy data) is treated as "meeting"', async () => {
+    await setDoc(doc(firestore, 'roleDefinitions', 'legacy-role'), { label: 'Legacy Role', order: 0, active: true });
+    const service = createService();
+
+    await waitFor(() => service.all().some((r) => r.id === 'legacy-role'));
+    expect(service.meetingRoles().some((r) => r.id === 'legacy-role')).toBe(true);
+    expect(service.committeeRoles().some((r) => r.id === 'legacy-role')).toBe(false);
+  });
+
   it('archive() sets active=false without removing the entry; restore() reverses it', async () => {
     const service = createService();
-    const role = await service.create('Table Topics Master');
-    await waitFor(() => service.all().length === 1);
+    const role = await service.create('meeting', 'Table Topics Master');
+    await waitFor(() => service.meetingRoles().length === 1);
 
     await service.archive(role.id);
-    await waitFor(() => !service.activeRoles().some((r) => r.id === role.id));
-    expect(service.all().some((r) => r.id === role.id)).toBe(true);
+    await waitFor(() => !service.activeMeetingRoles().some((r) => r.id === role.id));
+    expect(service.meetingRoles().some((r) => r.id === role.id)).toBe(true);
 
     await service.restore(role.id);
-    await waitFor(() => service.activeRoles().some((r) => r.id === role.id));
+    await waitFor(() => service.activeMeetingRoles().some((r) => r.id === role.id));
   });
 
   it('update() changes label and description', async () => {
     const service = createService();
-    const role = await service.create('Old Label', 'Old description');
-    await waitFor(() => service.all().length === 1);
+    const role = await service.create('meeting', 'Old Label', 'Old description');
+    await waitFor(() => service.meetingRoles().length === 1);
 
     await service.update(role.id, { label: 'New Label', description: 'New description' });
 
-    await waitFor(() => service.all()[0]?.label === 'New Label');
-    expect(service.all()[0].description).toBe('New description');
+    await waitFor(() => service.meetingRoles()[0]?.label === 'New Label');
+    expect(service.meetingRoles()[0].description).toBe('New description');
   });
 
   it('setDefinition() creates a new role at the exact given id — for import, where stable ids must survive the round trip', async () => {
     const service = createService();
-    await service.setDefinition({ id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true });
+    await service.setDefinition({ id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true, kind: 'meeting' });
 
     await waitFor(() => service.all().some((r) => r.id === 'toastmaster'));
     expect(service.all().find((r) => r.id === 'toastmaster')?.label).toBe('Evening Chairman');
@@ -168,10 +200,10 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
 
   it('setDefinition() overwrites an existing role at that id rather than duplicating it', async () => {
     const service = createService();
-    await service.setDefinition({ id: 'toastmaster', label: 'Old Label', order: 0, active: true });
+    await service.setDefinition({ id: 'toastmaster', label: 'Old Label', order: 0, active: true, kind: 'meeting' });
     await waitFor(() => service.all().length === 1);
 
-    await service.setDefinition({ id: 'toastmaster', label: 'New Label', order: 3, active: false });
+    await service.setDefinition({ id: 'toastmaster', label: 'New Label', order: 3, active: false, kind: 'meeting' });
 
     await waitFor(() => service.all()[0]?.label === 'New Label');
     expect(service.all().length).toBe(1);
@@ -185,7 +217,7 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
       .firestore() as unknown as Firestore;
     const service = createService(nonAdminFirestore, 'random-signed-up-uid', 'random@example.com');
 
-    await expect(service.create('Should Be Rejected')).rejects.toThrow();
+    await expect(service.create('meeting', 'Should Be Rejected')).rejects.toThrow();
   });
 
   it('allows writes from a Firestore-granted admin with no real claim — isAppAdmin() takes effect, not just isAdmin()', async () => {
@@ -200,14 +232,14 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
     const grantedFirestore = testEnv.authenticatedContext('granted-uid').firestore() as unknown as Firestore;
     const service = createService(grantedFirestore, 'granted-uid', 'granted@example.com');
 
-    const role = await service.create('Granted Admin Created This');
+    const role = await service.create('meeting', 'Granted Admin Created This');
     await waitFor(() => service.all().some((r) => r.id === role.id));
     expect(service.all().find((r) => r.id === role.id)?.label).toBe('Granted Admin Created This');
   });
 
   it('create() and archive() each write a matching auditLog entry in the same batch as the change itself', async () => {
     const service = createService();
-    const role = await service.create('Table Topics Master');
+    const role = await service.create('meeting', 'Table Topics Master');
     await service.archive(role.id);
 
     const snap = await getDocs(collection(firestore, 'auditLog'));
@@ -215,5 +247,17 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
 
     expect(entries.some((e) => e['action'] === 'role.create' && e['summary'].includes('Table Topics Master'))).toBe(true);
     expect(entries.some((e) => e['action'] === 'role.archive' && e['summary'].includes('Table Topics Master'))).toBe(true);
+  });
+
+  it('committee create()/archive() write committeeRole.* audit actions, not role.*', async () => {
+    const service = createService();
+    const role = await service.create('committee', 'Sergeant at Arms');
+    await service.archive(role.id);
+
+    const snap = await getDocs(collection(firestore, 'auditLog'));
+    const entries = snap.docs.map((d) => d.data());
+
+    expect(entries.some((e) => e['action'] === 'committeeRole.create' && e['summary'].includes('Sergeant at Arms'))).toBe(true);
+    expect(entries.some((e) => e['action'] === 'committeeRole.archive' && e['summary'].includes('Sergeant at Arms'))).toBe(true);
   });
 });

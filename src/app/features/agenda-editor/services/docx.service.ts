@@ -9,7 +9,7 @@ import { AgendaItem, AgendaSnapshot, CommitteeMember, Speaker } from '../models/
 import { computeAgendaTimeline } from '../utils/agenda-timeline';
 import { APP_LOCALE } from '../../../core/utils/locale';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
-import { CommitteeRoleDefinitionService } from './committee-role-definition.service';
+import { CommitteeRosterService } from './committee-roster.service';
 
 // ── Layout constants (all sums = CONTENT_W = 10546) ──────────────────────────
 const CONTENT_W       = 10546;
@@ -400,10 +400,19 @@ async function getImageDims(src: string): Promise<{ w: number; h: number }> {
 @Injectable({ providedIn: 'root' })
 export class DocxService {
   private readonly roleDefs = inject(RoleDefinitionService);
-  private readonly committeeRoleDefs = inject(CommitteeRoleDefinitionService);
+  // Live, not `snapshot.cmt` (a frozen copy AgendaSnapshot used to carry
+  // purely so this service had committee data to render — confirmed dead
+  // for every OTHER reader, since the on-screen preview always uses this
+  // same live roster via AgendaStateService.cmt, but this file had no live
+  // access of its own and was the one real reader left. Matching that
+  // existing live-preview behavior here — instead of keeping the frozen
+  // copy just for this one caller — means the printed footer always
+  // reflects who currently holds each committee role, same as the preview
+  // does, and let AgendaSnapshot.cmt be removed for real. See CLAUDE.md.
+  private readonly committeeRoster = inject(CommitteeRosterService);
 
   async generate(snapshot: AgendaSnapshot, fileName: string): Promise<void> {
-    const roleLabelById = new Map([...this.roleDefs.all(), ...this.committeeRoleDefs.all()].map((r) => [r.id, r.label]));
+    const roleLabelById = new Map(this.roleDefs.all().map((r) => [r.id, r.label]));
     const logoLeft  = snapshot.logoLeft  ?? 'logo.png';
     const logoRight = snapshot.logoRight ?? 'crown.png';
 
@@ -422,7 +431,7 @@ export class DocxService {
       ...buildMission(snapshot),
       ...buildAgendaBody(snapshot.agItems, snapshot.spks, snapshot, roleLabelById),
       ...buildMeetingNotes(snapshot),
-      ...buildCommitteeFooter(snapshot.cmt, snapshot, roleLabelById),
+      ...buildCommitteeFooter(this.committeeRoster.all(), snapshot, roleLabelById),
     ];
 
     const doc = new Document({

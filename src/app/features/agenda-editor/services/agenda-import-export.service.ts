@@ -12,13 +12,19 @@ import { AgendaSnapshot, MeetingData } from '../models/agenda.models';
 export class AgendaImportExportService {
   private readonly state = inject(AgendaStateService);
 
+  /**
+   * `cmt` is deliberately NOT included here — the committee roster is
+   * always read live (AgendaStateService.cmt / DocxService's own
+   * CommitteeRosterService injection), so freezing a copy into every saved/
+   * published agenda was pure dead weight: nothing ever read it back. See
+   * AgendaSnapshot.cmt's own doc comment.
+   */
   getSnapshot(): AgendaSnapshot {
     const s = this.state;
     return {
       ...JSON.parse(JSON.stringify(s.meeting())),
       agItems: JSON.parse(JSON.stringify(s.agItems())),
       spks: JSON.parse(JSON.stringify(s.spks())),
-      cmt: JSON.parse(JSON.stringify(s.cmt())),
       logoLeft: s.logoLeft(),
       logoRight: s.logoRight(),
       overriddenRoles: [...s.overriddenRoles()],

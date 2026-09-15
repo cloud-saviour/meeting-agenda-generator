@@ -4,7 +4,6 @@ import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
 import { AgendaStateService } from '../../services/agenda-state.service';
 import { AgendaItem } from '../../models/agenda.models';
 import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
-import { CommitteeRoleDefinitionService } from '../../services/committee-role-definition.service';
 
 @Component({
   selector: 'app-agenda-items',
@@ -16,9 +15,8 @@ import { CommitteeRoleDefinitionService } from '../../services/committee-role-de
 export class AgendaItemsComponent {
   readonly state = inject(AgendaStateService);
   readonly roleDefs = inject(RoleDefinitionService);
-  readonly committeeRoleDefs = inject(CommitteeRoleDefinitionService);
-  readonly activeRoles = this.roleDefs.activeRoles;
-  readonly activeCommitteeRoles = this.committeeRoleDefs.activeRoles;
+  readonly activeRoles = this.roleDefs.activeMeetingRoles;
+  readonly activeCommitteeRoles = this.roleDefs.activeCommitteeRoles;
   editMode = false;
 
   /** Bubbles up to the page controller, which pushes the lock into CheckinStateService for the current meeting. */

@@ -22,13 +22,13 @@ export class AdminRolesComponent {
   editDescription = '';
 
   get roles() {
-    return this.roleDefs.all();
+    return this.roleDefs.meetingRoles();
   }
 
   create() {
     const label = this.newLabel.trim();
     if (!label) return;
-    this.roleDefs.create(label, this.newDescription);
+    this.roleDefs.create('meeting', label, this.newDescription);
     this.newLabel = '';
     this.newDescription = '';
   }

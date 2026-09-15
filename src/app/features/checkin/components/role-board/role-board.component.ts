@@ -14,7 +14,7 @@ export class RoleBoardComponent {
   readonly roleDefs = inject(RoleDefinitionService);
   readonly auth = inject(AuthService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
-  readonly activeRoles = this.roleDefs.activeRoles;
+  readonly activeRoles = this.roleDefs.activeMeetingRoles;
 
   claimError: string | null = null;
   private readonly pendingRoleConfirm = new Set<string>();

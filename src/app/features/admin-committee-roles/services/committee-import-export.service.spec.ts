@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { CommitteeImportExportService } from './committee-import-export.service';
-import { CommitteeRoleDefinitionService } from '../../agenda-editor/services/committee-role-definition.service';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { CommitteeRosterService } from '../../agenda-editor/services/committee-roster.service';
 import { RoleDefinition } from '../../../core/models/role-definition.models';
 import { CommitteeMember } from '../../agenda-editor/models/agenda.models';
@@ -14,17 +14,17 @@ describe('CommitteeImportExportService', () => {
   let replaceAll: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    roles = [{ id: 'president', label: 'President', order: 0, active: true }];
+    roles = [{ id: 'president', label: 'President', order: 0, active: true, kind: 'committee' }];
     roster = [{ roleId: 'president', name: 'Naledi K.', email: 'naledi@example.com', phone: '' }];
     setDefinition = vi.fn().mockResolvedValue(undefined);
     replaceAll = vi.fn().mockResolvedValue(undefined);
 
-    const fakeRoleDefs = { all: () => roles, setDefinition } as unknown as CommitteeRoleDefinitionService;
+    const fakeRoleDefs = { committeeRoles: () => roles, setDefinition } as unknown as RoleDefinitionService;
     const fakeRoster = { all: () => roster, replaceAll } as unknown as CommitteeRosterService;
 
     TestBed.configureTestingModule({
       providers: [
-        { provide: CommitteeRoleDefinitionService, useValue: fakeRoleDefs },
+        { provide: RoleDefinitionService, useValue: fakeRoleDefs },
         { provide: CommitteeRosterService, useValue: fakeRoster },
       ],
     });
@@ -45,6 +45,11 @@ describe('CommitteeImportExportService', () => {
     expect(setDefinition).toHaveBeenCalledWith(roles[0]);
     expect(replaceAll).toHaveBeenCalledTimes(1);
     expect(replaceAll).toHaveBeenCalledWith(roster);
+  });
+
+  it('loadSnapshot() always tags imported roles kind: \'committee\', regardless of what the imported file itself claims', async () => {
+    await importExport.loadSnapshot({ roleDefinitions: [{ id: 'president', label: 'President', kind: 'meeting' } as RoleDefinition], roster });
+    expect(setDefinition).toHaveBeenCalledWith(expect.objectContaining({ kind: 'committee' }));
   });
 
   it('loadSnapshot() rejects a payload missing either array, writing nothing', async () => {
