@@ -133,7 +133,11 @@ src/app/
                       one-time `getDoc()` `open()` already uses) and calls
                       `PublishedAgendaService.publish()`, so publishing no
                       longer requires opening the agenda into the editor
-                      first
+                      first. Each row also has a "👁 Preview" button next to
+                      Open — regardless of publish state, unlike the public
+                      `/preview` — navigating to `/admin/preview?meeting=<no>`
+                      (`AdminAgendasComponent.preview()`); see
+                      `agenda-viewer/`'s `AgendaDraftPreviewComponent` below.
       pages/           admin-agendas.component.ts
 
     admin-agendas-hub/  Route "/admin/manage-agendas" (guarded) — Home's
@@ -171,6 +175,49 @@ src/app/
                         register" actions, writes memberHistory, see
                         Persistence below)
       models/          checkin.models.ts
+
+    agenda-viewer/    Two read-only rendering routes, both reusing
+                      `AgendaPreviewComponent` (from `agenda-editor/
+                      components/`) for the actual output, fed by hydrating
+                      the shared `AgendaStateService` via
+                      `AgendaImportExportService.loadSnapshot()` — they
+                      differ in *where the snapshot comes from*, *who can
+                      reach them*, and — deliberately — *their nav links*.
+                      `AgendaViewerComponent` — route "/preview" (public, no
+                      guard — see Authentication below) — shows the
+                      currently *published* agenda for a meeting, live via
+                      `PublishedAgendaService.current()`, merged with live
+                      check-in activity (`CheckinAgendaSyncService`, see
+                      "Check-in → agenda is automatic" above). Titled
+                      "Agenda Preview", nav has "👥 Check-in" (the meeting
+                      this page shows is, by definition, live/published, so
+                      linking to its check-in sheet makes sense) and
+                      "🏠 Home".
+                      `AgendaDraftPreviewComponent` — route "/admin/preview"
+                      (guarded — nested under `/admin`, see
+                      `app.routes.ts`) — shows a *saved* agenda regardless
+                      of publish state, one-time via
+                      `SavedAgendaService.load()` (mirrors
+                      `AdminAgendasComponent.open()`'s own one-time
+                      `getDoc()`), with the same live check-in merge layered
+                      on top. Reached from "My Agendas"' 👁 Preview button
+                      (see `admin-agendas/` above) — this is what
+                      distinguishes it from `/preview`: an admin can check
+                      how a draft will look before ever publishing it, or
+                      re-check an already-unpublished past meeting. Titled
+                      "Agenda Preview (Draft)", nav has "📋 My Agendas" and
+                      "🏠 Home" but **deliberately no "Check-in" link** — the
+                      meeting being drafted here may not be published (or
+                      may no longer be), so there's often no meaningful
+                      check-in sheet to link to; unlike `/preview`, this
+                      page never assumes one exists. Necessarily admin-only,
+                      since `savedAgendas` itself is admin-read-only per
+                      `firestore.rules` (see Persistence below) — a
+                      signed-out visitor hitting "/admin/preview" is
+                      redirected to `/login` by the same `authGuard` every
+                      other `/admin*` route uses.
+      pages/           agenda-viewer.component.ts,
+                        agenda-draft-preview.component.ts
 
     admin-roles/      Route "/admin/roles" (guarded) — manage role definitions
       pages/           admin-roles.component.ts
@@ -902,6 +949,27 @@ and restarting the emulator doesn't lose your seeded roles or check-in
 data. `.emulator-data/` is gitignored — it's local dev state, not something
 to commit.
 
+**`npm run emulators` also passes `--only firestore,auth` — required, not
+optional, once `firebase.json` gained a top-level `hosting` block.** The
+Firebase CLI starts a Hosting emulator too on a bare `emulators:start`
+whenever `firebase.json` has a `hosting` config, regardless of what's under
+`emulators` in that same file (there's no `emulators.hosting` entry here —
+its presence isn't what gates this). Starting the Hosting emulator means
+resolving `hosting.target` ("main") for whatever project the command is
+running against — and with no `--project` flag, that's the `default` alias,
+`meeting-agenda-generator`, the fake local-only id (see "Local dev is
+emulator-backed" above). `.firebaserc`'s `targets` only maps `main` for the
+*real* project, `agenda-planner-101c4` — so resolving it for the fake one
+fails outright: `Deploy target main not configured for project
+meeting-agenda-generator`, and the whole emulator suite exits immediately,
+including Firestore and Auth, which had already started fine. `--only
+firestore,auth` sidesteps this by never asking the CLI to start Hosting at
+all — which also matches what local dev actually needs: `ng serve`
+(`npm start`) is the real local dev server; the Firebase Hosting emulator
+was never part of this workflow (see the two-terminal setup below). The
+Emulator UI still starts regardless of `--only` — confirmed by running it —
+so `:4000` keeps working exactly as documented.
+
 **Testing the Firestore-backed services**: per the role-locking-pattern and
 localStorage-to-firestore-migration skills, a hand-rolled mock can't
 faithfully reproduce Firestore's optimistic-concurrency retry behavior, so
@@ -1200,9 +1268,11 @@ exceptions that still check `isAdmin()` specifically:
   not a build error — trace real injection chains before ever tightening a
   rule here, don't assume from what a page's template shows.
 - `savedAgendas` — **app-admin for both read and write**. Confirmed safe
-  because `SavedAgendaService` is only ever injected by `AgendaEditorComponent`
-  and `AdminAgendasComponent`, both already behind the guard — nothing on
-  `/preview` or `/checkin` transitively touches it.
+  because `SavedAgendaService` is only ever injected by `AgendaEditorComponent`,
+  `AdminAgendasComponent`, and `AgendaDraftPreviewComponent` (the
+  `/admin/preview` draft-preview page — see `agenda-viewer/` above), all
+  three already behind the guard — nothing on the public `/preview` or
+  `/checkin` transitively touches it.
 - `members` — **own-uid read/write, plus admin read** (for a future member
   directory) — but never admin *write*, which would defeat the point of
   self-service. Deliberately stays `isAdmin()`, not `isAppAdmin()` — no
@@ -1365,7 +1435,10 @@ dashboard), `http://localhost:4300/admin` (agenda editor),
 `http://localhost:4300/admin/agendas` (My Agendas — list/open/publish/delete saved agendas),
 `http://localhost:4300/admin/manage-agendas` (hub: Agenda Editor / My Agendas),
 `http://localhost:4300/checkin` (check-in page, no sign-in needed),
-`http://localhost:4300/preview` (read-only published-agenda view, no sign-in needed), and
+`http://localhost:4300/preview` (read-only published-agenda view, no sign-in needed),
+`http://localhost:4300/admin/preview?meeting=<no>` (preview a saved draft
+regardless of publish state — guarded, reached via My Agendas' 👁 Preview
+button), and
 `http://localhost:4300/admin/roles` / `/admin/committee-roles` / `/admin/manage-roles`
 (manage role definitions), and `http://localhost:4300/admin/manage-admins`
 (grant/revoke app-admin access — only reachable by a true, real-claim

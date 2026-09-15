@@ -43,6 +43,13 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin-agendas/pages/admin-agendas.component').then((m) => m.AdminAgendasComponent),
       },
       {
+        // Admin-only preview of a SAVED draft, published or not — distinct
+        // from the public /preview route below, which only ever shows the
+        // currently published meeting. See AgendaDraftPreviewComponent.
+        path: 'preview',
+        loadComponent: () => import('./features/agenda-viewer/pages/agenda-draft-preview.component').then((m) => m.AgendaDraftPreviewComponent),
+      },
+      {
         path: 'manage-agendas',
         loadComponent: () => import('./features/admin-agendas-hub/pages/admin-agendas-hub.component').then((m) => m.AdminAgendasHubComponent),
       },

@@ -1,0 +1,21 @@
+<app-navbar title="Agenda Preview (Draft)" [fixed]="true"
+  [links]="[
+    { label: '📋 My Agendas', path: '/admin/agendas' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+  <button class="btn btn-outline-light btn-sm" [disabled]="loading" (click)="refresh()">
+    {{ loading ? 'Refreshing…' : '🔄 Refresh' }}
+  </button>
+</app-navbar>
+
+<div>
+  @if (found) {
+    <div class="bg-body-secondary d-flex justify-content-center p-4">
+      <app-agenda-preview></app-agenda-preview>
+    </div>
+  } @else if (!loading) {
+    <div class="container text-center py-5" style="max-width:500px;">
+      <p class="text-muted">No saved agenda found for meeting #{{ meetingId }}.</p>
+    </div>
+  }
+</div>

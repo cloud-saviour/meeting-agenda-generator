@@ -34,6 +34,11 @@ export class AdminAgendasComponent {
     this.router.navigate(['/admin']);
   }
 
+  /** Preview this saved agenda regardless of publish state — see AgendaDraftPreviewComponent. */
+  preview(no: string) {
+    this.router.navigate(['/admin/preview'], { queryParams: { meeting: no } });
+  }
+
   /** Whether `no` is the currently published meeting — entries() is normally 0-1 elements now that publish() is exclusive. */
   isPublished(no: string): boolean {
     return this.publishedAgenda.entries().some((e) => e.no === no);
