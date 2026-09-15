@@ -59,13 +59,19 @@ export class CheckinComponent {
       }
     });
 
-    // Reactive, not a one-time check: isAdmin() reads false until Firebase
+    // Reactive, not a one-time check: isAppAdmin() reads false until Firebase
     // Auth's async session restore resolves, even for an already-signed-in
-    // admin on a cold reload — a plain `if (auth.isAdmin())` here would
+    // admin on a cold reload — a plain `if (auth.isAppAdmin())` here would
     // silently skip loading forever. loadForMeeting() is itself idempotent
     // per meetingId, so repeated effect firings are cheap no-ops.
+    //
+    // isAppAdmin(), not isAdmin(): memberHistory's write rule is isAppAdmin()
+    // (a Firestore-granted admin can confirm attendance same as a real-claim
+    // one — see firestore.rules), so gating the load on the narrower isAdmin()
+    // would leave a granted admin's confirm buttons stuck showing stale/empty
+    // state even though their writes would actually succeed.
     effect(() => {
-      if (this.auth.isAdmin()) {
+      if (this.auth.isAppAdmin()) {
         this.attendanceConfirmation.loadForMeeting(this.meetingId);
       }
     });

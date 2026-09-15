@@ -12,7 +12,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "test:emulator": "ng run meeting-agenda-generator:test-emulator",
-    "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit=./.emulator-data",
+    "emulators": "firebase emulators:start --only firestore,auth --import=./.emulator-data --export-on-exit=./.emulator-data",
     "seed:roles": "node scripts/seed-role-definitions.mjs",
     "seed:roles:prod": "node scripts/seed-role-definitions.mjs --prod",
     "seed:admin": "node scripts/seed-admin-user.mjs",

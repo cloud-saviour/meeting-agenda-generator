@@ -6,7 +6,7 @@
         <span class="badge rounded-pill text-bg-light border d-inline-flex align-items-center gap-1">
           <b>{{ a.name }}</b>
           <span class="text-muted">{{ a.joinedAt }}</span>
-          @if (auth.isAdmin()) {
+          @if (auth.isAppAdmin()) {
             @if (isConfirmed(a.uid)) {
               <button type="button" class="btn btn-success btn-sm py-0 px-1" [disabled]="isConfirmPending(a.uid)" (click)="toggleConfirm(a.uid)">{{ isConfirmPending(a.uid) ? '…' : '✓ Confirmed' }}</button>
             } @else {
