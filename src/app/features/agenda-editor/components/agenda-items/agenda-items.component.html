@@ -38,8 +38,9 @@
                 <select class="form-select form-select-sm" style="width:100%"
                   (change)="onRoleChange(item.id, $any($event.target).value)">
                   @if ($any(item).customRoleLabel) {
-                    <option value="" selected>{{ $any(item).customRoleLabel }}</option>
+                    <option value="__custom__" selected>{{ $any(item).customRoleLabel }}</option>
                   }
+                  <option value="" [selected]="!$any(item).customRoleLabel && !$any(item).roleId">No role</option>
                   <optgroup label="Meeting Roles">
                     @for (def of activeRoles(); track def.id) {
                       <option [value]="def.id" [selected]="!$any(item).customRoleLabel && def.id === $any(item).roleId">{{ def.label }}</option>
@@ -115,8 +116,9 @@
                 <select class="form-select form-select-sm" style="width:100%"
                   (change)="onDualRoleChange(item.id, 0, $any($event.target).value)">
                   @if ($any(item).items[0].customRoleLabel) {
-                    <option value="" selected>{{ $any(item).items[0].customRoleLabel }}</option>
+                    <option value="__custom__" selected>{{ $any(item).items[0].customRoleLabel }}</option>
                   }
+                  <option value="" [selected]="!$any(item).items[0].customRoleLabel && !$any(item).items[0].roleId">No role</option>
                   <optgroup label="Meeting Roles">
                     @for (def of activeRoles(); track def.id) {
                       <option [value]="def.id" [selected]="!$any(item).items[0].customRoleLabel && def.id === $any(item).items[0].roleId">{{ def.label }}</option>
@@ -162,8 +164,9 @@
                 <select class="form-select form-select-sm" style="width:100%"
                   (change)="onDualRoleChange(item.id, 1, $any($event.target).value)">
                   @if ($any(item).items[1].customRoleLabel) {
-                    <option value="" selected>{{ $any(item).items[1].customRoleLabel }}</option>
+                    <option value="__custom__" selected>{{ $any(item).items[1].customRoleLabel }}</option>
                   }
+                  <option value="" [selected]="!$any(item).items[1].customRoleLabel && !$any(item).items[1].roleId">No role</option>
                   <optgroup label="Meeting Roles">
                     @for (def of activeRoles(); track def.id) {
                       <option [value]="def.id" [selected]="!$any(item).items[1].customRoleLabel && def.id === $any(item).items[1].roleId">{{ def.label }}</option>

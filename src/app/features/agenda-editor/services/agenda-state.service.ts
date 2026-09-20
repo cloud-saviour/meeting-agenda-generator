@@ -7,7 +7,6 @@ import {
 } from '../models/agenda.models';
 import { defaultAgenda } from './default-agenda';
 import { APP_LOCALE } from '../../../core/utils/locale';
-import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { CommitteeRosterService } from './committee-roster.service';
 
 const DEFAULT_LOGO_LEFT = 'logo.png';
@@ -43,7 +42,6 @@ function defaultMeeting(no: string, cmt: CommitteeMember[]): MeetingData {
 
 @Injectable({ providedIn: 'root' })
 export class AgendaStateService {
-  private readonly roleDefs = inject(RoleDefinitionService);
   private readonly committeeRoster = inject(CommitteeRosterService);
 
   // ── Private counters ──────────────────────────────────────────────────────
@@ -147,7 +145,6 @@ export class AgendaStateService {
   // ── AgendaItem methods ────────────────────────────────────────────────────
   addAgItem(type: AgendaItem['type']): void {
     const id = ++this.agId;
-    const defaultRoleId = this.roleDefs.activeRoles()[0]?.id ?? '';
     let item: AgendaItem;
 
     switch (type) {
@@ -157,7 +154,7 @@ export class AgendaStateService {
           type: 'row',
           title: 'New item',
           person: '',
-          roleId: defaultRoleId,
+          roleId: '',
           roleVisible: true,
           customRoleLabel: null,
           duration: 5,
@@ -169,8 +166,8 @@ export class AgendaStateService {
           type: 'dual',
           durationA: 10,
           items: [
-            { title: 'Session A', person: '', roleId: defaultRoleId, roleVisible: true, customRoleLabel: null },
-            { title: 'Session B', person: '', roleId: defaultRoleId, roleVisible: true, customRoleLabel: null },
+            { title: 'Session A', person: '', roleId: '', roleVisible: true, customRoleLabel: null },
+            { title: 'Session B', person: '', roleId: '', roleVisible: true, customRoleLabel: null },
           ],
         } as AgendaItem;
         break;
@@ -192,7 +189,7 @@ export class AgendaStateService {
           type: 'row',
           title: 'New item',
           person: '',
-          roleId: defaultRoleId,
+          roleId: '',
           roleVisible: true,
           customRoleLabel: null,
           duration: 5,
