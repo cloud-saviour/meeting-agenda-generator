@@ -11,11 +11,11 @@ describe('RoleDefinitionImportExportService', () => {
 
   beforeEach(() => {
     roles = [
-      { id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true },
-      { id: 'timer', label: 'Timekeeper', order: 1, active: true, description: 'Keeps time' },
+      { id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true, kind: 'meeting' },
+      { id: 'timer', label: 'Timekeeper', order: 1, active: true, description: 'Keeps time', kind: 'meeting' },
     ];
     setDefinition = vi.fn().mockResolvedValue(undefined);
-    const fakeRoleDefs = { all: () => roles, setDefinition } as unknown as RoleDefinitionService;
+    const fakeRoleDefs = { meetingRoles: () => roles, setDefinition } as unknown as RoleDefinitionService;
 
     TestBed.configureTestingModule({
       providers: [{ provide: RoleDefinitionService, useValue: fakeRoleDefs }],
@@ -38,7 +38,12 @@ describe('RoleDefinitionImportExportService', () => {
 
   it('loadSnapshot() defaults a missing order/active rather than writing undefined', async () => {
     await importExport.loadSnapshot([{ id: 'grammarian', label: 'Grammarian' } as RoleDefinition]);
-    expect(setDefinition).toHaveBeenCalledWith({ id: 'grammarian', label: 'Grammarian', order: 0, active: true });
+    expect(setDefinition).toHaveBeenCalledWith({ id: 'grammarian', label: 'Grammarian', order: 0, active: true, kind: 'meeting' });
+  });
+
+  it('loadSnapshot() always tags imported roles kind: \'meeting\', regardless of what the imported file itself claims', async () => {
+    await importExport.loadSnapshot([{ id: 'grammarian', label: 'Grammarian', kind: 'committee' } as RoleDefinition]);
+    expect(setDefinition).toHaveBeenCalledWith(expect.objectContaining({ kind: 'meeting' }));
   });
 
   it('loadSnapshot() rejects a non-array payload without writing anything', async () => {

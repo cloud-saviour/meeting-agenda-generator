@@ -5,10 +5,11 @@ import { AgendaStateService } from './agenda-state.service';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { CommitteeRosterService } from './committee-roster.service';
 
-// AgendaStateService only ever calls roleDefs.activeRoles() (to default a new
-// agenda item's role) — nothing here exercises that path, so a stub avoids
-// needing RoleDefinitionService's real Firestore dependency in this suite.
-const fakeRoleDefinitionService = { activeRoles: () => [] } as unknown as RoleDefinitionService;
+// AgendaStateService only ever calls roleDefs.activeMeetingRoles() (to
+// default a new agenda item's role) — nothing here exercises that path, so
+// a stub avoids needing RoleDefinitionService's real Firestore dependency
+// in this suite.
+const fakeRoleDefinitionService = { activeMeetingRoles: () => [] } as unknown as RoleDefinitionService;
 
 // Same reasoning — CommitteeRosterService is Firestore-backed too.
 const fakeCommitteeRosterService = {
@@ -36,7 +37,11 @@ describe('AgendaImportExportService', () => {
     const snapshot = importExport.getSnapshot();
     expect(snapshot.theme).toBe('Leadership');
     expect(snapshot.agItems.length).toBe(state.agItems().length);
-    expect(snapshot.cmt.length).toBe(state.cmt().length);
+  });
+
+  it('getSnapshot() no longer includes cmt — the committee roster is always read live, never frozen into a saved agenda', () => {
+    const snapshot = importExport.getSnapshot();
+    expect(snapshot.cmt).toBeUndefined();
   });
 
   it('round-trips: getSnapshot -> loadSnapshot -> getSnapshot produces an equivalent snapshot', () => {

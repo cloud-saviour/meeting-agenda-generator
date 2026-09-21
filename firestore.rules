@@ -89,13 +89,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Both meeting roles (claimed via check-in) and committee/governance
+    // titles (admin-assigned only) — discriminated by the doc's own `kind`
+    // field, not by collection; see RoleDefinitionService's class doc.
     // Public read (check-in role board + /preview both need these
     // unauthenticated); only the admin UI writes.
     match /roleDefinitions/{roleId} {
-      allow read: if true;
-      allow write: if isAppAdmin();
-    }
-    match /committeeRoleDefinitions/{roleId} {
       allow read: if true;
       allow write: if isAppAdmin();
     }

@@ -23,7 +23,7 @@ export class RoleDefinitionImportExportService {
   private readonly roleDefs = inject(RoleDefinitionService);
 
   getSnapshot(): RoleDefinition[] {
-    return JSON.parse(JSON.stringify(this.roleDefs.all()));
+    return JSON.parse(JSON.stringify(this.roleDefs.meetingRoles()));
   }
 
   saveJSON(): void {
@@ -49,6 +49,7 @@ export class RoleDefinitionImportExportService {
         label: role.label,
         order: role.order ?? 0,
         active: role.active ?? true,
+        kind: 'meeting',
         ...(role.description ? { description: role.description } : {}),
       });
     }

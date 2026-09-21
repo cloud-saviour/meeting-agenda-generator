@@ -105,7 +105,16 @@ export interface CommitteeMember {
 export interface AgendaSnapshot extends MeetingData {
   agItems: AgendaItem[];
   spks: Speaker[];
-  cmt: CommitteeMember[];
+  /**
+   * No longer written by AgendaImportExportService.getSnapshot() — the
+   * committee roster is always read live now (AgendaStateService.cmt /
+   * DocxService's own CommitteeRosterService injection), never from a
+   * frozen copy. Kept optional, not removed, purely so loadSnapshot()
+   * can still safely destructure-and-discard this field out of an
+   * already-saved agenda document from before this change — those old
+   * Firestore docs still have it sitting in their stored data.
+   */
+  cmt?: CommitteeMember[];
   logoLeft?: string;
   logoRight?: string;
   /** Role ids the admin has taken over from check-in — see AgendaStateService.overriddenRoles. */

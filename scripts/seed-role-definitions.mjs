@@ -1,6 +1,7 @@
-// One-time bootstrap: populates the roleDefinitions and
-// committeeRoleDefinitions collections with this club's standard role
-// list. Two modes:
+// One-time bootstrap: populates the roleDefinitions collection with this
+// club's standard meeting-role and committee-role lists — both kinds now
+// live in this one collection, discriminated by `kind: 'meeting' |
+// 'committee'` (see RoleDefinitionService). Two modes:
 //
 //   npm run seed:roles        — local emulator (default).
 //   npm run seed:roles:prod   — the real project (agenda-planner-101c4),
@@ -9,13 +10,16 @@
 //                                downloaded service-account key JSON
 //                                first — never commit that file).
 //
-// Safe to re-run in either mode — skips any collection that already has
-// documents, so it never clobbers roles you've since edited via the admin
-// UI. This is the only place these role lists exist now; the app itself
-// has no hardcoded fallback.
+// Safe to re-run in either mode — skips a kind entirely if any document of
+// that kind already exists, so it never clobbers roles you've since edited
+// via the admin UI. Checked PER KIND, not per collection — now that both
+// kinds share one collection, "the collection already has documents" would
+// otherwise wrongly skip seeding committee roles just because meeting
+// roles (or vice versa) already exist. This is the only place these role
+// lists exist now; the app itself has no hardcoded fallback.
 //
 // Uses firebase-admin, not the client SDK — firestore.rules requires
-// isAdmin() to write these collections (see scripts/seed-admin-user.mjs),
+// isAdmin() to write this collection (see scripts/seed-admin-user.mjs),
 // and the Admin SDK bypasses security rules by design, same reasoning as
 // that script.
 
@@ -29,6 +33,7 @@ if (!isProd) {
 }
 
 const PROJECT_ID = isProd ? 'agenda-planner-101c4' : 'meeting-agenda-generator';
+const COLLECTION = 'roleDefinitions';
 
 const MEETING_ROLES = [
   { id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true },
@@ -51,26 +56,26 @@ const COMMITTEE_ROLES = [
   { id: 'treasurer', label: 'Treasurer', order: 6, active: true },
 ];
 
-async function seedCollection(firestore, collectionName, roles) {
-  const ref = firestore.collection(collectionName);
-  const existing = await ref.get();
+async function seedKind(firestore, kind, roles) {
+  const ref = firestore.collection(COLLECTION);
+  const existing = await ref.where('kind', '==', kind).limit(1).get();
   if (!existing.empty) {
-    console.log(`Skipping "${collectionName}" — already has ${existing.size} document(s).`);
+    console.log(`Skipping kind "${kind}" — "${COLLECTION}" already has at least one document of this kind.`);
     return;
   }
   for (const role of roles) {
     const { id, ...data } = role;
-    await ref.doc(id).set(data);
+    await ref.doc(id).set({ ...data, kind });
   }
-  console.log(`Seeded "${collectionName}" with ${roles.length} role(s).`);
+  console.log(`Seeded ${roles.length} "${kind}" role(s) into "${COLLECTION}".`);
 }
 
 async function main() {
   const app = initializeApp({ projectId: PROJECT_ID });
   const firestore = getFirestore(app);
 
-  await seedCollection(firestore, 'roleDefinitions', MEETING_ROLES);
-  await seedCollection(firestore, 'committeeRoleDefinitions', COMMITTEE_ROLES);
+  await seedKind(firestore, 'meeting', MEETING_ROLES);
+  await seedKind(firestore, 'committee', COMMITTEE_ROLES);
 
   process.exit(0);
 }

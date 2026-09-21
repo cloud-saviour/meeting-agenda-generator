@@ -107,13 +107,17 @@ src/app/
                         agenda-preview
       services/        agenda-state.service.ts (AgendaStateService),
                         agenda-import-export.service.ts, docx.service.ts
-                        (DocxService — all DOCX generation logic),
+                        (DocxService — all DOCX generation logic; the
+                        Executive Committee footer reads the live
+                        `CommitteeRosterService`, same as the on-screen
+                        preview — see "AgendaSnapshot.cmt was removed"
+                        under Persistence below),
                         saved-agenda.service.ts (SavedAgendaService — the
                         agenda library, Firestore-backed, see below),
                         default-agenda.ts, published-agenda.service.ts
                         (PublishedAgendaService — also Firestore-backed),
                         committee-roster.service.ts (CommitteeRosterService —
-                        also Firestore-backed), committee-role-definition.service.ts,
+                        also Firestore-backed),
                         checkin-agenda-sync.service.ts
                         (CheckinAgendaSyncService — the check-in → agenda
                         merge, shared by the editor AND the /preview viewer,
@@ -226,7 +230,10 @@ src/app/
                       place both committee role *definitions* (title/
                       description CRUD, unchanged) and role *assignment*
                       (who currently holds each role) are managed. Injects
-                      both CommitteeRoleDefinitionService (definitions) and
+                      both RoleDefinitionService — scoped to committee roles
+                      via `.committeeRoles()`/`create('committee', ...)`,
+                      same shared service `/admin/roles` uses for meeting
+                      roles (see Persistence below for the merge) — and
                       CommitteeRosterService (assignment — see Persistence
                       below); each active role row shows an
                       Assigned/Unassigned badge plus Assign/Reassign/
@@ -678,21 +685,82 @@ row by hand.
   back a planned reminder-email feature (email every past attendee, member
   or anonymous) without ever exposing an attendee's email on the public
   `checkins` collection.
-- `RoleDefinitionService` (meeting roles) and `CommitteeRoleDefinitionService`
-  (committee/governance titles) — one Firestore document per role, at
-  `roleDefinitions/{roleId}` and `committeeRoleDefinitions/{roleId}`
-  respectively, kept live via `onSnapshot()` on the whole collection.
-  **No hardcoded fallback list exists in either service anymore** — a fresh
-  environment (or a wiped emulator) needs `npm run seed:roles`
-  (`scripts/seed-role-definitions.mjs`) to populate this club's standard
-  8 meeting roles / 7 committee roles before either admin page or the
-  check-in role board shows anything. The script is idempotent — it skips
-  any collection that already has documents, so re-running it never
-  clobbers roles you've since edited or archived via the admin UI. Role ids
+- `RoleDefinitionService` — one Firestore document per role, at
+  `roleDefinitions/{roleId}`, kept live via `onSnapshot()` on the whole
+  collection. Covers **both** meeting roles (Evening Chairman, Grammarian,
+  etc. — claimed live via check-in) and committee/governance titles
+  (President, Secretary, etc. — admin-assigned only), discriminated by a
+  `kind: 'meeting' | 'committee'` field on each doc, not by collection.
+  **Used to be two entirely separate collections/services**
+  (`roleDefinitions` + a standalone `CommitteeRoleDefinitionService` /
+  `committeeRoleDefinitions`) with copy-pasted CRUD on an identical shape —
+  merged because the distinction was never really about the *data*, only
+  about which admin page manages it and which check-in surface can see it
+  (the check-in role board must never show committee titles). The service
+  exposes kind-scoped views — `meetingRoles()`/`activeMeetingRoles()` and
+  `committeeRoles()`/`activeCommitteeRoles()` — for callers that only ever
+  want one kind (both admin pages, `agenda-items.component.ts`'s two
+  separate role dropdowns, `agenda-state.service.ts`'s default-new-item
+  role, `role-board.component.ts`'s check-in list), plus a combined `all()`
+  for the two callers that look up a role by id without knowing which kind
+  it is (`agenda-preview.component.ts`'s `resolveRole()`, `docx.service.ts`'s
+  `roleLabelById` map) — those two used to each do two separate lookups
+  with a `??` fallback chain against two separate services; now it's one
+  list, one `.find()`. `create(kind, label, description?)` scopes its
+  "next order index" computation to the same kind, so creating a committee
+  role never inflates a meeting role's order number or vice versa (each
+  kind renders as its own independently-sorted list either way, but the
+  numbers should still make sense on their own). A doc with no `kind`
+  field (any role created before this merge, if
+  `scripts/migrate-role-definitions.mjs` — see below — hasn't been run
+  against that environment yet) is treated as `'meeting'` on read, so a
+  delayed migration degrades safely instead of silently hiding a role.
+  **No hardcoded fallback list exists** — a fresh environment (or a wiped
+  emulator) needs `npm run seed:roles` (`scripts/seed-role-definitions.mjs`)
+  to populate this club's standard 8 meeting roles / 7 committee roles
+  before either admin page or the check-in role board shows anything. The
+  script is idempotent, checked **per kind now, not per collection** — it
+  skips seeding a kind if any document of that kind already exists, since
+  "the collection already has documents" would otherwise wrongly skip
+  committee roles just because meeting roles (or vice versa) already exist
+  now that both share one collection — so re-running it never clobbers
+  roles you've since edited or archived via the admin UI. Role ids
   (`toastmaster`, `president`, etc.) are used as literal Firestore document
   IDs, not auto-generated — `default-agenda.ts`, `docx.service.ts`, and
   `agenda-preview.component.ts` all reference these exact strings as stable
-  keys, so they must never change.
+  keys, so they must never change; the merge didn't touch any of them.
+
+  **Migrating an existing environment**: `npm run migrate:role-definitions`
+  (`scripts/migrate-role-definitions.mjs`) copies every doc out of the old
+  `committeeRoleDefinitions` collection into `roleDefinitions` (tagging
+  each `kind: 'committee'`, preserving its exact id), and backfills
+  `kind: 'meeting'` onto any pre-existing `roleDefinitions` doc missing it.
+  Idempotent (every write is a plain id-keyed upsert) and non-destructive —
+  it only ever reads from `committeeRoleDefinitions`, never deletes it;
+  that old collection is left in place, unused (no `firestore.rules` entry
+  for it anymore — see below), until a deliberate later cleanup deploy
+  removes it outright. A fresh environment seeded via `npm run seed:roles`
+  after this merge never needs this script at all — it only matters for an
+  environment (like production) that had data under the old two-collection
+  shape before the merge shipped.
+
+  **`AgendaSnapshot.cmt` was removed as part of the same pass** — it used
+  to freeze a full copy of the committee roster into every saved/published
+  agenda, confirmed dead everywhere except `DocxService`, which had no live
+  source of its own and read `snapshot.cmt` as its only way to get
+  committee data for the Executive Committee footer. Fixed by giving
+  `DocxService` the same live `CommitteeRosterService` the on-screen
+  preview already uses (`AgendaStateService.cmt` is
+  `computed(() => this.committeeRoster.all())` — see the admin-committee-roles
+  Structure entry above), rather than keeping the frozen copy just for that
+  one caller. `AgendaImportExportService.getSnapshot()` no longer writes
+  `cmt` at all; `AgendaSnapshot.cmt` stays optional (not removed from the
+  type outright) purely so `loadSnapshot()` can still safely destructure-
+  and-discard it out of an already-saved agenda document from before this
+  change — those old Firestore docs still have it sitting in their stored
+  data, and reading them back must not break. No migration needed for
+  those old docs either — an unused stored field is inert, safe to leave
+  forever.
 - `PublishedAgendaService` — one document per meeting at
   `publishedAgendas/{meetingId}`, holding the full published `AgendaSnapshot`
   plus `publishedAt`. **At most one such document exists at a time** —
@@ -975,8 +1043,9 @@ localStorage-to-firestore-migration skills, a hand-rolled mock can't
 faithfully reproduce Firestore's optimistic-concurrency retry behavior, so
 transactional logic is tested against the real Local Emulator Suite, never
 a mock. Each Firestore-backed service (`CheckinStateService`,
-`CheckinContactsService`, `RoleDefinitionService`,
-`CommitteeRoleDefinitionService`, `PublishedAgendaService`,
+`CheckinContactsService`, `RoleDefinitionService` (covers both meeting and
+committee roles — see Persistence above),
+`PublishedAgendaService`,
 `CommitteeRosterService`, `SavedAgendaService`, `MemberProfileService`,
 `MemberHistoryService`, `AttendanceConfirmationService`) has a
 `*.emulator.spec.ts` sibling, plus `AuthService` itself has one covering the
@@ -1182,9 +1251,10 @@ which would have flooded the log — but now that saving is an explicit
 Save-button click (see "Saving used to be automatic" under Two
 independent features above), each one is `agenda.save`, exactly as
 meaningful as `agenda.publish`/`agenda.delete`. Every instrumented service
-(`AppAdminService`, `RoleDefinitionService`, `CommitteeRoleDefinitionService`,
-`CommitteeRosterService`, `PublishedAgendaService`, `SavedAgendaService`,
-`AttendanceConfirmationService`) now also injects `AuthService` purely to
+(`AppAdminService`, `RoleDefinitionService` (writes both `role.*` and
+`committeeRole.*` actions depending on which kind a given role is — see
+Persistence above), `CommitteeRosterService`, `PublishedAgendaService`,
+`SavedAgendaService`, `AttendanceConfirmationService`) now also injects `AuthService` purely to
 attribute the entry it writes — `core/audit/audit-log.util.ts`'s
 `appendAuditEntry(firestore, batch, action, summary, actor)` is the only
 way an entry is ever created, and it's never called outside a
@@ -1252,8 +1322,9 @@ exceptions that still check `isAdmin()` specifically:
   update/delete for anyone** — see "Audit log" above for why read stays
   real-claim-only even though any app-admin can create an entry (by
   performing the action it describes).
-- `roleDefinitions`, `committeeRoleDefinitions`, `committeeRoster`,
-  `publishedAgendas` — **public read, app-admin write**. All four are
+- `roleDefinitions` (both meeting AND committee roles — see Persistence
+  above), `committeeRoster`,
+  `publishedAgendas` — **public read, app-admin write**. All three are
   public-read for a non-obvious reason worth remembering before tightening
   any of them further: every migrated Firestore-backed service subscribes
   via `onSnapshot()` **eagerly in its constructor**, so a collection is
@@ -1263,10 +1334,14 @@ exceptions that still check `isAdmin()` specifically:
   `CommitteeRosterService` — so `/preview` fires a live `committeeRoster`
   read on load even though nothing in `/preview`'s own template displays
   roster data directly. `RoleDefinitionService` is the same story via
-  `RoleBoardComponent` on `/checkin`. Making any of these four admin-only
+  `RoleBoardComponent` on `/checkin`. Making any of these three admin-only
   would break the corresponding public page with a silent permission-denied,
   not a build error — trace real injection chains before ever tightening a
-  rule here, don't assume from what a page's template shows.
+  rule here, don't assume from what a page's template shows. The old,
+  separate `committeeRoleDefinitions` collection has **no rule at all**
+  now (implicit deny) — nothing in the app reads or writes it anymore
+  (see Persistence above), and its data is left in place, unused, until a
+  deliberate later cleanup deploy removes it outright.
 - `savedAgendas` — **app-admin for both read and write**. Confirmed safe
   because `SavedAgendaService` is only ever injected by `AgendaEditorComponent`,
   `AdminAgendasComponent`, and `AgendaDraftPreviewComponent` (the
@@ -1289,9 +1364,10 @@ exceptions that still check `isAdmin()` specifically:
   write model as `checkins/**` itself) — see Persistence above for why this
   is the one place raw check-in email/PII is allowed to live at all.
 
-**Test impact**: the 5 `*.emulator.spec.ts` files for the
+**Test impact**: the 4 `*.emulator.spec.ts` files for the
 public-read-admin-write and admin-only collections
-(`role-definition`, `committee-role-definition`, `committee-roster`,
+(`role-definition` — covers both meeting and committee roles now,
+`committee-roster`,
 `published-agenda`, `saved-agenda`) each embed their own `FIRESTORE_RULES`
 string (they don't load the real `firestore.rules` file — the unit-test
 builder bundles for the browser, so `node:fs` can't read it at runtime) —
@@ -1315,8 +1391,8 @@ rules didn't change.
 loosened model: a *granted* admin (present in `appAdmins`, no real claim)
 CAN grant/revoke a DIFFERENT member, but both a true admin AND a granted
 admin are rejected granting THEMSELVES — the self-grant restriction
-applies to both tiers equally. Six of the specs across the app
-(`role-definition`, `committee-role-definition`, `committee-roster`,
+applies to both tiers equally. Five of the specs across the app
+(`role-definition`, `committee-roster`,
 `published-agenda`, `saved-agenda`, `attendance-confirmation`) each got a
 "granted admin can write" test (seeding an `appAdmins/{uid}` doc for an
 otherwise-unclaimed uid, confirming that uid can now write) plus a
@@ -1396,6 +1472,28 @@ debug from the rendered output alone.
    lock the sheet once the meeting starts (role-locking now exists per-role
    via the editor's override toggle — see above — but there's no bulk
    "lock everything" or "reset this role" control yet)
+4. **Data-model cleanup, Phase 1 (not started)** — a wider audit found
+   `checkins/{meetingId}.meeting` is a second, persisted copy of 7 fields
+   (`date`/`theme`/`word`/`start`/`club`/`sub`/`addr`) that also live in
+   the agenda's own `MeetingData`, kept in sync by a debounced push effect
+   in `AgendaEditorComponent` (see "These two pages are now linked both
+   ways" under Two independent features above). That push-then-listen
+   shape is what caused a real production incident (~100 duplicate
+   `agenda.publish` writes/hour on one meeting, from a missing no-op
+   guard — see the audit-log paragraph there); the existing fix only
+   patches that one guard, the duplicated-storage design underneath is
+   unchanged and could misfire the same way for a different field later.
+   The fix on the table: a new `meetings/{meetingNo}` collection both the
+   live editor and check-in read from directly, with the write folded into
+   the *existing* `SavedAgendaService.save()`/`PublishedAgendaService.publish()`
+   batches instead of a new push mechanism — eliminating the feedback path
+   rather than guarding it. **Phase 0 of the same audit is done** — see the
+   `RoleDefinitionService` merge and the `AgendaSnapshot.cmt` removal under
+   Persistence above, both genuinely independent of Phase 1 and safe to
+   have shipped without it. Phase 1 needs its own staged, rollback-capable
+   production deploy (it touches `firestore.rules`, a new collection, and
+   two existing services' write paths on a live app with real meetings) —
+   not attempted here.
 
 ## Local dev
 

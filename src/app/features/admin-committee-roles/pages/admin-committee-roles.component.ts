@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { CommitteeRoleDefinitionService } from '../../agenda-editor/services/committee-role-definition.service';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { CommitteeRosterService } from '../../agenda-editor/services/committee-roster.service';
 import { CommitteeImportExportService } from '../services/committee-import-export.service';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
@@ -29,7 +29,7 @@ const PRINTED_ROLE_IDS = new Set([
   templateUrl: './admin-committee-roles.component.html',
 })
 export class AdminCommitteeRolesComponent {
-  readonly roleDefs = inject(CommitteeRoleDefinitionService);
+  readonly roleDefs = inject(RoleDefinitionService);
   readonly roster = inject(CommitteeRosterService);
   private readonly importExport = inject(CommitteeImportExportService);
 
@@ -49,13 +49,13 @@ export class AdminCommitteeRolesComponent {
   private readonly pendingRoles = new Set<string>();
 
   get roles() {
-    return this.roleDefs.all();
+    return this.roleDefs.committeeRoles();
   }
 
   create() {
     const label = this.newLabel.trim();
     if (!label) return;
-    this.roleDefs.create(label, this.newDescription);
+    this.roleDefs.create('committee', label, this.newDescription);
     this.newLabel = '';
     this.newDescription = '';
   }

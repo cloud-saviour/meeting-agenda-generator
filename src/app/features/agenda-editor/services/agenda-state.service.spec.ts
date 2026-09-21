@@ -6,10 +6,11 @@ import { CommitteeRosterService } from './committee-roster.service';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { AgendaItem, CommitteeMember } from '../models/agenda.models';
 
-// AgendaStateService only ever calls roleDefs.activeRoles() (to default a new
-// agenda item's role) — nothing here exercises that path, so a stub avoids
-// needing RoleDefinitionService's real Firestore dependency in this suite.
-const fakeRoleDefinitionService = { activeRoles: () => [] } as unknown as RoleDefinitionService;
+// AgendaStateService only ever calls roleDefs.activeMeetingRoles() (to
+// default a new agenda item's role) — nothing here exercises that path, so
+// a stub avoids needing RoleDefinitionService's real Firestore dependency
+// in this suite.
+const fakeRoleDefinitionService = { activeMeetingRoles: () => [] } as unknown as RoleDefinitionService;
 
 // CommitteeRosterService is Firestore-backed and its real data arrives
 // asynchronously even on the first read — this suite needs a signal-backed
