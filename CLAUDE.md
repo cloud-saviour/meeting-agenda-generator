@@ -481,36 +481,48 @@ These two pages are now linked both ways, via the agenda's own meeting
 number. Editor → check-in: a "🔗 Share Check-in Link" button copies
 `/checkin?meeting=<no>` to the clipboard — check-in data is isolated per
 meeting number (`CheckinStateService.loadMeeting()`, keyed by `?meeting=`),
-so different meetings don't share a sheet. A separate, always-on `effect()`
-in `AgendaEditorComponent` also pushes the agenda's `date`/`theme`/`word`/`st`
-into `CheckinStateService.updateMeeting()` on any change (guarded on a
-non-blank meeting number) — `CheckinMeeting` is its
-own independent record (id/date/theme/word/start/maxSpeakers), not a
-reference to the agenda, so without this push the header members see at
-`/checkin` would just show `CheckinMeeting`'s own untouched defaults
-regardless of what the admin set. One-way only — check-in's `maxSpeakers`
-and nothing else agenda-side ever reads from `CheckinMeeting` back. Debounced
-(500ms) — this is a real Firestore write per call, not a free
-in-memory one — and skips the write
-entirely when none of the 7 pushed fields actually changed since the last
-push for that meeting number (`lastPushedMeetingJsonByNo`) — **this guard
-was missing for a while and caused a real, self-sustaining bug**, back
-when saving the agenda itself was also still automatic (see below): any
-change to `state.meeting()` at all (including `apologySyncUids` being
-updated by the check-in→editor apology sync below, part of the same
-signal) re-triggered this push unconditionally; that write's own
-`runTransaction()` round-trip re-fired `checkins/{no}`'s `onSnapshot`
-listener with fresh object references for `roles`/`speakers`/`apologies`,
-which re-ran the check-in→editor sync effect below, which could touch
-`state.meeting()` again — sustaining a loop through real Firestore
-round-trips (roughly one cycle every few seconds) for as long as the
-Agenda Editor stayed open on a currently-published meeting. Caught via the
-audit log: ~100 redundant `agenda.publish` entries for one meeting inside
-an hour, all identical content, once `PublishedAgendaService.publish()`
-started logging every call. Keeping a currently-published meeting's
-`publishedAgendas` copy current is no longer tied to this effect at
-all — see "Saving used to be automatic" above; it's now part of the
-explicit Save button's own `save()` action instead.
+so different meetings don't share a sheet.
+
+**The meeting header (date/theme/word/start/club/sub/addr) has exactly one
+stored copy: `meetings/{meetingNo}`** — see `MeetingDoc` in
+`core/models/meeting-doc.models.ts`. It is written **only inside the
+existing `SavedAgendaService.save()` and `PublishedAgendaService.publish()`
+batches** (`meetingDocFromSnapshot()` maps the agenda's `st` to `start`),
+and read live by `CheckinStateService`, whose `meeting()` merges it over
+check-in's own `id`/`maxSpeakers`. **This replaced a debounced push effect
+in `AgendaEditorComponent`** that copied those fields into
+`checkins/{no}.meeting` on every edit (`updateMeeting()`,
+`lastPushedMeetingJsonByNo`, a 500ms timer — all deleted). That
+push-then-listen shape caused a real, self-sustaining production bug: any
+change to `state.meeting()` (including `apologySyncUids` being touched by
+the check-in→editor apology sync below) re-triggered the push; its
+`runTransaction()` round-trip re-fired `checkins/{no}`'s `onSnapshot`,
+which re-ran the check-in→editor sync, which could touch `state.meeting()`
+again — a loop through real Firestore round-trips for as long as the
+editor stayed open on a published meeting (caught via ~100 duplicate
+`agenda.publish` audit entries in an hour). It had been patched with a
+no-op guard, but the duplicated-storage design underneath could misfire
+the same way for another field. Folding the write into Save/Publish
+removes the feedback path outright instead of guarding it: nothing in the
+editor writes to check-in on edit anymore, and check-in never writes the
+header at all.
+
+**Behavior change to know about:** an unsaved edit to the header no longer
+reaches `/checkin` — it appears when the admin clicks Save (or Publish),
+which they already must do for the published agenda to update.
+`meetings/{no}` is **not** deleted when an agenda is deleted or
+unpublished, same as `checkins/{no}` itself is left alone.
+
+**Transitional fallback (Stage 1 — remove in Stage 2):** until a meeting has
+a `meetings` doc, `CheckinStateService.meeting()` falls back to the legacy
+header still stored inside `checkins/{no}.meeting`, so a meeting nobody has
+re-saved since this shipped keeps its header instead of going blank. New
+`checkins` docs still get those legacy fields from `defaultSnapshot()`,
+and old ones still hold stale values — both inert once a `meetings` doc
+exists. **Stage 2** (a later, separate deploy) drops them: slim the stored
+`checkins.meeting` to just `id`/`maxSpeakers`, delete the fallback branch
+in `meeting()`, and update `defaultSnapshot()`. Do not do that before
+`npm run migrate:meetings:prod` has run (see Persistence).
 
 Check-in → agenda is automatic, not a button — and it applies on **both**
 the editor (`/admin`) and the read-only published-agenda viewer
@@ -658,10 +670,10 @@ row by hand.
   holding the full `CheckinSnapshot` (meeting/attendees/roles/speakers/lockedRoles)
   as nested fields. `loadMeeting(id)` subscribes via `onSnapshot()`
   (idempotent — calling it again with the same id is a cheap no-op, since
-  `AgendaEditorComponent`'s meeting-sync effect calls it on every
-  meeting-details edit, not just when the number changes). Every mutator
+  `AgendaEditorComponent`'s check-in-sync effects can call it repeatedly,
+  not just when the number changes). Every mutator
   (`checkIn()`, `claimRole()`, `releaseRole()`, `addSpeakerSignup()`,
-  `claimEvaluatorSlot()`, `releaseEvaluatorSlot()`, `updateMeeting()`,
+  `claimEvaluatorSlot()`, `releaseEvaluatorSlot()`,
   `setRoleLocked()`, `resetAll()`) runs inside `runTransaction()` via a
   shared private `mutate()` helper — read-decide-write in one atomic
   round-trip, so two people claiming the same role at the same instant
@@ -685,6 +697,30 @@ row by hand.
   back a planned reminder-email feature (email every past attendee, member
   or anonymous) without ever exposing an attendee's email on the public
   `checkins` collection.
+- `meetings/{meetingNo}` (no dedicated service) — the single stored copy of
+  a meeting's 7 header fields, shared by the editor and check-in. Written
+  by `SavedAgendaService.save()` and `PublishedAgendaService.publish()` (one
+  extra `batch.set()` in each existing batch, via `meetingDocFromSnapshot()`
+  in `core/models/meeting-doc.models.ts`); read by `CheckinStateService`
+  via a second live `onSnapshot` opened in `loadMeeting()` and torn down on
+  meeting switch (its signal is cleared on switch too, so a previous
+  meeting's header never shows under the new id). See "The meeting header
+  ... has exactly one stored copy" under Two independent features for why
+  this exists and what it replaced.
+
+  **Rolling out to an existing environment, in this order** (each step is
+  reversible until the next): (1) `npm run migrate:meetings:prod`
+  (`scripts/migrate-meetings.mjs` — backfills a `meetings` doc for every
+  `savedAgendas` doc, and for any `checkins` doc with no saved agenda from
+  its legacy `meeting` field; idempotent id-keyed upserts, never deletes,
+  never touches its sources; needs ADC, same as
+  `migrate:role-definitions:prod`); (2) `npm run deploy:rules` so the
+  `meetings` rule is live; (3) `npm run deploy` (or `deploy:all`). Rolling
+  back is redeploying the previous bundle: it still pushes/reads the legacy
+  `checkins.meeting` fields, which Stage 1 never touched. The migration is
+  not strictly required for correctness (the read path falls back to the
+  legacy fields), but it is a hard precondition for Stage 2 (Known gaps #4).
+  `npm run seed:test-data` also seeds `meetings/TEST-1` for local QA.
 - `RoleDefinitionService` — one Firestore document per role, at
   `roleDefinitions/{roleId}`, kept live via `onSnapshot()` on the whole
   collection. Covers **both** meeting roles (Evening Chairman, Grammarian,
@@ -1342,6 +1378,14 @@ exceptions that still check `isAdmin()` specifically:
   now (implicit deny) — nothing in the app reads or writes it anymore
   (see Persistence above), and its data is left in place, unused, until a
   deliberate later cleanup deploy removes it outright.
+- `meetings/{meetingNo}` — **public read, app-admin write**. Public because
+  `/checkin` is anonymous and already showed every one of these fields;
+  written only inside `SavedAgendaService.save()`/`PublishedAgendaService.publish()`'s
+  batches, so **deploy the rules before (or with) the bundle that writes it**
+  — `npm run deploy:all` does both, but if you ever ship hosting alone, a
+  missing rule fails those whole batches with "Missing or insufficient
+  permissions" naming the wrong collection (see the `auditLog` incident
+  under "Deploying").
 - `savedAgendas` — **app-admin for both read and write**. Confirmed safe
   because `SavedAgendaService` is only ever injected by `AgendaEditorComponent`,
   `AdminAgendasComponent`, and `AgendaDraftPreviewComponent` (the
@@ -1472,28 +1516,25 @@ debug from the rendered output alone.
    lock the sheet once the meeting starts (role-locking now exists per-role
    via the editor's override toggle — see above — but there's no bulk
    "lock everything" or "reset this role" control yet)
-4. **Data-model cleanup, Phase 1 (not started)** — a wider audit found
-   `checkins/{meetingId}.meeting` is a second, persisted copy of 7 fields
-   (`date`/`theme`/`word`/`start`/`club`/`sub`/`addr`) that also live in
-   the agenda's own `MeetingData`, kept in sync by a debounced push effect
-   in `AgendaEditorComponent` (see "These two pages are now linked both
-   ways" under Two independent features above). That push-then-listen
-   shape is what caused a real production incident (~100 duplicate
-   `agenda.publish` writes/hour on one meeting, from a missing no-op
-   guard — see the audit-log paragraph there); the existing fix only
-   patches that one guard, the duplicated-storage design underneath is
-   unchanged and could misfire the same way for a different field later.
-   The fix on the table: a new `meetings/{meetingNo}` collection both the
-   live editor and check-in read from directly, with the write folded into
-   the *existing* `SavedAgendaService.save()`/`PublishedAgendaService.publish()`
-   batches instead of a new push mechanism — eliminating the feedback path
-   rather than guarding it. **Phase 0 of the same audit is done** — see the
-   `RoleDefinitionService` merge and the `AgendaSnapshot.cmt` removal under
-   Persistence above, both genuinely independent of Phase 1 and safe to
-   have shipped without it. Phase 1 needs its own staged, rollback-capable
-   production deploy (it touches `firestore.rules`, a new collection, and
-   two existing services' write paths on a live app with real meetings) —
-   not attempted here.
+4. **Data-model cleanup, Phase 1 Stage 2 (not started)** — the audit found
+   `checkins/{meetingId}.meeting` was a second, persisted copy of the 7
+   meeting-header fields, kept in sync by a debounced push effect (see "The
+   meeting header ... has exactly one stored copy" under Two independent
+   features above). **Phase 0** (the `RoleDefinitionService` merge and
+   `AgendaSnapshot.cmt` removal) and **Phase 1 Stage 1** (the new
+   `meetings/{meetingNo}` collection, folded into the existing save/publish
+   batches, with the push effect deleted) are done. What's left is
+   **Stage 2, deliberately a separate later deploy** so Stage 1 stays
+   rollback-safe: an old bundle can still read the untouched legacy fields
+   in `checkins`, which is exactly what makes Stage 1 reversible. Stage 2
+   removes the now-dead legacy fields — slim `checkins.meeting` to
+   `id`/`maxSpeakers`, delete the fallback branch in
+   `CheckinStateService.meeting()`, update `defaultSnapshot()`/
+   `emptySnapshotPlaceholder()`. Precondition: `npm run migrate:meetings:prod`
+   has run and every live meeting has a `meetings` doc. `maxSpeakers` stays
+   in `checkins` (check-in's own config, read inside its transactions);
+   moving it is a separate decision, tied to the admin check-in console in
+   item 3.
 
 ## Local dev
 

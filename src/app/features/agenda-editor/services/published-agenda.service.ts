@@ -4,6 +4,7 @@ import { AgendaSnapshot } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
+import { MEETINGS_COLLECTION, meetingDocFromSnapshot } from '../../../core/models/meeting-doc.models';
 
 const COLLECTION = 'publishedAgendas';
 
@@ -117,6 +118,7 @@ export class PublishedAgendaService implements OnDestroy {
           if (d.id !== meetingId) batch.delete(d.ref);
         }
         batch.set(doc(this.firestore, COLLECTION, meetingId), payload);
+        batch.set(doc(this.firestore, MEETINGS_COLLECTION, meetingId), meetingDocFromSnapshot(data));
         appendAuditEntry(
           this.firestore,
           batch,
