@@ -21,6 +21,7 @@ export class LoginComponent {
 
   email = '';
   password = '';
+  showPassword = false;
   error: string | null = null;
   busy = false;
 
