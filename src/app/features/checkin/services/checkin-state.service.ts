@@ -6,6 +6,8 @@ import { APP_LOCALE } from '../../../core/utils/locale';
 import { sha256Hex } from '../../../core/utils/hash';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
+import { AuditAction } from '../../../core/audit/audit-log.models';
+import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
 const CHECKINS_COLLECTION = 'checkins';
 
@@ -345,7 +347,7 @@ export class CheckinStateService implements OnDestroy {
     return this.mutate((s) => {
       if (s.lockedRoles.includes(roleKey)) return { next: s, result: undefined };
       const existing = s.roles[roleKey];
-      if (!existing || (existing.uid !== this.currentUid && !this.auth.isAdmin())) {
+      if (!existing || (existing.uid !== this.currentUid && !this.auth.isAppAdmin())) {
         return { next: s, result: undefined };
       }
       const next = { ...s, roles: { ...s.roles, [roleKey]: { name: '', uid: '' } } };
@@ -391,7 +393,7 @@ export class CheckinStateService implements OnDestroy {
   removeSpeakerSignup(id: string): Promise<void> {
     return this.mutate((s) => {
       const sp = s.speakers.find((x) => x.id === id);
-      if (!sp || sp.uid !== this.currentUid) return { next: s, result: undefined };
+      if (!sp || (sp.uid !== this.currentUid && !this.auth.isAppAdmin())) return { next: s, result: undefined };
       const next = { ...s, speakers: s.speakers.filter((x) => x.id !== id) };
       return { next, result: undefined };
     }).then(() => undefined);
@@ -430,12 +432,118 @@ export class CheckinStateService implements OnDestroy {
         ...s,
         speakers: s.speakers.map((sp) => {
           if (sp.id !== speakerId) return sp;
-          if (!sp.evaluator || sp.evaluator.uid !== this.currentUid) return sp;
+          if (!sp.evaluator || (sp.evaluator.uid !== this.currentUid && !this.auth.isAppAdmin())) return sp;
           return { ...sp, evaluator: null };
         }),
       };
       return { next, result: undefined };
     }).then(() => undefined);
+  }
+
+  // ── Admin corrections & deletions ───────────────────────────────────────
+  /**
+   * Corrects a mistyped/wrong name for `uid`, sweeping every denormalized
+   * copy in one atomic transaction — the attendee record, this uid's role
+   * claim (if any), any speaker signup owned by this uid AND any speaker's
+   * `evaluator.name` where `evaluator.uid` is this uid, and any apology
+   * entry. Never touches a `uid` field: per the confirmed product decision,
+   * this only ever corrects the name string on an EXISTING uid, it never
+   * reassigns which uid a record belongs to — the original person keeps
+   * full self-service control over every one of these afterward, exactly
+   * as before the admin's fix. No-ops (no write, no audit entry) if `uid`
+   * appears nowhere in the meeting, or the caller isn't an app-admin.
+   */
+  adminRenamePerson(uid: string, name: string): Promise<boolean> {
+    const trimmed = name.trim();
+    if (!trimmed) return Promise.resolve(false);
+
+    return this.mutateAudited('checkin.adminEdit', (s) => {
+      if (!this.auth.isAppAdmin()) return { next: s, applied: false };
+
+      const touchesAnything =
+        s.attendees.some((a) => a.uid === uid) ||
+        Object.values(s.roles).some((r) => r.uid === uid) ||
+        s.speakers.some((sp) => sp.uid === uid || sp.evaluator?.uid === uid) ||
+        s.apologies.some((a) => a.uid === uid);
+      if (!touchesAnything) return { next: s, applied: false };
+
+      const next: CheckinSnapshot = {
+        ...s,
+        attendees: s.attendees.map((a) => (a.uid === uid ? { ...a, name: trimmed } : a)),
+        roles: Object.fromEntries(
+          Object.entries(s.roles).map(([roleId, claim]) =>
+            claim.uid === uid ? [roleId, { ...claim, name: trimmed }] : [roleId, claim]
+          )
+        ),
+        speakers: s.speakers.map((sp) => ({
+          ...sp,
+          name: sp.uid === uid ? trimmed : sp.name,
+          evaluator: sp.evaluator?.uid === uid ? { ...sp.evaluator, name: trimmed } : sp.evaluator,
+        })),
+        apologies: s.apologies.map((a) => (a.uid === uid ? { ...a, name: trimmed } : a)),
+      };
+      return { next, applied: true, summary: `Renamed check-in entry for uid ${uid} to "${trimmed}"` };
+    });
+  }
+
+  /** Corrects non-identity speaker fields only — title/level/timePref. Name and uid are
+   *  deliberately excluded (see adminRenamePerson()). */
+  adminEditSpeaker(
+    speakerId: string,
+    patch: Partial<Pick<CheckinSpeaker, 'title' | 'level' | 'timePref'>>
+  ): Promise<boolean> {
+    return this.mutateAudited('checkin.adminEdit', (s) => {
+      if (!this.auth.isAppAdmin()) return { next: s, applied: false };
+      const sp = s.speakers.find((x) => x.id === speakerId);
+      if (!sp) return { next: s, applied: false };
+
+      const next = { ...s, speakers: s.speakers.map((x) => (x.id === speakerId ? { ...x, ...patch } : x)) };
+      return { next, applied: true, summary: `Edited speaker signup for ${sp.name} at meeting #${s.meeting.id}` };
+    });
+  }
+
+  /**
+   * Removes a bogus/duplicate attendee entry outright — mirrors
+   * `uncheckIn()`'s cascade (releases their unlocked role claim, cancels
+   * their own speaker signup, releases any evaluator slot they hold) but
+   * targets an arbitrary uid, and deliberately does NOT add them to
+   * `apologies`: this erases a mistaken entry rather than recording a
+   * withdrawal. If the real person needs to attend, they check in again
+   * themselves under the same uid.
+   */
+  adminRemoveAttendee(uid: string): Promise<boolean> {
+    return this.mutateAudited('checkin.adminRemove', (s) => {
+      if (!this.auth.isAppAdmin()) return { next: s, applied: false };
+      const attendee = s.attendees.find((a) => a.uid === uid);
+      if (!attendee) return { next: s, applied: false };
+
+      const next: CheckinSnapshot = {
+        ...s,
+        attendees: s.attendees.filter((a) => a.uid !== uid),
+        roles: Object.fromEntries(
+          Object.entries(s.roles).map(([roleId, claim]) =>
+            !s.lockedRoles.includes(roleId) && claim.uid === uid ? [roleId, { name: '', uid: '' }] : [roleId, claim]
+          )
+        ),
+        speakers: s.speakers
+          .filter((sp) => sp.uid !== uid)
+          .map((sp) => (sp.evaluator?.uid === uid ? { ...sp, evaluator: null } : sp)),
+      };
+      return { next, applied: true, summary: `Removed attendee ${attendee.name} (${uid}) from meeting #${s.meeting.id}` };
+    });
+  }
+
+  /** Removes a stray/bogus apology entry — an admin data correction, not a
+   *  status change, so it never touches attendees/roles/speakers. */
+  adminRemoveApology(uid: string): Promise<boolean> {
+    return this.mutateAudited('checkin.adminRemove', (s) => {
+      if (!this.auth.isAppAdmin()) return { next: s, applied: false };
+      const apology = s.apologies.find((a) => a.uid === uid);
+      if (!apology) return { next: s, applied: false };
+
+      const next = { ...s, apologies: s.apologies.filter((a) => a.uid !== uid) };
+      return { next, applied: true, summary: `Removed apology entry for ${apology.name} (${uid}) at meeting #${s.meeting.id}` };
+    });
   }
 
   // ── Meeting config (admin) ──────────────────────────────────────────────
@@ -497,6 +605,41 @@ export class CheckinStateService implements OnDestroy {
     }).catch((err) => {
       console.error('checkin transaction failed', err);
       return undefined;
+    });
+  }
+
+  /**
+   * Same transactional read-decide-write shape as `mutate()` above, but ALSO
+   * appends an audit-log entry in the SAME transaction when `fn` reports
+   * `applied: true` — used only by the admin correction/removal methods
+   * above, so `mutate()` itself (and every existing self-service call site)
+   * stays untouched. `fn` mirrors `mutate()`'s `{ next, result }` shape but
+   * returns `applied` (whether anything actually changed — false for "not
+   * an admin" or "target not found") and an optional `summary`, so a
+   * rejected attempt never writes an audit entry.
+   */
+  private mutateAudited(
+    action: AuditAction,
+    fn: (s: CheckinSnapshot) => { next: CheckinSnapshot; applied: boolean; summary?: string }
+  ): Promise<boolean> {
+    if (!this.currentMeetingId) return Promise.resolve(false);
+    const meetingId = this.currentMeetingId;
+    const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
+
+    return runTransaction(this.firestore, async (tx) => {
+      const snap = await tx.get(ref);
+      const current = snap.exists()
+        ? this.normalize(snap.data() as CheckinSnapshot)
+        : this.defaultSnapshot(meetingId);
+      const { next, applied, summary } = fn(current);
+      tx.set(ref, next);
+      if (applied) {
+        appendAuditEntry(this.firestore, tx, action, summary ?? action, this.auth.currentUser());
+      }
+      return applied;
+    }).catch((err) => {
+      console.error('checkin admin transaction failed', err);
+      return false;
     });
   }
 

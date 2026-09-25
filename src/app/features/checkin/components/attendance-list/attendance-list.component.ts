@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
 import { AuthService } from '../../../../core/auth/auth.service';
@@ -6,6 +7,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 @Component({
   selector: 'app-attendance-list',
   standalone: true,
+  imports: [FormsModule],
   templateUrl: './attendance-list.component.html',
 })
 export class AttendanceListComponent {
@@ -15,6 +17,11 @@ export class AttendanceListComponent {
 
   confirmError: string | null = null;
   private readonly pendingConfirm = new Set<string>();
+
+  editingUid: string | null = null;
+  editName = '';
+  private readonly pendingEdit = new Set<string>();
+  private readonly pendingRemove = new Set<string>();
 
   get attendees() {
     return this.state.attendees();
@@ -43,6 +50,56 @@ export class AttendanceListComponent {
       this.confirmError = 'Could not update confirmation — try again.';
     } finally {
       this.pendingConfirm.delete(uid);
+    }
+  }
+
+  startEdit(uid: string, currentName: string) {
+    this.editingUid = uid;
+    this.editName = currentName;
+  }
+
+  cancelEdit() {
+    this.editingUid = null;
+    this.editName = '';
+  }
+
+  isEditPending(uid: string): boolean {
+    return this.pendingEdit.has(uid);
+  }
+
+  async saveEdit() {
+    if (!this.editingUid) return;
+    const name = this.editName.trim();
+    if (!name) return;
+    const uid = this.editingUid;
+    this.pendingEdit.add(uid);
+    try {
+      await this.state.adminRenamePerson(uid, name);
+      this.cancelEdit();
+    } catch {
+      this.confirmError = 'Could not rename — try again.';
+    } finally {
+      this.pendingEdit.delete(uid);
+    }
+  }
+
+  isRemovePending(uid: string): boolean {
+    return this.pendingRemove.has(uid);
+  }
+
+  async remove(uid: string, name: string) {
+    const confirmed = confirm(
+      `Remove "${name}" from attendance? This also releases any role claim, speaker signup, and evaluator slot they hold. Use this only for a bogus/duplicate entry, not a real withdrawal — this will NOT list them as an apology.`
+    );
+    if (!confirmed) return;
+    this.confirmError = null;
+    this.pendingRemove.add(uid);
+    try {
+      await this.state.adminRemoveAttendee(uid);
+    } catch {
+      this.confirmError = 'Could not remove — try again.';
+    } finally {
+      this.pendingRemove.delete(uid);
     }
   }
 }

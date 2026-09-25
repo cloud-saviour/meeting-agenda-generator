@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
 import { AuthService } from '../../../../core/auth/auth.service';
+import { CheckinSpeaker } from '../../models/checkin.models';
 
 @Component({
   selector: 'app-speaker-signup',
@@ -28,6 +29,13 @@ export class SpeakerSignupComponent {
   timeHi = 10;
   error: string | null = null;
   private readonly pendingSpeechConfirm = new Set<string>();
+
+  editingSpeakerId: string | null = null;
+  editTitle = '';
+  editLevel = '';
+  editTimeLo = 7;
+  editTimeHi = 10;
+  private readonly pendingSpeakerEdit = new Set<string>();
 
   get speakers() {
     return this.state.speakers();
@@ -110,6 +118,51 @@ export class SpeakerSignupComponent {
       this.error = 'Could not update confirmation — try again.';
     } finally {
       this.pendingSpeechConfirm.delete(uid);
+    }
+  }
+
+  startEditSpeaker(sp: Pick<CheckinSpeaker, 'id' | 'title' | 'level' | 'timePref'>) {
+    this.editingSpeakerId = sp.id;
+    this.editTitle = sp.title;
+    this.editLevel = sp.level;
+    const [lo, hi] = sp.timePref.split('-').map((n) => parseInt(n, 10));
+    this.editTimeLo = Number.isFinite(lo) ? lo : 7;
+    this.editTimeHi = Number.isFinite(hi) ? hi : 10;
+  }
+
+  cancelEditSpeaker() {
+    this.editingSpeakerId = null;
+  }
+
+  onEditTimeLoChange() {
+    if (this.editTimeLo > this.editTimeHi) this.editTimeHi = this.editTimeLo;
+  }
+
+  onEditTimeHiChange() {
+    if (this.editTimeHi < this.editTimeLo) this.editTimeLo = this.editTimeHi;
+  }
+
+  isSpeakerEditPending(id: string): boolean {
+    return this.pendingSpeakerEdit.has(id);
+  }
+
+  async saveEditSpeaker() {
+    if (!this.editingSpeakerId) return;
+    const title = this.editTitle.trim();
+    if (!title) return;
+    const id = this.editingSpeakerId;
+    this.pendingSpeakerEdit.add(id);
+    try {
+      await this.state.adminEditSpeaker(id, {
+        title,
+        level: this.editLevel.trim(),
+        timePref: `${this.editTimeLo}-${this.editTimeHi}`,
+      });
+      this.cancelEditSpeaker();
+    } catch {
+      this.error = 'Could not save changes — try again.';
+    } finally {
+      this.pendingSpeakerEdit.delete(id);
     }
   }
 }
