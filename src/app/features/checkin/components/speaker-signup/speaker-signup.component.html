@@ -14,14 +14,40 @@
                 <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? 'Confirming…' : 'Confirm spoke' }}</button>
               }
             }
-            @if (isMine(s.uid)) {
+            @if (auth.isAppAdmin()) {
+              <button class="btn btn-outline-secondary btn-sm" (click)="startEditSpeaker(s)">Edit</button>
+            }
+            @if (isMine(s.uid) || auth.isAppAdmin()) {
               <button class="btn btn-outline-secondary btn-sm" (click)="remove(s.id)">Remove</button>
             }
           </div>
         </div>
-        <div class="text-muted small">
-          "{{ s.title }}"@if (s.level) { &nbsp;&middot;&nbsp;{{ s.level }} } &nbsp;&middot;&nbsp; {{ s.timePref }} mins
-        </div>
+
+        @if (editingSpeakerId === s.id) {
+          <div class="row g-2">
+            <div class="col-12">
+              <input class="form-control form-control-sm" type="text" [(ngModel)]="editTitle" name="editTitle" placeholder="Speech title">
+            </div>
+            <div class="col-6">
+              <input class="form-control form-control-sm" type="text" [(ngModel)]="editLevel" name="editLevel" placeholder="Level">
+            </div>
+            <div class="col-6">
+              <div class="input-group input-group-sm">
+                <input class="form-control" type="number" min="1" max="60" [(ngModel)]="editTimeLo" name="editTimeLo" (ngModelChange)="onEditTimeLoChange()">
+                <span class="input-group-text">–</span>
+                <input class="form-control" type="number" min="1" max="60" [(ngModel)]="editTimeHi" name="editTimeHi" (ngModelChange)="onEditTimeHiChange()">
+              </div>
+            </div>
+            <div class="col-12 d-flex gap-2">
+              <button class="btn btn-danger btn-sm" [disabled]="isSpeakerEditPending(s.id)" (click)="saveEditSpeaker()">Save</button>
+              <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditSpeaker()">Cancel</button>
+            </div>
+          </div>
+        } @else {
+          <div class="text-muted small">
+            "{{ s.title }}"@if (s.level) { &nbsp;&middot;&nbsp;{{ s.level }} } &nbsp;&middot;&nbsp; {{ s.timePref }} mins
+          </div>
+        }
       </div>
     }
   } @else {

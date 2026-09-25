@@ -1,0 +1,20 @@
+@if (auth.isAppAdmin() && apologies.length) {
+  <div class="card p-3 mb-3">
+    <h3 class="section-title">Apologies ({{ apologies.length }})</h3>
+    <div class="d-flex flex-wrap gap-2">
+      @for (a of apologies; track a.uid) {
+        <span class="badge rounded-pill text-bg-light border d-inline-flex align-items-center gap-1">
+          <b>{{ a.name }}</b>
+          <span class="text-muted">{{ a.joinedAt }}</span>
+          <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1"
+            [disabled]="isRemovePending(a.uid)" (click)="remove(a.uid, a.name)">
+            {{ isRemovePending(a.uid) ? '…' : 'Remove' }}
+          </button>
+        </span>
+      }
+    </div>
+    @if (removeError) {
+      <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ removeError }}</div>
+    }
+  </div>
+}

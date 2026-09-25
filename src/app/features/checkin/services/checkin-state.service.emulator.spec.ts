@@ -3,7 +3,7 @@ import { Injector, NgZone, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { CheckinStateService } from './checkin-state.service';
@@ -11,8 +11,24 @@ import { CheckinContactsService } from './checkin-contacts.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
 
-function fakeAuthService(user: Pick<User, 'uid' | 'displayName' | 'email'> | null = null, isAdmin = false) {
-  return { currentUser: signal(user), isAdmin: signal(isAdmin) } as unknown as AuthService;
+/**
+ * `isAppAdmin` defaults to mirror `isAdmin` so every existing call site
+ * (`createService(user, true)`) keeps meaning "a real-claim admin" — pass it
+ * explicitly to simulate a Firestore-granted (non-claim) admin instead
+ * (`isAdmin: false, isAppAdmin: true`), which is the case the `releaseRole()`
+ * `isAdmin()`-vs-`isAppAdmin()` bug missed.
+ */
+function fakeAuthService(
+  user: Pick<User, 'uid' | 'displayName' | 'email'> | null = null,
+  isAdmin = false,
+  isAppAdmin = isAdmin
+) {
+  return { currentUser: signal(user), isAdmin: signal(isAdmin), isAppAdmin: signal(isAppAdmin) } as unknown as AuthService;
+}
+
+async function auditEntriesFor(firestore: Firestore, action: string) {
+  const snap = await getDocs(query(collection(firestore, 'auditLog'), where('action', '==', action)));
+  return snap.docs.map((d) => d.data());
 }
 
 const noopContacts = { upsert: async () => undefined } as unknown as CheckinContactsService;
@@ -106,7 +122,8 @@ describe('CheckinStateService (Firestore emulator)', () => {
 
   function createService(
     signedInUser: Pick<User, 'uid' | 'displayName' | 'email'> | null = null,
-    isAdmin = false
+    isAdmin = false,
+    isAppAdmin = isAdmin
   ): CheckinStateService {
     const child = Injector.create({
       parent: parentInjector,
@@ -114,7 +131,7 @@ describe('CheckinStateService (Firestore emulator)', () => {
         CheckinStateService,
         { provide: FIRESTORE, useValue: firestore },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
-        { provide: AuthService, useValue: fakeAuthService(signedInUser, isAdmin) },
+        { provide: AuthService, useValue: fakeAuthService(signedInUser, isAdmin, isAppAdmin) },
         { provide: CheckinContactsService, useValue: noopContacts },
       ],
     });
@@ -364,6 +381,20 @@ describe('CheckinStateService (Firestore emulator)', () => {
     await waitFor(() => admin.roles()['toastmaster']?.uid === '');
   });
 
+  it('releaseRole() lets a granted-only admin (isAppAdmin true, isAdmin false) release a claim they do not own', async () => {
+    const svcA = createService(); // anonymous claimant
+    const granted = createService({ uid: 'granted-uid', displayName: 'Granted', email: 'granted@example.com' }, false, true);
+    svcA.loadMeeting('m4d');
+    granted.loadMeeting('m4d');
+    await svcA.checkIn('Alice', 'alice@example.com');
+    const uidA = svcA.currentUid;
+    await svcA.claimRole('toastmaster');
+    await waitFor(() => granted.roles()['toastmaster']?.uid === uidA);
+
+    await granted.releaseRole('toastmaster'); // not granted's claim, no real claim either — should still succeed
+    await waitFor(() => granted.roles()['toastmaster']?.uid === '');
+  });
+
   it('releaseRole() still respects a locked role even for an admin', async () => {
     const svcA = createService();
     const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
@@ -392,6 +423,49 @@ describe('CheckinStateService (Firestore emulator)', () => {
     expect(await service.addSpeakerSignup({ title: 'Talk 2', level: 'CC2', timePref: '5-7' })).toBe(
       false
     );
+  });
+
+  it('removeSpeakerSignup() lets an admin remove a signup they do not own', async () => {
+    const svcA = createService();
+    const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+    svcA.loadMeeting('m5b');
+    admin.loadMeeting('m5b');
+    await svcA.checkIn('Naledi K.', 'naledi@example.com');
+    await svcA.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+    await waitFor(() => admin.speakers().length === 1);
+    const speakerId = admin.speakers()[0].id;
+
+    await admin.removeSpeakerSignup(speakerId);
+    await waitFor(() => admin.speakers().length === 0);
+  });
+
+  it('removeSpeakerSignup() lets a granted-only admin remove a signup they do not own', async () => {
+    const svcA = createService();
+    const granted = createService({ uid: 'granted-uid', displayName: 'Granted', email: 'granted@example.com' }, false, true);
+    svcA.loadMeeting('m5c');
+    granted.loadMeeting('m5c');
+    await svcA.checkIn('Naledi K.', 'naledi@example.com');
+    await svcA.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+    await waitFor(() => granted.speakers().length === 1);
+    const speakerId = granted.speakers()[0].id;
+
+    await granted.removeSpeakerSignup(speakerId);
+    await waitFor(() => granted.speakers().length === 0);
+  });
+
+  it('removeSpeakerSignup() still no-ops for a non-owning non-admin', async () => {
+    const svcA = createService();
+    const svcB = createService();
+    svcA.loadMeeting('m5d');
+    svcB.loadMeeting('m5d');
+    await svcA.checkIn('Naledi K.', 'naledi@example.com');
+    await svcA.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+    await waitFor(() => svcB.speakers().length === 1);
+    const speakerId = svcB.speakers()[0].id;
+
+    await svcB.removeSpeakerSignup(speakerId);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(svcB.speakers().length).toBe(1);
   });
 
   it('claimEvaluatorSlot() rejects evaluating your own speech and blocks a second concurrent claim', async () => {
@@ -429,6 +503,44 @@ describe('CheckinStateService (Firestore emulator)', () => {
 
     await svcB.releaseEvaluatorSlot(speakerId);
     await waitFor(() => svcB.speakers()[0]?.evaluator === null);
+  });
+
+  it('releaseEvaluatorSlot() lets an admin release an evaluator slot they do not own', async () => {
+    const svcA = createService();
+    const svcB = createService();
+    const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+    svcA.loadMeeting('m7b');
+    svcB.loadMeeting('m7b');
+    admin.loadMeeting('m7b');
+    await svcA.checkIn('Naledi K.', 'naledi@example.com');
+    await svcB.checkIn('Bongani', 'bongani@example.com');
+    await svcA.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+    await waitFor(() => svcB.speakers().length === 1);
+    const speakerId = svcB.speakers()[0].id;
+    await svcB.claimEvaluatorSlot(speakerId);
+    await waitFor(() => admin.speakers()[0]?.evaluator !== null);
+
+    await admin.releaseEvaluatorSlot(speakerId);
+    await waitFor(() => admin.speakers()[0]?.evaluator === null);
+  });
+
+  it('releaseEvaluatorSlot() lets a granted-only admin release an evaluator slot they do not own', async () => {
+    const svcA = createService();
+    const svcB = createService();
+    const granted = createService({ uid: 'granted-uid', displayName: 'Granted', email: 'granted@example.com' }, false, true);
+    svcA.loadMeeting('m7c');
+    svcB.loadMeeting('m7c');
+    granted.loadMeeting('m7c');
+    await svcA.checkIn('Naledi K.', 'naledi@example.com');
+    await svcB.checkIn('Bongani', 'bongani@example.com');
+    await svcA.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+    await waitFor(() => svcB.speakers().length === 1);
+    const speakerId = svcB.speakers()[0].id;
+    await svcB.claimEvaluatorSlot(speakerId);
+    await waitFor(() => granted.speakers()[0]?.evaluator !== null);
+
+    await granted.releaseEvaluatorSlot(speakerId);
+    await waitFor(() => granted.speakers()[0]?.evaluator === null);
   });
 
   it('loadMeeting() isolates data between different meeting ids', async () => {
@@ -529,5 +641,322 @@ describe('CheckinStateService (Firestore emulator)', () => {
 
     const snap = await getDoc(doc(firestore, 'checkins', 'm11'));
     expect(snap.exists()).toBe(false);
+  });
+
+  describe('adminRenamePerson()', () => {
+    it('lets an app-admin correct a mistyped name', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m13a');
+      admin.loadMeeting('m13a');
+      await svcA.checkIn('Alise', 'alice@example.com');
+      const uid = svcA.currentUid;
+      await waitFor(() => admin.attendees().length === 1);
+
+      expect(await admin.adminRenamePerson(uid, 'Alice')).toBe(true);
+      await waitFor(() => admin.attendees()[0]?.name === 'Alice');
+    });
+
+    it('lets a granted-only admin correct a mistyped name', async () => {
+      const svcA = createService();
+      const granted = createService({ uid: 'granted-uid', displayName: 'Granted', email: 'granted@example.com' }, false, true);
+      svcA.loadMeeting('m13b');
+      granted.loadMeeting('m13b');
+      await svcA.checkIn('Alise', 'alice@example.com');
+      const uid = svcA.currentUid;
+      await waitFor(() => granted.attendees().length === 1);
+
+      expect(await granted.adminRenamePerson(uid, 'Alice')).toBe(true);
+      await waitFor(() => granted.attendees()[0]?.name === 'Alice');
+    });
+
+    it('sweeps attendee, role claim, own speaker name, and nested evaluator.name for the same uid in one call', async () => {
+      const priya = createService();
+      const thabo = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      priya.loadMeeting('m13c');
+      thabo.loadMeeting('m13c');
+      admin.loadMeeting('m13c');
+      await priya.checkIn('Priya Naidoo', 'priya@example.com');
+      await thabo.checkIn('Thabo', 'thabo@example.com');
+      const priyaUid = priya.currentUid;
+
+      await priya.claimRole('timer'); // role claim
+      await priya.addSpeakerSignup({ title: 'The Art of the Pause', level: 'CC6', timePref: '6-8' }); // own signup
+      await thabo.addSpeakerSignup({ title: 'Finding Your Voice', level: 'CC4', timePref: '5-7' });
+      await waitFor(() => admin.speakers().length === 2);
+      const thaboSpeakerId = admin.speakers().find((sp) => sp.uid !== priyaUid)!.id;
+      await priya.claimEvaluatorSlot(thaboSpeakerId); // evaluates Thabo's speech
+      await waitFor(() => admin.speakers().find((sp) => sp.id === thaboSpeakerId)?.evaluator?.uid === priyaUid);
+
+      expect(await admin.adminRenamePerson(priyaUid, 'Priya N.')).toBe(true);
+
+      await waitFor(() => admin.attendees().find((a) => a.uid === priyaUid)?.name === 'Priya N.');
+      expect(admin.roles()['timer']?.name).toBe('Priya N.');
+      expect(admin.speakers().find((sp) => sp.uid === priyaUid)?.name).toBe('Priya N.');
+      expect(admin.speakers().find((sp) => sp.id === thaboSpeakerId)?.evaluator?.name).toBe('Priya N.');
+      // uid never changes on any of the four copies
+      expect(admin.roles()['timer']?.uid).toBe(priyaUid);
+      expect(admin.speakers().find((sp) => sp.uid === priyaUid)?.uid).toBe(priyaUid);
+      expect(admin.speakers().find((sp) => sp.id === thaboSpeakerId)?.evaluator?.uid).toBe(priyaUid);
+    });
+
+    it('also updates an existing apology entry for that uid', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m13d');
+      admin.loadMeeting('m13d');
+      await svcA.checkIn('Alise', 'alice@example.com');
+      const uid = svcA.currentUid;
+      await svcA.uncheckIn();
+      await waitFor(() => admin.apologies().length === 1);
+
+      await admin.adminRenamePerson(uid, 'Alice');
+      await waitFor(() => admin.apologies()[0]?.name === 'Alice');
+    });
+
+    it('is a no-op for a non-admin caller', async () => {
+      const svcA = createService();
+      const svcB = createService();
+      svcA.loadMeeting('m13e');
+      svcB.loadMeeting('m13e');
+      await svcA.checkIn('Alise', 'alice@example.com');
+      const uid = svcA.currentUid;
+      await waitFor(() => svcB.attendees().length === 1);
+
+      expect(await svcB.adminRenamePerson(uid, 'Alice')).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(svcB.attendees()[0].name).toBe('Alise');
+    });
+
+    it('is a no-op for a uid with no record anywhere in the meeting', async () => {
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      admin.loadMeeting('m13f');
+
+      expect(await admin.adminRenamePerson('nobody-uid', 'Whoever')).toBe(false);
+    });
+
+    it('writes a checkin.adminEdit auditLog entry', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m13g');
+      admin.loadMeeting('m13g');
+      await svcA.checkIn('Alise', 'alice@example.com');
+      const uid = svcA.currentUid;
+      await waitFor(() => admin.attendees().length === 1);
+
+      await admin.adminRenamePerson(uid, 'Alice');
+
+      const entries = await auditEntriesFor(firestore, 'checkin.adminEdit');
+      expect(entries.some((e) => (e['summary'] as string).includes(uid) && (e['summary'] as string).includes('Alice'))).toBe(true);
+    });
+  });
+
+  describe('adminEditSpeaker()', () => {
+    it('lets an admin correct title/level/timePref without touching name or uid', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m14a');
+      admin.loadMeeting('m14a');
+      await svcA.checkIn('Naledi K.', 'naledi@example.com');
+      await svcA.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+      await waitFor(() => admin.speakers().length === 1);
+      const id = admin.speakers()[0].id;
+      const uid = admin.speakers()[0].uid;
+
+      expect(await admin.adminEditSpeaker(id, { title: 'Talk One', level: 'CC2', timePref: '7-10' })).toBe(true);
+      await waitFor(() => admin.speakers()[0]?.title === 'Talk One');
+      expect(admin.speakers()[0].level).toBe('CC2');
+      expect(admin.speakers()[0].timePref).toBe('7-10');
+      expect(admin.speakers()[0].name).toBe('Naledi K.');
+      expect(admin.speakers()[0].uid).toBe(uid);
+    });
+
+    it('is a no-op for a non-admin', async () => {
+      const svcA = createService();
+      const svcB = createService();
+      svcA.loadMeeting('m14b');
+      svcB.loadMeeting('m14b');
+      await svcA.checkIn('Naledi K.', 'naledi@example.com');
+      await svcA.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+      await waitFor(() => svcB.speakers().length === 1);
+      const id = svcB.speakers()[0].id;
+
+      expect(await svcB.adminEditSpeaker(id, { title: 'Hacked' })).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(svcB.speakers()[0].title).toBe('Talk 1');
+    });
+
+    it('is a no-op for an unknown speakerId', async () => {
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      admin.loadMeeting('m14c');
+
+      expect(await admin.adminEditSpeaker('no-such-id', { title: 'X' })).toBe(false);
+    });
+
+    it('writes a checkin.adminEdit auditLog entry', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m14d');
+      admin.loadMeeting('m14d');
+      await svcA.checkIn('Naledi K.', 'naledi@example.com');
+      await svcA.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+      await waitFor(() => admin.speakers().length === 1);
+      const id = admin.speakers()[0].id;
+
+      await admin.adminEditSpeaker(id, { title: 'Talk One' });
+
+      const entries = await auditEntriesFor(firestore, 'checkin.adminEdit');
+      expect(entries.some((e) => (e['summary'] as string).includes('Naledi K.'))).toBe(true);
+    });
+  });
+
+  describe('adminRemoveAttendee()', () => {
+    it('cascades: removes the attendee, releases their unlocked role claim, cancels their own speaker signup, releases their evaluator slot', async () => {
+      const svcA = createService();
+      const svcB = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m15a');
+      svcB.loadMeeting('m15a');
+      admin.loadMeeting('m15a');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      await svcB.checkIn('Bongani', 'bongani@example.com');
+      const uidA = svcA.currentUid;
+      await svcA.claimRole('toastmaster');
+      await svcB.addSpeakerSignup({ title: 'Talk 1', level: 'CC1', timePref: '5-7' });
+      await waitFor(() => admin.speakers().length === 1);
+      const speakerId = admin.speakers()[0].id;
+      await svcA.claimEvaluatorSlot(speakerId);
+      await svcA.addSpeakerSignup({ title: "Alice's Talk", level: 'CC1', timePref: '5-7' });
+      await waitFor(() => admin.speakers().length === 2);
+
+      expect(await admin.adminRemoveAttendee(uidA)).toBe(true);
+
+      await waitFor(() => admin.attendees().every((a) => a.uid !== uidA));
+      expect(admin.roles()['toastmaster']?.uid).toBe('');
+      expect(admin.speakers().find((sp) => sp.uid === uidA)).toBeUndefined();
+      expect(admin.speakers().find((sp) => sp.id === speakerId)?.evaluator).toBeNull();
+    });
+
+    it('does NOT add the removed uid to apologies', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m15b');
+      admin.loadMeeting('m15b');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      const uidA = svcA.currentUid;
+      await waitFor(() => admin.attendees().length === 1);
+
+      await admin.adminRemoveAttendee(uidA);
+      await waitFor(() => admin.attendees().length === 0);
+
+      expect(admin.apologies().some((a) => a.uid === uidA)).toBe(false);
+    });
+
+    it('respects a locked role — does not release it', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m15c');
+      admin.loadMeeting('m15c');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      const uidA = svcA.currentUid;
+      await svcA.claimRole('toastmaster');
+      await waitFor(() => admin.roles()['toastmaster']?.uid === uidA);
+      await admin.setRoleLocked('toastmaster', true);
+      await waitFor(() => admin.lockedRoles().includes('toastmaster'));
+
+      await admin.adminRemoveAttendee(uidA);
+      await waitFor(() => admin.attendees().every((a) => a.uid !== uidA));
+      expect(admin.roles()['toastmaster'].uid).toBe(uidA); // locked — survives the removal
+    });
+
+    it('is a no-op for a non-admin', async () => {
+      const svcA = createService();
+      const svcB = createService();
+      svcA.loadMeeting('m15d');
+      svcB.loadMeeting('m15d');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      const uidA = svcA.currentUid;
+      await waitFor(() => svcB.attendees().length === 1);
+
+      expect(await svcB.adminRemoveAttendee(uidA)).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(svcB.attendees().length).toBe(1);
+    });
+
+    it('lets a granted-only admin remove an attendee', async () => {
+      const svcA = createService();
+      const granted = createService({ uid: 'granted-uid', displayName: 'Granted', email: 'granted@example.com' }, false, true);
+      svcA.loadMeeting('m15e');
+      granted.loadMeeting('m15e');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      const uidA = svcA.currentUid;
+      await waitFor(() => granted.attendees().length === 1);
+
+      expect(await granted.adminRemoveAttendee(uidA)).toBe(true);
+      await waitFor(() => granted.attendees().length === 0);
+    });
+
+    it('writes a checkin.adminRemove auditLog entry', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m15f');
+      admin.loadMeeting('m15f');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      const uidA = svcA.currentUid;
+      await waitFor(() => admin.attendees().length === 1);
+
+      await admin.adminRemoveAttendee(uidA);
+
+      const entries = await auditEntriesFor(firestore, 'checkin.adminRemove');
+      expect(entries.some((e) => (e['summary'] as string).includes('Alice'))).toBe(true);
+    });
+  });
+
+  describe('adminRemoveApology()', () => {
+    it('removes a stray apology entry', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m16a');
+      admin.loadMeeting('m16a');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      const uidA = svcA.currentUid;
+      await svcA.uncheckIn();
+      await waitFor(() => admin.apologies().length === 1);
+
+      expect(await admin.adminRemoveApology(uidA)).toBe(true);
+      await waitFor(() => admin.apologies().length === 0);
+    });
+
+    it('is a no-op for a non-admin', async () => {
+      const svcA = createService();
+      const svcB = createService();
+      svcA.loadMeeting('m16b');
+      svcB.loadMeeting('m16b');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      const uidA = svcA.currentUid;
+      await svcA.uncheckIn();
+      await waitFor(() => svcB.apologies().length === 1);
+
+      expect(await svcB.adminRemoveApology(uidA)).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(svcB.apologies().length).toBe(1);
+    });
+
+    it('writes a checkin.adminRemove auditLog entry', async () => {
+      const svcA = createService();
+      const admin = createService({ uid: 'admin-uid', displayName: 'Admin', email: 'admin@example.com' }, true);
+      svcA.loadMeeting('m16c');
+      admin.loadMeeting('m16c');
+      await svcA.checkIn('Alice', 'alice@example.com');
+      const uidA = svcA.currentUid;
+      await svcA.uncheckIn();
+      await waitFor(() => admin.apologies().length === 1);
+
+      await admin.adminRemoveApology(uidA);
+
+      const entries = await auditEntriesFor(firestore, 'checkin.adminRemove');
+      expect(entries.some((e) => (e['summary'] as string).includes('Alice'))).toBe(true);
+    });
   });
 });
