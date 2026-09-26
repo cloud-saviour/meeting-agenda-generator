@@ -52,16 +52,21 @@ src/app/
                 token + provideAppAuth(), same getOrCreateApp()-shares-one-
                 FirebaseApp pattern as firestore.provider.ts. Both read
                 src/environments/environment.ts
-    auth/       auth.service.ts (AuthService — currentUser/isAdmin/
-                isAppAdmin/ready signals, signIn()/signUp()/signOut()/
-                resetPassword()/updateDisplayName()), auth.guard.ts
-                (authGuard — CanActivateFn gating most /admin* routes on
-                isAppAdmin(), not just currentUser()), super-admin.guard.ts
-                (superAdminGuard — same shape, but checks isAdmin()
-                specifically; guards only /admin/audit-log),
-                member.guard.ts (memberGuard — gates /member on
-                currentUser() alone, since any signed-in account counts as
-                a member) — see Authentication below
+    auth/       auth.service.ts (AuthService — GLOBAL identity only:
+                currentUser/isAdmin/ready signals, signIn()/signUp()/
+                signOut()/resetPassword()/updateDisplayName()),
+                super-admin.guard.ts (superAdminGuard — gates on the real
+                global claim, isAdmin(): /admin/audit-log and
+                /platform/clubs/new), member.guard.ts (memberGuard — gates
+                /member on currentUser() alone, since any signed-in account
+                counts as a member) — see Authentication below
+    club/       club-context.service.ts (ClubContextService — the current
+                club from the URL, plus `isAppAdmin`: the per-club admin
+                check), club-context.guard.ts (clubContextGuard — resolves
+                /c/:clubSlug), club-admin.guard.ts (clubAdminGuard — gates
+                every /c/:slug/admin* route on clubContext.isAppAdmin()),
+                legacy-club-redirect.guard.ts, club-link.pipe.ts,
+                club-provisioning.service.ts — see "Multi-club groundwork"
     utils/      locale.ts (APP_LOCALE)
 
   layout/
@@ -218,7 +223,7 @@ src/app/
                       since `savedAgendas` itself is admin-read-only per
                       `firestore.rules` (see Persistence below) — a
                       signed-out visitor hitting "/admin/preview" is
-                      redirected to `/login` by the same `authGuard` every
+                      redirected to `/login` by the same `clubAdminGuard` every
                       other `/admin*` route uses.
       pages/           agenda-viewer.component.ts,
                         agenda-draft-preview.component.ts
@@ -260,7 +265,7 @@ src/app/
                       redesigning that fixed table to be dynamic.
       pages/           admin-committee-roles.component.ts
 
-    admin-admins/     Route "/admin/manage-admins" — guarded by `authGuard`:
+    admin-admins/     Route "/admin/manage-admins" — guarded by `clubAdminGuard`:
                       any app-admin (real claim or Firestore-granted) can
                       reach it and grant/revoke another member's access, not
                       just a true claim-holder — see "App-admin grants"
@@ -281,7 +286,7 @@ src/app/
       models/          app-admin.models.ts
 
     admin-audit-log/  Route "/admin/audit-log" — guarded by
-                      `superAdminGuard`, not `authGuard`: unlike every other
+                      `superAdminGuard`, not `clubAdminGuard`: unlike every other
                       admin-gated route, a Firestore-granted admin cannot
                       reach this one, only a true claim-holder — see "Audit
                       log" under Authentication below for why. Read-only
@@ -306,7 +311,7 @@ src/app/
       pages/           signup.component.ts
 
     member/           Route "/member" — guarded by memberGuard, not
-                      authGuard (any signed-in account, not just admins —
+                      clubAdminGuard (any signed-in account, not just admins —
                       see Authentication below): the signed-in member's own
                       dashboard, edit display name, view confirmed
                       attendance/role/speech history
@@ -1107,28 +1112,48 @@ see checkin-state.service.spec.ts) — and, for services now consumed by
 provide plain synchronous fakes rather than the real Firestore-backed
 service, since neither suite is testing Firestore behavior itself.
 
-## Authentication — admin, self-service member, and anonymous tiers
+## Authentication — who can do what
 
-Three independent tiers share one `AuthService` / one Firebase Auth
-instance: **admin** (signed in + the `admin` custom claim, provisioned
-manually — or, since the app-admin grants feature below, a Firestore-
-granted equivalent), **member** (any signed-in account — self-service,
+**Terminology.** Older paragraphs below use several names for the same two
+admin tiers; this is the mapping. **Platform admin** = "super admin" = "true
+admin" = "real-claim admin" (`AuthService.isAdmin()`, the Firebase custom
+`admin` claim — global, every club). **Club admin** = "app-admin" = "granted
+admin" (`ClubContextService.isAppAdmin()` — the real claim OR a
+`clubs/{clubId}/appAdmins/{uid}` grant for the *current* club). A platform
+admin is automatically a club admin of every club; the reverse is never true.
+
+| Who | How they get it | Scope | Can | Cannot |
+|---|---|---|---|---|
+| **Platform admin** | Firebase custom `admin` claim, set by script (`promote:admin`), never from inside the app; needs a fresh sign-in to take effect | Every club | Everything a club admin can, in any club; view the audit log (`/admin/audit-log`); create clubs (`/platform/clubs/new`); read the member list | Grant *themselves* club-admin (blocked by rule — it would let access outlive the claim) |
+| **Club admin** | Granted by a platform admin or another admin of that club (`/admin/manage-admins`, or as first admin when the club is created); stored at `clubs/{clubId}/appAdmins/{uid}` | That one club only | Agenda editor, My Agendas, meeting/committee roles, committee roster, mark attendance, correct/remove check-in entries, grant/revoke other members as admins of that club | View the audit log; create clubs; grant themselves; touch any other club. Grant/revoke takes effect immediately, no sign-out |
+| **Member** | Self-service `/signup`; any signed-in account | Own profile (global) | Check in as themselves, own history at `/member` | Any admin page |
+| **Guest** | None — types an email at check-in | One check-in | Check in, claim roles, sign up to speak | Everything else |
+
+Committee titles (President, Secretary, ...) are unrelated to all of this:
+they only control what prints in the agenda footer and grant no access.
+
+Independent tiers share one `AuthService` / one Firebase Auth
+instance: **admin** (a platform admin — signed in + the `admin` custom
+claim, provisioned manually — or a per-club club admin, a Firestore grant
+scoped to one club; see the table above), **member** (any signed-in account — self-service,
 provisioned via `/signup`, no claim involved), and **anonymous** (no
 account at all — check-in's original, still-fully-supported mode). Every
-`/admin*` route except one (8 total: `admin`, `admin/agendas`,
+`/c/:clubSlug/admin*` route except one (8 total: `admin`, `admin/agendas`,
 `admin/manage-agendas`, `admin/manage-roles`, `admin/roles`,
 `admin/committee-roles`, `admin/manage-admins`, `admin/audit-log`) is
-gated by `authGuard` (`core/auth/auth.guard.ts`) on `isAppAdmin()` (real
-claim OR Firestore grant — see "App-admin grants" below), including
-`admin/manage-admins` itself: any app-admin can grant/revoke another
-member's access, not just a true claim-holder. `admin/audit-log` alone is
+gated by `clubAdminGuard` (`core/club/club-admin.guard.ts`, declared once on
+the `admin` parent route) on `ClubContextService.isAppAdmin()` (real claim
+OR a grant for *that* club — see "Club admin grants" below; this replaced
+the old global `authGuard`), including `admin/manage-admins` itself: any
+club admin can grant/revoke another member's access, not just a
+claim-holder. `admin/audit-log` alone is
 gated by the stricter `superAdminGuard` (`core/auth/super-admin.guard.ts`)
 on `isAdmin()` specifically — who granted/revoked what should only be
 visible to a true claim-holder, even though any app-admin can perform the
 action itself (see "Audit log" below). `/member` is gated by the
 separate `memberGuard` (`core/auth/member.guard.ts`) on `currentUser() !==
 null` alone — a member account never carries the admin claim (self-service
-sign-up can't grant one), so reusing `authGuard` there would wrongly reject
+sign-up can't grant one), so reusing `clubAdminGuard` there would wrongly reject
 every member. `/checkin` and `/preview` are still deliberately **not**
 guarded by either — check-in stays open to all three tiers: an anonymous
 visitor types a name+email (see "How anonymous identity works" under
@@ -1206,28 +1231,36 @@ all signals, set together in one `NgZone.run()` per auth-state change
 user.getIdTokenResult()` before that batched write). `ready` matters because
 this whole sequence is async — on a cold page load, `isAdmin()` briefly
 reads `false` even for an already-signed-in admin while Firebase restores
-the cached session. **`authGuard` waits for `ready()`, then checks
-`isAdmin()`, not just `currentUser()`** — without the `ready()` wait, a hard
+the cached session. The admin guards wait for `ready()` first, then check the admin
+flag (`clubAdminGuard` via `clubContext.isAppAdmin()`, `superAdminGuard` via
+`isAdmin()`), not just `currentUser()` — without the `ready()` wait, a hard
 refresh on any admin page would flash-redirect a signed-in admin to
-`/login`; without checking `isAdmin()` specifically, a signed-in account
-without the claim could still reach an admin page and only fail once it hit
-an actual Firestore read/write, instead of being redirected immediately.
+`/login`; without checking the flag, a signed-in account without admin
+access could still reach an admin page and only fail once it hit an actual
+Firestore read/write, instead of being redirected immediately. `AuthService`
+no longer has `isAppAdmin` or any `appAdmins` listener — that per-club half
+lives in `ClubContextService`.
 
-**App-admin grants (`appAdmins/{uid}`)** — a second, Firestore-based way
+**Club admin grants (`clubs/{clubId}/appAdmins/{uid}`)** — this used to be one
+flat, global `appAdmins` collection; with multi-club it is per club, so being
+an admin of club A says nothing about club B. Everything below that says
+`appAdmins/{uid}` means the current club's copy, and "app-admin" means
+"club admin". A second, Firestore-based way
 to get admin-equivalent access, deliberately kept separate from the real
 `admin` custom claim so an admin can grant it to someone else without
 ever touching the Admin SDK/a service-account key (setting the real claim
 still requires that — see `scripts/promote-to-admin.mjs`). A document's
-mere existence at `appAdmins/{uid}` means that uid has full parity with
-`isAdmin()` for every app feature (`AuthService.isAppAdmin` — a computed
-`isAdmin() || grantedAdmin()`), enforced the same way everywhere in
-`firestore.rules` via an `isAppAdmin()` helper that itself calls
-`isAdmin() || isGrantedAdmin()`. This now extends to `appAdmins/{uid}`
+mere existence at `clubs/{clubId}/appAdmins/{uid}` means that uid has full
+parity with `isAdmin()` for every feature *of that club*
+(`ClubContextService.isAppAdmin` — a computed `auth.isAdmin() ||
+grantedAdmin()`), enforced the same way everywhere in `firestore.rules` via
+an `isAppAdmin(clubId)` helper that itself calls
+`isAdmin() || isGrantedAdmin(clubId)`. This now extends to `appAdmins/{uid}`
 itself: `allow create, update: if isAppAdmin() && request.auth.uid !=
 uid` (`allow delete: if isAppAdmin()`, no such restriction) — **any**
 app-admin, real claim or granted, can grant or revoke ANOTHER member's
 access via `/admin/manage-admins` (`AdminAdminsComponent`,
-`AppAdminService`, guarded by `authGuard` like every other admin route —
+`AppAdminService`, guarded by `clubAdminGuard` like every other admin route —
 this was originally `superAdminGuard`-only, real-claim-only, loosened
 deliberately so it doesn't bottleneck on one person). **The one thing
 still off-limits to everyone**, real claim included, is granting or
@@ -1255,15 +1288,16 @@ before this restriction existed).
 
 Unlike the real claim (which needs a fresh ID token — sign out and back
 in, or the SDK's periodic silent refresh — to reflect a change),
-`grantedAdmin` is populated by a **live** `onSnapshot` on the signed-in
-user's own `appAdmins/{uid}` document, re-subscribed on every
-`onAuthStateChanged` transition (the previous listener is explicitly
-unsubscribed first, so a stale one never keeps running against a
-signed-out or switched-away uid). `ready()` now also waits for that
-listener's first result, same reasoning as it already waits for
-`getIdTokenResult()` — without it, `authGuard` could flash-redirect a
-granted (non-claim) admin on a hard refresh, before their grant has been
-read. Net effect: revoking someone's granted access takes effect in their
+`grantedAdmin` (in `ClubContextService`) is populated by a **live**
+`onSnapshot` on the signed-in user's own
+`clubs/{clubId}/appAdmins/{uid}` document, re-subscribed whenever the
+signed-in user or the current club changes (the previous listener is
+explicitly unsubscribed first, so a stale one never keeps running against a
+signed-out or switched-away uid or club). The club context's `ready` waits
+for that listener's first result, same reasoning as `AuthService.ready`
+waits for `getIdTokenResult()` — without it, `clubAdminGuard` could
+flash-redirect a granted (non-claim) admin on a hard refresh, before their
+grant has been read. Net effect: revoking someone's granted access takes effect in their
 already-open session immediately, no sign-out required — a genuine
 usability advantage over the claim, on top of not needing the Admin SDK
 to grant it in the first place.
@@ -1348,9 +1382,10 @@ own "Edit Name" instead) but deliberately exempts admins, who need the
 flexibility to type any name while running a meeting.
 
 **Firestore rules are now per-collection, not a single blanket `allow read,
-write: if true`** (`firestore.rules`). Everywhere below that says
-"app-admin" means `isAppAdmin()` — real claim OR Firestore grant, see
-"App-admin grants" above; `members` and `auditLog` read are the deliberate
+write: if true`** (`firestore.rules`). Every collection below now lives under
+`clubs/{clubId}/...` except `members`. Everywhere below that says
+"app-admin" means `isAppAdmin(clubId)` — real claim OR a grant for that
+club, see "Club admin grants" above; `members` and `auditLog` read are the deliberate
 exceptions that still check `isAdmin()` specifically:
 - `checkins/**` — untouched, fully open (see above).
 - `appAdmins/{uid}` — **own-uid-or-app-admin read, app-admin write (except
