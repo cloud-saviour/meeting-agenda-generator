@@ -1603,6 +1603,8 @@ copies every collection listed above into the new nested paths (`members` is
 deliberately excluded — it was never club-scoped). Writes are batched under
 Firestore's 500-writes-per-batch limit.
 
+**Creating a club from the app (platform admins only)** - `/platform/clubs/new` (`features/platform-clubs/pages/create-club.component.*`), guarded by `superAdminGuard`, linked from the admin hub for real-claim admins. It calls `ClubProvisioningService.createClub()` (`core/club/club-provisioning.service.ts`), which writes the `clubs/{clubId}` doc, the `clubSlugs/{slug}` pointer, the standard roles (`core/club/standard-roles.json` - also read by `scripts/seed-role-definitions.mjs`, so there is one role list), an optional first club admin, and a `club.create` audit entry in ONE `writeBatch`. Every write is authorised by the global `admin` claim, so granting the first admin inside the same batch works even though the new club's `appAdmins` is empty at that moment. `firestore.rules`: `clubs/{clubId}` create needs `isAdmin()` plus a valid slug/name/`active == true`; `clubSlugs/{slug}` create needs `isAdmin()` and a `getAfter()` check that the pointer's club doc (same batch) has that exact slug - so a taken slug can never be overwritten. Update/delete stay `false` for clients. Slug rules live in `core/club/club-slug.util.ts` and mirror the rules regex. Deliberately platform-admin-only: there is no billing or abuse control yet, and a granted club admin can't create clubs. Not built: editing a club's branding, logo upload, a club switcher.
+
 **Provisioning a new club — `scripts/create-club.mjs`** (`npm run create:club -- --slug=my-club --name="My Club" [--admin-email=a@b.c]`, `:prod` for the real project): creates `clubs/{clubId}` + `clubSlugs/{slug}` atomically, refuses a taken slug, and optionally grants an existing account as that club's admin (`clubs/{clubId}/appAdmins`). Follow with `npm run seed:roles -- --club=<slug>` (roles are per-club data). Verified in the browser against the emulator: a member who is admin of only club B reaches `/c/club-b/admin/*`, sees none of club A's agendas, and is redirected to `/login` on `/c/<clubA>/admin/*`; bare `/checkin?meeting=..` redirects to the default club with the query intact; an unknown slug falls back to the default club.
 
 **Firestore rules (`firestore.rules`)**: the new nested rules live under
@@ -1641,13 +1643,7 @@ already did this (for an unrelated reason, its own signed-in-member-seeding
 `effect()`); the fix generalized to every other emulator spec once their
 services grew a club-resolution `effect()` too.
 
-**Explicitly out of scope this pass** (see the approved plan for the full
-list): self-service "create a new club" UI, a club-switcher for a user
-belonging to multiple clubs, billing/subscriptions (`clubs/{clubId}.active`
-is a placeholder only), and making the hardcoded 7-role DOCX/committee
-footer structure (`docx.service.ts`'s `PRINTED_ROLE_IDS`,
-`default-agenda.ts`'s role-id vocabulary) configurable per club — only each
-club's actual role-holder *data* is isolated, not that fixed structure.
+**Explicitly out of scope this pass**: editing a club's branding after creation, logo upload, a club-switcher for a user belonging to multiple clubs, club creation by non-platform admins, billing/subscriptions (`clubs/{clubId}.active` is a placeholder only), and making the hardcoded 7-role DOCX/committee footer structure (`docx.service.ts`'s `PRINTED_ROLE_IDS`, `default-agenda.ts`'s role-id vocabulary) configurable per club - only each club's actual role-holder *data* is isolated, not that fixed structure.
 
 ## Known gaps / next planned work
 
@@ -1669,13 +1665,14 @@ club's actual role-holder *data* is isolated, not that fixed structure.
    **groundwork done**: data isolation (nested `clubs/{clubId}/...`
    collections), club-scoped admin access, and path-based routing
    (`/c/<clubSlug>/...`) all exist now — see "Multi-club groundwork" above
-   for the full design. **Still open**: a self-service "create a new club"
-   UI (provisioning is still script-only, `scripts/migrate-to-clubs.mjs`),
-   a club-switcher for someone belonging to multiple clubs, and
-   admin-managed yearly subscriptions (manually flagged for now, modeled to
-   slot in real payments later without a schema rewrite — `clubs/{clubId}.active`
-   is a placeholder field only). Self-service member accounts already exist
-   (see Authentication above) and stay global, independent of any club.
+   for the full design. Platform admins can now create clubs in-app at
+   `/platform/clubs/new`. **Still open**: editing a club's branding, a
+   club-switcher for someone belonging to multiple clubs, club creation by
+   non-platform admins, and admin-managed yearly subscriptions (manually
+   flagged for now, modeled to slot in real payments later without a schema
+   rewrite - `clubs/{clubId}.active` is a placeholder field only).
+   Self-service member accounts already exist (see Authentication above)
+   and stay global, independent of any club.
 3. Admin console for the check-in page: reset a role, cap speaker slots,
    lock the sheet once the meeting starts (role-locking now exists per-role
    via the editor's override toggle — see above — but there's no bulk

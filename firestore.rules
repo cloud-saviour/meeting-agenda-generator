@@ -45,12 +45,20 @@ service cloud.firestore {
     // A club's own branding/identity doc — see core/models/club.models.ts.
     // Public read: /checkin and /preview are anonymous and need a club's
     // name/logo/address to render their header before any auth state is
-    // known. No client write path at all in this pass — provisioning is
-    // Admin-SDK-only (scripts/migrate-to-clubs.mjs), matching "no
-    // self-service club creation yet."
+    // known. Create is platform-admin-only (the real global `admin` claim -
+    // see core/club/club-provisioning.service.ts and the /platform/clubs/new
+    // screen); scripts/create-club.mjs (Admin SDK) is the other path. Never
+    // updated or deleted from a client in this pass.
     match /clubs/{clubId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if isAdmin()
+        && request.resource.data.slug is string
+        && request.resource.data.slug.matches('^[a-z0-9]+(-[a-z0-9]+)*$')
+        && request.resource.data.slug.size() <= 40
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.active == true;
+      allow update, delete: if false;
 
       // Granted admin power for THIS club — a Firestore document, not a
       // custom claim, so it can be assigned by any of this club's admins
@@ -162,12 +170,18 @@ service cloud.firestore {
 
     // The only way a URL segment (/c/<slug>/...) resolves to a clubId —
     // see ClubContextService.setClub(). Public read (needed pre-auth, same
-    // reasoning as clubs/{clubId} above); no client write path — created
-    // only by scripts/migrate-to-clubs.mjs (Admin SDK), atomically with the
-    // clubs/{clubId} doc it points to.
+    // reasoning as clubs/{clubId} above). Create-only, platform-admin-only,
+    // and only when the pointer agrees with a club doc written in the SAME
+    // batch (getAfter) whose slug is this document's id - so a taken slug
+    // can never be overwritten and a pointer can't name someone else's
+    // club. scripts/migrate-to-clubs.mjs / create-club.mjs (Admin SDK) also
+    // create these.
     match /clubSlugs/{slug} {
       allow read: if true;
-      allow write: if false;
+      allow create: if isAdmin()
+        && request.resource.data.clubId is string
+        && getAfter(/databases/$(database)/documents/clubs/$(request.resource.data.clubId)).data.slug == slug;
+      allow update, delete: if false;
     }
 
     // Self-service member accounts — GLOBAL, not club-scoped (see
