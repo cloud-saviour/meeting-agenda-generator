@@ -1581,7 +1581,8 @@ Authentication). The bare root `''` redirects to
 routes, each guarded by `legacyClubRedirectGuard(segment)`
 (`core/club/legacy-club-redirect.guard.ts`), which redirects to
 `/c/<defaultClubSlug>/<segment>` while preserving query params — so an
-already-texted/QR-coded `/checkin?meeting=42` link keeps working.
+already-texted/QR-coded `/checkin?meeting=42` link keeps working. Bookmarked un-prefixed `/admin/...` and `/member` pages get the same
+treatment via `legacyClubPrefixGuard` (a `matcher` route in `app.routes.ts`), which prepends `/c/<defaultClubSlug>` to the whole URL so sub-paths and query strings survive.
 
 **`ClubLinkPipe`** (`core/club/club-link.pipe.ts`, `clubLink`, impure) is how
 internal `routerLink`s got club-prefixed without touching every consuming
