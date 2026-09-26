@@ -32,6 +32,11 @@ export type AuditAction =
   | 'attendance.confirm'
   | 'attendance.unconfirm'
   | 'club.create'
+  | 'club.update'
+  | 'membership.approve'
+  | 'membership.reject'
+  | 'membership.remove'
+  | 'membership.assign'
   | 'checkin.adminEdit'
   | 'checkin.adminRemove';
 

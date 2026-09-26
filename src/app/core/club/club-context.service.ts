@@ -40,6 +40,17 @@ export class ClubContextService implements OnDestroy {
   /** Full parity with the real claim for every club feature except granting/revoking access to THIS club — see firestore.rules' appAdmins rule under clubs/{clubId}. */
   readonly isAppAdmin = computed(() => this.auth.isAdmin() || this.grantedAdmin());
 
+  /**
+   * A deactivated club (`active === false`) is closed to everyone except a
+   * platform admin, who must still be able to open it to reactivate or
+   * inspect it. This is a UI-level closure: firestore.rules still let the
+   * data be read, so it hides the club from members and guests, it is not a
+   * data-access control. Checked by clubContextGuard on each navigation into
+   * the club, so a club deactivated while someone has it open takes effect
+   * on their next navigation or reload.
+   */
+  readonly unavailable = computed(() => this.currentClub()?.active === false && !this.auth.isAdmin());
+
   /** True once the slug has resolved to a club AND (if signed in) the first appAdmins/{uid} snapshot for THIS club has arrived — same "don't flash-redirect on a cold reload" reasoning AuthService.ready() already documents. */
   readonly ready = signal(false);
 
@@ -90,6 +101,16 @@ export class ClubContextService implements OnDestroy {
     if (this.resolvingSlug !== slug) return this.currentClubId() !== null;
 
     this.currentClubId.set(clubId);
+
+    // Load the club doc BEFORE returning so the guard can check `active`
+    // synchronously; the live listener below keeps it current afterwards.
+    try {
+      const clubSnap = await getDoc(doc(this.firestore, CLUBS_COLLECTION, clubId));
+      if (this.resolvingSlug !== slug) return this.currentClubId() !== null;
+      this.currentClub.set(clubSnap.exists() ? (clubSnap.data() as Club) : null);
+    } catch (err) {
+      console.error('club doc load failed', err);
+    }
 
     this.unsubscribeClub = onSnapshot(
       doc(this.firestore, CLUBS_COLLECTION, clubId),

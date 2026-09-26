@@ -272,10 +272,13 @@ src/app/
                       under Authentication below for the full design. The
                       one thing the UI itself still blocks is granting
                       yourself (`AdminAdminsComponent.isSelf()`, mirroring
-                      firestore.rules' own restriction) — shows "Already an
+                      firestore.rules' own restriction) — shows "Ask another
                       admin" instead of a Grant button on your own row.
-                      Lists every member (via MemberProfileService.listAll())
-                      with a Grant/Revoke control per row backed by
+                      Lists THIS club's approved members (`MembershipService.listForClub()`,
+                      status `active`) plus anyone already granted admin here
+                      who isn't an approved member (shown as "not an approved
+                      member", so they can still be revoked), with a
+                      Grant/Revoke control per row backed by
                       AppAdminService, which also writes a matching
                       core/audit/audit-log.util.ts entry for every
                       grant/revoke — see "Audit log" under Authentication
@@ -332,9 +335,13 @@ src/app/
                       `AuthService.isAdmin`, not just currentUser(), so a
                       real Firebase account without the admin claim still
                       sees "Sign In", not the admin tiles (see Authentication
-                      below for why that distinction matters); a signed-in
-                      non-admin member gets "Member Profile" (→ /member)
-                      instead. "Sign Out" appears whenever any account is
+                      below for why that distinction matters). "Member
+                      Profile" (→ /member) shows for EVERY signed-in account,
+                      admins included, so an admin can see their own member
+                      profile and history too (an account with no
+                      `members/{uid}` doc yet is offered "Create My
+                      Profile"). "Sign In" shows only when signed out.
+                      "Sign Out" appears whenever any account is
                       signed in (admin or member), calling
                       `AuthService.signOut()` directly rather than
                       navigating — Home is otherwise the one page with no
@@ -1127,7 +1134,7 @@ admin is automatically a club admin of every club; the reverse is never true.
 
 | Who | How they get it | Scope | Can | Cannot |
 |---|---|---|---|---|
-| **Platform admin** | Firebase custom `admin` claim, set by script (`promote:admin`), never from inside the app; needs a fresh sign-in to take effect | Every club | Everything a club admin can, in any club; view the audit log (`/admin/audit-log`); create clubs (`/platform/clubs/new`); read the member list | Grant *themselves* club-admin (blocked by rule — it would let access outlive the claim) |
+| **Platform admin** | Firebase custom `admin` claim, set by script (`promote:admin`), never from inside the app; needs a fresh sign-in to take effect | Every club | Everything a club admin can, in any club; view the audit log (`/admin/audit-log`); create, list, edit and deactivate clubs (`/platform/clubs`); see all members and add them to any club directly (`/platform/members`) | Grant *themselves* club-admin (blocked by rule — it would let access outlive the claim) |
 | **Club admin** | Granted by a platform admin or another admin of that club (`/admin/manage-admins`, or as first admin when the club is created); stored at `clubs/{clubId}/appAdmins/{uid}` | That one club only | Agenda editor, My Agendas, meeting/committee roles, committee roster, mark attendance, correct/remove check-in entries, grant/revoke other members as admins of that club | View the audit log; create clubs; grant themselves; touch any other club. Grant/revoke takes effect immediately, no sign-out |
 | **Member** | Self-service `/signup`; any signed-in account | Own profile (global) | Check in as themselves, own history at `/member` | Any admin page |
 | **Guest** | None — types an email at check-in | One check-in | Check in, claim roles, sign up to speak | Everything else |
@@ -1610,9 +1617,20 @@ unchanged), `admin` (`clubAdminGuard` — `core/club/club-admin.guard.ts`,
 replaces the deleted `auth.guard.ts`, checks `clubContext.isAppAdmin()`),
 `checkin`, and `preview`, with `admin/audit-log` still additionally guarded
 by `superAdminGuard` (unchanged, deliberately not club-aware — see
-Authentication). The bare root `''` redirects to
-`/c/${environment.defaultClubSlug}` (a new field on `environment.ts`/
-`environment.production.ts`, holding the migrated club's slug).
+Authentication). The bare root `''` goes through `rootRedirectGuard`
+(`core/club/root-redirect.guard.ts`): a platform admin is sent to
+`/platform/clubs`; everyone else stays on `/` and sees the club picker
+(`features/club-picker/pages/club-picker.component.*`), which lists ACTIVE
+clubs only (`ClubDirectoryService.listActiveClubs()`, works signed out since
+`clubs` is public-read) and skips straight into the club when exactly one is
+active. Sign-in with no `returnUrl` goes to `/`, so it follows the same rule;
+an explicit `returnUrl` always wins. An unknown club slug also falls back to
+`/` (the picker). The club home has a "Switch club" link back to `/`.
+`environment.defaultClubSlug` is now used only by the legacy un-prefixed
+links (`/checkin`, `/preview`, `/admin/...`, `/member`), which still go to
+that one club so already-shared links keep working. No club membership is
+stored anywhere: a member account is global, so the picker is how a member
+finds their club.
 
 **Backward compatibility for already-shared check-in/preview links**: bare
 `/checkin` and `/preview` (no `/c/` prefix) are kept as their own top-level
@@ -1641,7 +1659,9 @@ copies every collection listed above into the new nested paths (`members` is
 deliberately excluded — it was never club-scoped). Writes are batched under
 Firestore's 500-writes-per-batch limit.
 
-**Creating a club from the app (platform admins only)** - `/platform/clubs/new` (`features/platform-clubs/pages/create-club.component.*`), guarded by `superAdminGuard`, linked from the admin hub for real-claim admins. It calls `ClubProvisioningService.createClub()` (`core/club/club-provisioning.service.ts`), which writes the `clubs/{clubId}` doc, the `clubSlugs/{slug}` pointer, the standard roles (`core/club/standard-roles.json` - also read by `scripts/seed-role-definitions.mjs`, so there is one role list), an optional first club admin, and a `club.create` audit entry in ONE `writeBatch`. Every write is authorised by the global `admin` claim, so granting the first admin inside the same batch works even though the new club's `appAdmins` is empty at that moment. `firestore.rules`: `clubs/{clubId}` create needs `isAdmin()` plus a valid slug/name/`active == true`; `clubSlugs/{slug}` create needs `isAdmin()` and a `getAfter()` check that the pointer's club doc (same batch) has that exact slug - so a taken slug can never be overwritten. Update/delete stay `false` for clients. Slug rules live in `core/club/club-slug.util.ts` and mirror the rules regex. Deliberately platform-admin-only: there is no billing or abuse control yet, and a granted club admin can't create clubs. Not built: editing a club's branding, logo upload, a club switcher.
+**Creating a club from the app (platform admins only)** - `/platform/clubs/new` (`features/platform-clubs/pages/create-club.component.*`), guarded by `superAdminGuard`, linked from the admin hub for real-claim admins. It calls `ClubProvisioningService.createClub()` (`core/club/club-provisioning.service.ts`), which writes the `clubs/{clubId}` doc, the `clubSlugs/{slug}` pointer, the standard roles (`core/club/standard-roles.json` - also read by `scripts/seed-role-definitions.mjs`, so there is one role list), an optional first club admin, and a `club.create` audit entry in ONE `writeBatch`. Every write is authorised by the global `admin` claim, so granting the first admin inside the same batch works even though the new club's `appAdmins` is empty at that moment. `firestore.rules`: `clubs/{clubId}` create needs `isAdmin()` plus a valid slug/name/`active == true`; `clubSlugs/{slug}` create needs `isAdmin()` and a `getAfter()` check that the pointer's club doc (same batch) has that exact slug - so a taken slug can never be overwritten. A platform admin can also list and edit clubs (`/platform/clubs`, `/platform/clubs/:slug/edit`, `ClubDirectoryService` in `core/club/club-directory.service.ts`): name, sub-line, address, mission, website and Facebook page, with a `club.update` audit entry in the same batch. The `clubs/{clubId}` update rule requires `isAdmin()` and keeps `slug` and `createdAt` unchanged; there is no client delete (a club owns many subcollections). `active` is the deactivate/reactivate switch: `ClubContextService.unavailable` (`active === false` and the user is not a platform admin) makes `clubContextGuard` send members and guests to `/club-unavailable` (an unguarded page outside `/c/<slug>`, so it can't loop); platform admins can still open the club. The club doc is loaded before the guard decides, and each change is a `Deactivated`/`Reactivated` audit entry. This is a UI-level closure, not a data-access control: `firestore.rules` still let the club's data be read and anonymous check-ins be written by anyone who calls the API directly, and a club deactivated while someone has it open takes effect on their next navigation or reload. Logo files can't be changed (no upload). Edits reach new agendas and the club header, not agendas already saved. Slug rules live in `core/club/club-slug.util.ts` and mirror the rules regex. Deliberately platform-admin-only: there is no billing or abuse control yet, and a granted club admin can't create clubs. Not built: deleting a club, logo upload, a club switcher.
+
+**Club membership with admin approval** - `clubs/{clubId}/memberships/{uid}` (`features/membership/`): `uid`, `email`, `displayName` (copied so admins can read who is asking), `status` (`pending` -> `active` | `rejected`; an active member can be `removed`), `requestedAt`, `decidedAt`, `decidedByUid/Email`. A signed-in member asks to join from the club home ("Join this club" tile) and can withdraw a pending request or ask again after a rejection/removal. A club admin approves, rejects or removes on `/c/<slug>/admin/members` (the Admin hub's Members tile shows a pending count); each decision is a `membership.approve|reject|remove` audit entry in the same batch (`MembershipService`). `firestore.rules`: a member may only create their OWN row as `pending` (email must match their token), only re-request from rejected/removed, and cancel while pending; admins can move a row to active/rejected/removed but never their own (another admin must approve them). A recursive `match /{path=**}/memberships/{uid}` read rule lets a signed-in person run a collection-group query for THEIR OWN rows across clubs (`MembershipService.listMyClubs()`, which needs the `memberships.uid` collection-group index in `firestore.indexes.json`, deployed by `deploy:all`). A platform admin can also add anyone to any club directly, already active (`/platform/members`, `features/platform-members/`, reached from the Clubs list's "All Members" link and an Admin-hub tile): it lists every account with a chip per club (active / pending / declined / removed) and an "Add to club" picker (`MembershipService.assignToClub()`, audited as `membership.assign`; it also approves an existing pending row and keeps its original `requestedAt`). The same page removes someone from ANY club with the × on a green club chip (`MembershipService.removeFromClub()`: status becomes `removed`, so they can ask to rejoin; audited as `membership.remove`; hidden on your own row because the rules block an admin deciding on their own membership; a separate club-admin grant is not touched). `firestore.rules`: creating an `active` row for someone else needs `isAdmin()` (the real claim) — a club admin can't, they approve requests instead — and the recursive `memberships` read rule also lets `isAdmin()` read every row (`listAllMemberships()`). Membership does NOT gate anything: check-in, preview and roles stay open to guests; it only drives the picker's "My clubs" section, the "Member of ..." line on the club home, `/member`'s My Clubs list and the roster. The club picker never auto-skips based on membership (only when exactly one club is active overall) so a member can always reach "Other clubs". `scripts/backfill-memberships.mjs` (`npm run backfill:memberships[:prod] [-- --club=slug]`) gives every existing `members/{uid}` an ACTIVE membership in one club (default `kings-speakers-12`) without overwriting existing rows. Not built: email alerts to admins, invite links, a member directory for ordinary members.
 
 **Provisioning a new club — `scripts/create-club.mjs`** (`npm run create:club -- --slug=my-club --name="My Club" [--admin-email=a@b.c]`, `:prod` for the real project): creates `clubs/{clubId}` + `clubSlugs/{slug}` atomically, refuses a taken slug, and optionally grants an existing account as that club's admin (`clubs/{clubId}/appAdmins`). Follow with `npm run seed:roles -- --club=<slug>` (roles are per-club data). Verified in the browser against the emulator: a member who is admin of only club B reaches `/c/club-b/admin/*`, sees none of club A's agendas, and is redirected to `/login` on `/c/<clubA>/admin/*`; bare `/checkin?meeting=..` redirects to the default club with the query intact; an unknown slug falls back to the default club.
 
@@ -1681,7 +1701,7 @@ already did this (for an unrelated reason, its own signed-in-member-seeding
 `effect()`); the fix generalized to every other emulator spec once their
 services grew a club-resolution `effect()` too.
 
-**Explicitly out of scope this pass**: editing a club's branding after creation, logo upload, a club-switcher for a user belonging to multiple clubs, club creation by non-platform admins, billing/subscriptions (`clubs/{clubId}.active` is a placeholder only), and making the hardcoded 7-role DOCX/committee footer structure (`docx.service.ts`'s `PRINTED_ROLE_IDS`, `default-agenda.ts`'s role-id vocabulary) configurable per club - only each club's actual role-holder *data* is isolated, not that fixed structure.
+**Explicitly out of scope this pass**: deleting a club, logo upload, a club-switcher for a user belonging to multiple clubs, club creation by non-platform admins, billing/subscriptions (`clubs/{clubId}.active` is a placeholder only), and making the hardcoded 7-role DOCX/committee footer structure (`docx.service.ts`'s `PRINTED_ROLE_IDS`, `default-agenda.ts`'s role-id vocabulary) configurable per club - only each club's actual role-holder *data* is isolated, not that fixed structure.
 
 ## Known gaps / next planned work
 
@@ -1703,12 +1723,12 @@ services grew a club-resolution `effect()` too.
    **groundwork done**: data isolation (nested `clubs/{clubId}/...`
    collections), club-scoped admin access, and path-based routing
    (`/c/<clubSlug>/...`) all exist now — see "Multi-club groundwork" above
-   for the full design. Platform admins can now create clubs in-app at
-   `/platform/clubs/new`. **Still open**: editing a club's branding, a
-   club-switcher for someone belonging to multiple clubs, club creation by
+   for the full design. Platform admins can now create, list and edit clubs
+   in-app (`/platform/clubs`). **Still open**: deleting a club, logo upload,
+   a rules-level (not just UI) block for inactive clubs, a club-switcher for someone belonging to multiple clubs, club creation by
    non-platform admins, and admin-managed yearly subscriptions (manually
    flagged for now, modeled to slot in real payments later without a schema
-   rewrite - `clubs/{clubId}.active` is a placeholder field only).
+   rewrite - `clubs/{clubId}.active` is now the deactivate switch, but nothing else about billing exists).
    Self-service member accounts already exist (see Authentication above)
    and stay global, independent of any club.
 3. Admin console for the check-in page: reset a role, cap speaker slots,

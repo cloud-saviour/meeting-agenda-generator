@@ -1,0 +1,42 @@
+<app-navbar title="Clubs" [fixed]="true"
+  [links]="[
+    { label: '👥 All Members', path: '/platform/members' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:760px;">
+  <div class="card p-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h3 class="section-title mb-0">All Clubs ({{ clubs().length }})</h3>
+      <a class="btn btn-danger btn-sm" routerLink="/platform/clubs/new">+ New Club</a>
+    </div>
+
+    @if (loading()) {
+      <p class="text-muted small mb-0">Loading clubs…</p>
+    } @else if (error()) {
+      <div class="alert alert-danger py-1 px-2 small mb-0">{{ error() }}</div>
+    } @else if (clubs().length === 0) {
+      <p class="text-muted small mb-0">No clubs yet.</p>
+    } @else {
+      <div class="list-group list-group-flush">
+        @for (c of clubs(); track c.id) {
+          <div class="list-group-item d-flex align-items-center gap-2 flex-wrap">
+            <span class="flex-grow-1 small">
+              <span class="fw-semibold">{{ c.name }}</span>
+              <span class="text-muted"> — /c/{{ c.slug }}</span>
+              @if (!c.active) {
+                <span class="badge bg-danger-subtle text-danger-emphasis ms-1">Inactive</span>
+              }
+              @if (c.addressLine) {
+                <div class="text-muted">{{ c.addressLine }}</div>
+              }
+            </span>
+            <a class="btn btn-outline-secondary btn-sm" [routerLink]="['/c', c.slug]">Open</a>
+            <a class="btn btn-outline-primary btn-sm" [routerLink]="['/platform/clubs', c.slug, 'edit']">Edit</a>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

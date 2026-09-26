@@ -26,5 +26,6 @@ export const clubContextGuard: CanActivateFn = async (route) => {
 
   await waitForReady(auth);
   const ok = await clubContext.setClub(slug);
-  return ok ? true : router.parseUrl('/');
+  if (!ok) return router.parseUrl('/');
+  return clubContext.unavailable() ? router.parseUrl('/club-unavailable') : true;
 };

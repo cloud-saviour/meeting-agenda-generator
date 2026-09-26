@@ -4,14 +4,18 @@ import { superAdminGuard } from './core/auth/super-admin.guard';
 import { clubContextGuard } from './core/club/club-context.guard';
 import { clubAdminGuard } from './core/club/club-admin.guard';
 import { legacyClubPrefixGuard, legacyClubRedirectGuard } from './core/club/legacy-club-redirect.guard';
+import { rootRedirectGuard } from './core/club/root-redirect.guard';
 import { agendaEditorCanDeactivateGuard } from './features/agenda-editor/pages/agenda-editor-can-deactivate.guard';
-import { environment } from '../environments/environment';
 
 export const routes: Routes = [
-  // No club-picker UI yet (groundwork-only multi-club pass — see CLAUDE.md)
-  // — bare `/` always lands on the one club scripts/migrate-to-clubs.mjs
-  // provisions today.
-  { path: '', redirectTo: `/c/${environment.defaultClubSlug}`, pathMatch: 'full' },
+  // Bare `/` (and sign-in with no return address): a platform admin goes to
+  // the clubs list, everyone else sees the club picker — see rootRedirectGuard.
+  {
+    path: '',
+    pathMatch: 'full',
+    canActivate: [rootRedirectGuard],
+    loadComponent: () => import('./features/club-picker/pages/club-picker.component').then((m) => m.ClubPickerComponent),
+  },
 
   // Stay bare, unprefixed by any club — a Firebase account (real-claim
   // admin or self-service member) is global, not club-scoped, see
@@ -108,6 +112,10 @@ export const routes: Routes = [
             loadComponent: () => import('./features/admin-admins/pages/admin-admins.component').then((m) => m.AdminAdminsComponent),
           },
           {
+            path: 'members',
+            loadComponent: () => import('./features/admin-members/pages/admin-members.component').then((m) => m.AdminMembersComponent),
+          },
+          {
             path: 'audit-log',
             canActivate: [superAdminGuard],
             loadComponent: () => import('./features/admin-audit-log/pages/audit-log.component').then((m) => m.AuditLogComponent),
@@ -125,11 +133,37 @@ export const routes: Routes = [
     ],
   },
   {
-    // Platform-admin-only and club-agnostic: it creates clubs, so it lives
+    // Platform-admin-only and club-agnostic: these manage clubs, so they live
     // outside /c/<slug>. superAdminGuard checks the real global claim.
-    path: 'platform/clubs/new',
+    path: 'platform/clubs',
     canActivate: [superAdminGuard],
-    loadComponent: () => import('./features/platform-clubs/pages/create-club.component').then((m) => m.CreateClubComponent),
+    children: [
+      {
+        path: '',
+        loadComponent: () => import('./features/platform-clubs/pages/club-list.component').then((m) => m.ClubListComponent),
+      },
+      {
+        path: 'new',
+        loadComponent: () => import('./features/platform-clubs/pages/create-club.component').then((m) => m.CreateClubComponent),
+      },
+      {
+        path: ':slug/edit',
+        loadComponent: () => import('./features/platform-clubs/pages/edit-club.component').then((m) => m.EditClubComponent),
+      },
+    ],
+  },
+  {
+    // Platform admin: every account, and adding people to clubs directly.
+    path: 'platform/members',
+    canActivate: [superAdminGuard],
+    loadComponent: () => import('./features/platform-members/pages/all-members.component').then((m) => m.AllMembersComponent),
+  },
+  {
+    // Where a deactivated club sends members and guests (see
+    // ClubContextService.unavailable). Deliberately outside /c/<slug> and
+    // unguarded, so it can never redirect back into a loop.
+    path: 'club-unavailable',
+    loadComponent: () => import('./features/club-unavailable/pages/club-unavailable.component').then((m) => m.ClubUnavailableComponent),
   },
   { path: '**', redirectTo: '' },
 ];

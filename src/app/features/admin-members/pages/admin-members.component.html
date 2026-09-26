@@ -1,0 +1,85 @@
+<app-navbar title="Members" [fixed]="true"
+  [links]="[
+    { label: '⚙ Admin', path: '/admin/hub' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:760px;">
+
+  @if (loading()) {
+    <p class="text-muted small">Loading members…</p>
+  } @else if (loadError()) {
+    <div class="alert alert-danger py-1 px-2 small">{{ loadError() }}</div>
+  } @else {
+
+    @if (actionError()) {
+      <div class="alert alert-danger py-1 px-2 small">{{ actionError() }}</div>
+    }
+
+    <div class="card p-3 mb-3">
+      <h3 class="section-title">Join requests ({{ pending().length }})</h3>
+      @if (pending().length === 0) {
+        <p class="text-muted small mb-0">No requests waiting.</p>
+      } @else {
+        <div class="list-group list-group-flush">
+          @for (m of pending(); track m.uid) {
+            <div class="list-group-item d-flex align-items-center gap-2 flex-wrap">
+              <span class="flex-grow-1 small">
+                <span class="fw-semibold">{{ m.displayName }}</span>
+                <span class="text-muted"> — {{ m.email }}</span>
+              </span>
+              @if (isSelf(m.uid)) {
+                <span class="text-muted small">Another admin needs to approve you</span>
+              } @else {
+                <button class="btn btn-success btn-sm" [disabled]="isBusy(m.uid)" (click)="decide(m, 'active')">Approve</button>
+                <button class="btn btn-outline-danger btn-sm" [disabled]="isBusy(m.uid)" (click)="decide(m, 'rejected')">Reject</button>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="card p-3 mb-3">
+      <h3 class="section-title">Members ({{ active().length }})</h3>
+      @if (active().length === 0) {
+        <p class="text-muted small mb-0">No approved members yet.</p>
+      } @else {
+        <div class="list-group list-group-flush">
+          @for (m of active(); track m.uid) {
+            <div class="list-group-item d-flex align-items-center gap-2 flex-wrap">
+              <span class="flex-grow-1 small">
+                <span class="fw-semibold">{{ m.displayName }}</span>
+                <span class="text-muted"> — {{ m.email }}</span>
+              </span>
+              @if (!isSelf(m.uid)) {
+                <button class="btn btn-outline-danger btn-sm" [disabled]="isBusy(m.uid)" (click)="decide(m, 'removed')">Remove</button>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    @if (past().length > 0) {
+      <div class="card p-3">
+        <h3 class="section-title">Declined or removed ({{ past().length }})</h3>
+        <div class="list-group list-group-flush">
+          @for (m of past(); track m.uid) {
+            <div class="list-group-item d-flex align-items-center gap-2 flex-wrap">
+              <span class="flex-grow-1 small">
+                <span class="fw-semibold">{{ m.displayName }}</span>
+                <span class="text-muted"> — {{ m.email }}</span>
+              </span>
+              <span class="badge bg-secondary-subtle text-secondary-emphasis">{{ m.status === 'rejected' ? 'Declined' : 'Removed' }}</span>
+              @if (!isSelf(m.uid)) {
+                <button class="btn btn-outline-success btn-sm" [disabled]="isBusy(m.uid)" (click)="decide(m, 'active')">Approve anyway</button>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+  }
+</div>

@@ -1,0 +1,80 @@
+<app-navbar title="All Members" [fixed]="true"
+  [links]="[
+    { label: '🏢 All Clubs', path: '/platform/clubs' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:860px;">
+  <div class="card p-3">
+    <h3 class="section-title">Everyone with an account ({{ rows().length }})</h3>
+    <p class="text-muted small">
+      Add someone to a club directly and they become an active member straight away, without asking. Click the × on a green club to
+      remove them from it (they can ask to rejoin). To let a club's own admins decide, they use that club's Members page instead.
+    </p>
+
+    <input class="form-control form-control-sm mb-3" type="text" [ngModel]="filter()" (ngModelChange)="filter.set($event)"
+      name="filter" placeholder="Filter by name or email">
+
+    @if (loading()) {
+      <p class="text-muted small mb-0">Loading members…</p>
+    } @else if (loadError()) {
+      <div class="alert alert-danger py-1 px-2 small mb-0">{{ loadError() }}</div>
+    } @else if (rows().length === 0) {
+      <p class="text-muted small mb-0">No members match.</p>
+    } @else {
+      <div class="list-group list-group-flush">
+        @for (r of rows(); track r.member.uid) {
+          <div class="list-group-item">
+            <div class="d-flex align-items-start gap-2 flex-wrap">
+              <div class="flex-grow-1 small">
+                <span class="fw-semibold">{{ r.member.displayName }}</span>
+                <span class="text-muted"> — {{ r.member.email }}</span>
+                <div class="mt-1">
+                  @for (c of r.chips; track c.club.id) {
+                    @switch (c.membership.status) {
+                      @case ('active') {
+                        <span class="badge bg-success-subtle text-success-emphasis me-1">
+                          {{ c.club.name }}
+                          @if (canRemove(r.member.uid)) {
+                            <button type="button" class="btn btn-link p-0 ms-1 text-success-emphasis text-decoration-none" style="line-height:1;font-size:1rem;"
+                              [disabled]="isBusy(r.member.uid)" (click)="remove(r, c)"
+                              [attr.aria-label]="'Remove ' + r.member.displayName + ' from ' + c.club.name" title="Remove from this club">&times;</button>
+                          }
+                        </span>
+                      }
+                      @case ('pending') { <span class="badge bg-warning-subtle text-warning-emphasis me-1">{{ c.club.name }} · pending</span> }
+                      @case ('rejected') { <span class="badge bg-secondary-subtle text-secondary-emphasis me-1">{{ c.club.name }} · declined</span> }
+                      @default { <span class="badge bg-secondary-subtle text-secondary-emphasis me-1">{{ c.club.name }} · removed</span> }
+                    }
+                  } @empty {
+                    <span class="text-muted">Not in any club</span>
+                  }
+                </div>
+              </div>
+
+              @if (r.addable.length > 0) {
+                <div class="d-flex gap-1">
+                  <select class="form-select form-select-sm" style="width:auto;max-width:200px;" [attr.aria-label]="'Add ' + r.member.displayName + ' to a club'"
+                    [ngModel]="selection()[r.member.uid] || ''" (ngModelChange)="choose(r.member.uid, $event)" [name]="'club-' + r.member.uid">
+                    <option value="">Add to club…</option>
+                    @for (club of r.addable; track club.id) {
+                      <option [value]="club.id">{{ club.name }}</option>
+                    }
+                  </select>
+                  <button class="btn btn-primary btn-sm" [disabled]="!selection()[r.member.uid] || isBusy(r.member.uid)" (click)="add(r)">
+                    {{ isBusy(r.member.uid) ? '…' : 'Add' }}
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    @if (actionError()) {
+      <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ actionError() }}</div>
+    }
+  </div>
+</div>

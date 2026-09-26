@@ -1,0 +1,75 @@
+<app-navbar title="Edit Club" [fixed]="true"
+  [links]="[
+    { label: '🏢 All Clubs', path: '/platform/clubs' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:640px;">
+  @if (loading()) {
+    <p class="text-muted small">Loading…</p>
+  } @else if (notFound()) {
+    <div class="alert alert-warning small">No club with that address. <a routerLink="/platform/clubs">Back to all clubs</a></div>
+  } @else if (club(); as c) {
+    <form class="card p-3" (ngSubmit)="save()">
+      <h3 class="section-title">{{ c.name }}</h3>
+      <p class="text-muted small">
+        Web address <code>/c/{{ c.slug }}</code> can't be changed. Agendas already saved keep the club text they were saved with;
+        new agendas and the club's header use what you save here.
+      </p>
+
+      <label class="form-label small fw-semibold" for="e-name">Club name</label>
+      <input id="e-name" class="form-control form-control-sm mb-3" type="text" name="name"
+        [ngModel]="name()" (ngModelChange)="name.set($event)" required>
+
+      <label class="form-label small fw-semibold" for="e-sub">Sub-line</label>
+      <input id="e-sub" class="form-control form-control-sm mb-3" type="text" name="subLine"
+        [ngModel]="subLine()" (ngModelChange)="subLine.set($event)">
+
+      <label class="form-label small fw-semibold" for="e-address">Address</label>
+      <input id="e-address" class="form-control form-control-sm mb-3" type="text" name="addressLine"
+        [ngModel]="addressLine()" (ngModelChange)="addressLine.set($event)">
+
+      <label class="form-label small fw-semibold" for="e-mission">Mission statement</label>
+      <textarea id="e-mission" class="form-control form-control-sm mb-3" rows="3" name="missionStatement"
+        [ngModel]="missionStatement()" (ngModelChange)="missionStatement.set($event)"></textarea>
+
+      <label class="form-label small fw-semibold" for="e-web">Website</label>
+      <input id="e-web" class="form-control form-control-sm mb-3" type="text" name="website"
+        [ngModel]="website()" (ngModelChange)="website.set($event)">
+
+      <label class="form-label small fw-semibold" for="e-fb">Facebook page</label>
+      <input id="e-fb" class="form-control form-control-sm mb-3" type="text" name="facebookPage"
+        [ngModel]="facebookPage()" (ngModelChange)="facebookPage.set($event)">
+
+      <div class="form-check form-switch mb-1">
+        <input id="e-active" class="form-check-input" type="checkbox" role="switch" name="active"
+          [ngModel]="active()" (ngModelChange)="active.set($event)">
+        <label class="form-check-label small fw-semibold" for="e-active">Club is active</label>
+      </div>
+      <div class="small mb-3" [class.text-muted]="active()" [class.text-danger]="!active()">
+        @if (active()) {
+          Members and guests can use this club.
+        } @else {
+          Deactivated: members and guests see "not available". Only platform admins can still open it. Data is kept.
+        }
+      </div>
+
+      @if (error()) {
+        <div class="alert alert-danger py-1 px-2 small">{{ error() }}</div>
+      }
+      @if (saved()) {
+        <div class="alert alert-success py-1 px-2 small">Saved.</div>
+      }
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary btn-sm" type="submit" [disabled]="!name().trim() || saving()">
+          {{ saving() ? 'Saving…' : 'Save changes' }}
+        </button>
+        <a class="btn btn-outline-secondary btn-sm" routerLink="/platform/clubs">Back</a>
+      </div>
+    </form>
+  } @else if (error()) {
+    <div class="alert alert-danger small">{{ error() }}</div>
+  }
+</div>

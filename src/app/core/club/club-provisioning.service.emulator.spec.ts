@@ -3,7 +3,7 @@ import { Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { ClubProvisioningService, SlugTakenError } from './club-provisioning.service';
 import { FIRESTORE } from '../firebase/firestore.provider';
@@ -39,7 +39,13 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.active == true;
-      allow update, delete: if false;
+      allow update: if isAdmin()
+        && request.resource.data.slug == resource.data.slug
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.active is bool;
+      allow delete: if false;
       match /appAdmins/{uid} {
         allow read: if request.auth != null && (request.auth.uid == uid || isAppAdmin(clubId));
         allow create, update: if isAppAdmin(clubId) && request.auth.uid != uid;
@@ -196,11 +202,37 @@ describe('ClubProvisioningService (Firestore emulator)', () => {
     await expect(batch.commit()).rejects.toThrow();
   });
 
-  it('never lets a client overwrite or delete an existing club or slug pointer', async () => {
+  it('never lets a client overwrite a slug pointer or delete a club', async () => {
     await createService().createClub({ slug: 'locked', name: 'Locked', subLine: '', addressLine: '' });
     const clubId = await clubIdFor('locked');
 
-    await expect(setDoc(doc(platformDb, 'clubs', clubId), { slug: 'locked', name: 'Renamed', active: true })).rejects.toThrow();
     await expect(setDoc(doc(platformDb, 'clubSlugs', 'locked'), { clubId: 'someone-elses' })).rejects.toThrow();
+    await expect(deleteDoc(doc(platformDb, 'clubs', clubId))).rejects.toThrow();
+  });
+
+  it('lets a platform admin edit a club but never its slug or createdAt', async () => {
+    await createService().createClub({ slug: 'editable', name: 'Editable', subLine: '', addressLine: '' });
+    const clubId = await clubIdFor('editable');
+    const ref = doc(platformDb, 'clubs', clubId);
+    const before = (await getDoc(ref)).data()!;
+
+    await updateDoc(ref, { name: 'Renamed', missionStatement: 'New mission' });
+    expect((await getDoc(ref)).data()).toMatchObject({ name: 'Renamed', missionStatement: 'New mission', slug: 'editable' });
+
+    await expect(updateDoc(ref, { slug: 'other' })).rejects.toThrow();
+    await expect(updateDoc(ref, { createdAt: '2000-01-01T00:00:00.000Z' })).rejects.toThrow();
+    await expect(updateDoc(ref, { name: '' })).rejects.toThrow();
+    expect((await getDoc(ref)).data()?.['createdAt']).toBe(before['createdAt']);
+  });
+
+  it('rejects a non-platform user editing a club, including a granted admin of that same club', async () => {
+    await createService().createClub({ slug: 'guarded', name: 'Guarded', subLine: '', addressLine: '', firstAdmin: FIRST_ADMIN });
+    const clubId = await clubIdFor('guarded');
+    const grantedDb = testEnv.authenticatedContext(FIRST_ADMIN.uid).firestore() as unknown as Firestore;
+    const memberDb = testEnv.authenticatedContext('random-member-uid').firestore() as unknown as Firestore;
+
+    await expect(updateDoc(doc(grantedDb, 'clubs', clubId), { name: 'Hijacked' })).rejects.toThrow();
+    await expect(updateDoc(doc(memberDb, 'clubs', clubId), { name: 'Hijacked' })).rejects.toThrow();
+    expect((await getDoc(doc(platformDb, 'clubs', clubId))).data()?.['name']).toBe('Guarded');
   });
 });
