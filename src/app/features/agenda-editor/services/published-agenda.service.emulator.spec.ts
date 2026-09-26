@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Injector, NgZone } from '@angular/core';
+import { Injector, NgZone, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
@@ -9,19 +9,26 @@ import { PublishedAgendaService } from './published-agenda.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AgendaSnapshot } from '../models/agenda.models';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
+
+const testClubId = 'test-club';
+
+function fakeClubContextService(clubId: string | null = testClubId): ClubContextService {
+  return { currentClubId: signal<string | null>(clubId) } as unknown as ClubContextService;
+}
 
 /**
  * PublishedAgendaService is Firestore-backed — one document per meeting at
- * `publishedAgendas/{meetingId}` — specifically because its whole purpose
- * (a non-admin viewing a published agenda on their own device) can't work
- * on localStorage. Run via `npm run test:emulator` with the emulator
- * already running.
+ * `clubs/{clubId}/publishedAgendas/{meetingId}` — specifically because its
+ * whole purpose (a non-admin viewing a published agenda on their own device)
+ * can't work on localStorage. Run via `npm run test:emulator` with the
+ * emulator already running.
  *
  * isAdmin() requires the `admin` custom claim, not just an authenticated uid
  * (see firestore.rules) — authenticatedContext()'s second argument simulates
- * that claim directly, no Firestore fixture document needed. isAppAdmin()
- * also recognizes a Firestore-granted appAdmins/{uid} entry (see
- * AuthService/AppAdminService) — full parity with isAdmin() for this
+ * that claim directly, no Firestore fixture document needed. isAppAdmin(clubId)
+ * also recognizes a Firestore-granted clubs/{clubId}/appAdmins/{uid} entry
+ * (see AuthService/AppAdminService) — full parity with isAdmin() for this
  * collection, per firestore.rules.
  */
 const FIRESTORE_RULES = `
@@ -31,29 +38,31 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
-    function isGrantedAdmin() {
-      return request.auth != null &&
-        exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid));
-    }
-    function isAppAdmin() {
-      return isAdmin() || isGrantedAdmin();
-    }
-    match /appAdmins/{uid} {
-      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
-    }
-    match /publishedAgendas/{meetingId} {
-      allow read: if true;
-      allow write: if isAppAdmin();
-    }
-    match /meetings/{meetingId} {
-      allow read: if true;
-      allow write: if isAppAdmin();
-    }
-    match /auditLog/{entryId} {
-      allow read: if isAdmin();
-      allow create: if isAppAdmin();
-      allow update, delete: if false;
+    match /clubs/{clubId} {
+      function isGrantedAdmin(cid) {
+        return request.auth != null &&
+          exists(/databases/$(database)/documents/clubs/$(cid)/appAdmins/$(request.auth.uid));
+      }
+      function isAppAdmin(cid) {
+        return isAdmin() || isGrantedAdmin(cid);
+      }
+      match /appAdmins/{uid} {
+        allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+        allow write: if isAdmin();
+      }
+      match /publishedAgendas/{meetingId} {
+        allow read: if true;
+        allow write: if isAppAdmin(clubId);
+      }
+      match /meetings/{meetingId} {
+        allow read: if true;
+        allow write: if isAppAdmin(clubId);
+      }
+      match /auditLog/{entryId} {
+        allow read: if isAdmin();
+        allow create: if isAppAdmin(clubId);
+        allow update, delete: if false;
+      }
     }
   }
 }
@@ -109,9 +118,6 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
     firestore = testEnv.authenticatedContext('test-admin-uid', { admin: true }).firestore() as unknown as Firestore;
-
-    TestBed.configureTestingModule({});
-    parentInjector = TestBed.inject(Injector);
   });
 
   afterAll(async () => {
@@ -120,6 +126,13 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
 
   beforeEach(async () => {
     await testEnv.clearFirestore();
+    // Fetched fresh per test, not once in beforeAll: TestBed destroys its
+    // environment injector after every test by default, and this service's
+    // constructor effect() (re-subscribing on clubContext.currentClubId()
+    // changes) needs a live DestroyRef from this injector's ancestor chain —
+    // a stale parentInjector throws NG0205 on the second test onward.
+    TestBed.configureTestingModule({});
+    parentInjector = TestBed.inject(Injector);
   });
 
   afterEach(() => {
@@ -134,6 +147,7 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
         PublishedAgendaService,
         { provide: FIRESTORE, useValue: firestoreInstance },
         { provide: AuthService, useValue: fakeAuth(authUid, authEmail) },
+        { provide: ClubContextService, useValue: fakeClubContextService() },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
       ],
     });
@@ -306,7 +320,7 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
   });
 
   it('allows writes from a Firestore-granted admin with no real claim — isAppAdmin() takes effect, not just isAdmin()', async () => {
-    await setDoc(doc(firestore, 'appAdmins', 'granted-uid'), {
+    await setDoc(doc(firestore, 'clubs', testClubId, 'appAdmins', 'granted-uid'), {
       uid: 'granted-uid',
       email: 'granted@example.com',
       displayName: 'Granted Admin',
@@ -328,7 +342,7 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     await waitFor(() => service.entries().length === 1);
     await service.unpublish('160');
 
-    const snap = await getDocs(collection(firestore, 'auditLog'));
+    const snap = await getDocs(collection(firestore, 'clubs', testClubId, 'auditLog'));
     const entries = snap.docs.map((d) => d.data());
 
     expect(entries.some((e) => e['action'] === 'agenda.publish' && e['summary'].includes('#160'))).toBe(true);
@@ -340,7 +354,7 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     await service.unpublish('999');
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    const snap = await getDocs(collection(firestore, 'auditLog'));
+    const snap = await getDocs(collection(firestore, 'clubs', testClubId, 'auditLog'));
     expect(snap.docs.length).toBe(0);
   });
 
@@ -348,7 +362,7 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     const service = createService();
     await service.publish('160', makeSnapshot({ no: '160', theme: 'Resilience', st: '19:00' }));
 
-    const data = (await getDoc(doc(firestore, 'meetings', '160'))).data();
+    const data = (await getDoc(doc(firestore, 'clubs', testClubId, 'meetings', '160'))).data();
     expect(data).toMatchObject({ theme: 'Resilience', start: '19:00', date: '2026-08-29' });
   });
 
@@ -357,9 +371,9 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     await service.publish('160', makeSnapshot({ no: '160', theme: 'Old' }));
     await service.publish('161', makeSnapshot({ no: '161', theme: 'New' }));
 
-    expect((await getDoc(doc(firestore, 'publishedAgendas', '160'))).exists()).toBe(false);
-    expect((await getDoc(doc(firestore, 'meetings', '160'))).data()?.['theme']).toBe('Old');
-    expect((await getDoc(doc(firestore, 'meetings', '161'))).data()?.['theme']).toBe('New');
+    expect((await getDoc(doc(firestore, 'clubs', testClubId, 'publishedAgendas', '160'))).exists()).toBe(false);
+    expect((await getDoc(doc(firestore, 'clubs', testClubId, 'meetings', '160'))).data()?.['theme']).toBe('Old');
+    expect((await getDoc(doc(firestore, 'clubs', testClubId, 'meetings', '161'))).data()?.['theme']).toBe('New');
   });
 
   it('meetings/{no} is publicly readable but not writable — /checkin is anonymous', async () => {
@@ -367,7 +381,7 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     await service.publish('160', makeSnapshot({ no: '160', theme: 'Resilience' }));
 
     const anon = testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
-    expect((await getDoc(doc(anon, 'meetings', '160'))).data()?.['theme']).toBe('Resilience');
-    await expect(setDoc(doc(anon, 'meetings', '160'), { theme: 'Hacked' })).rejects.toThrow();
+    expect((await getDoc(doc(anon, 'clubs', testClubId, 'meetings', '160'))).data()?.['theme']).toBe('Resilience');
+    await expect(setDoc(doc(anon, 'clubs', testClubId, 'meetings', '160'), { theme: 'Hacked' })).rejects.toThrow();
   });
 });

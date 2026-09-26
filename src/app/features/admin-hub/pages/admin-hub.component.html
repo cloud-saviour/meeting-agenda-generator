@@ -11,14 +11,14 @@
       <div class="fs-1 mb-2">&#9881;</div>
       <h2 class="fs-6 fw-bold">Manage Roles</h2>
       <p class="text-muted small mb-0">Admin: manage meeting roles and committee roles</p>
-      <a routerLink="/admin/manage-roles" class="stretched-link" aria-label="Open Manage Roles"></a>
+      <a [routerLink]="'/admin/manage-roles' | clubLink" class="stretched-link" aria-label="Open Manage Roles"></a>
     </div>
 
     <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
       <div class="fs-1 mb-2">&#128081;</div>
       <h2 class="fs-6 fw-bold">Manage Admins</h2>
       <p class="text-muted small mb-0">Grant or revoke admin access for existing members</p>
-      <a routerLink="/admin/manage-admins" class="stretched-link" aria-label="Open Manage Admins"></a>
+      <a [routerLink]="'/admin/manage-admins' | clubLink" class="stretched-link" aria-label="Open Manage Admins"></a>
     </div>
 
     @if (isAdmin()) {
@@ -26,7 +26,14 @@
         <div class="fs-1 mb-2">&#128270;</div>
         <h2 class="fs-6 fw-bold">Audit Log</h2>
         <p class="text-muted small mb-0">Super admin: see who granted or revoked admin access, and when</p>
-        <a routerLink="/admin/audit-log" class="stretched-link" aria-label="Open Audit Log"></a>
+        <a [routerLink]="'/admin/audit-log' | clubLink" class="stretched-link" aria-label="Open Audit Log"></a>
+      </div>
+
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#127970;</div>
+        <h2 class="fs-6 fw-bold">Create a Club</h2>
+        <p class="text-muted small mb-0">Super admin: set up a new club with its own roles and admins</p>
+        <a routerLink="/platform/clubs/new" class="stretched-link" aria-label="Create a club"></a>
       </div>
     }
 

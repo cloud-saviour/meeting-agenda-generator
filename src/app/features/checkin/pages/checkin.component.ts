@@ -11,6 +11,7 @@ import { EvaluatorSlotsComponent } from '../components/evaluator-slots/evaluator
 import { APP_LOCALE } from '../../../core/utils/locale';
 import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
 
 @Component({
   selector: 'app-checkin',
@@ -30,6 +31,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 export class CheckinComponent {
   readonly state = inject(CheckinStateService);
   private readonly auth = inject(AuthService);
+  private readonly clubContext = inject(ClubContextService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -61,19 +63,21 @@ export class CheckinComponent {
       }
     });
 
-    // Reactive, not a one-time check: isAppAdmin() reads false until Firebase
-    // Auth's async session restore resolves, even for an already-signed-in
-    // admin on a cold reload — a plain `if (auth.isAppAdmin())` here would
+    // Reactive, not a one-time check: isAppAdmin() reads false until both
+    // Firebase Auth's async session restore AND clubContextGuard's own
+    // per-club grant listener resolve, even for an already-signed-in admin
+    // on a cold reload — a plain `if (clubContext.isAppAdmin())` here would
     // silently skip loading forever. loadForMeeting() is itself idempotent
     // per meetingId, so repeated effect firings are cheap no-ops.
     //
-    // isAppAdmin(), not isAdmin(): memberHistory's write rule is isAppAdmin()
-    // (a Firestore-granted admin can confirm attendance same as a real-claim
-    // one — see firestore.rules), so gating the load on the narrower isAdmin()
-    // would leave a granted admin's confirm buttons stuck showing stale/empty
-    // state even though their writes would actually succeed.
+    // clubContext.isAppAdmin(), not auth.isAdmin(): memberHistory's write
+    // rule is isAppAdmin(clubId) (a Firestore-granted admin of THIS club can
+    // confirm attendance same as a real-claim one — see firestore.rules), so
+    // gating the load on the narrower real-claim check would leave a granted
+    // admin's confirm buttons stuck showing stale/empty state even though
+    // their writes would actually succeed.
     effect(() => {
-      if (this.auth.isAppAdmin()) {
+      if (this.clubContext.isAppAdmin()) {
         this.attendanceConfirmation.loadForMeeting(this.meetingId);
       }
     });

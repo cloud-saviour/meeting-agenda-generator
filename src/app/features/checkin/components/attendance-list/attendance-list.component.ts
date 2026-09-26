@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
-import { AuthService } from '../../../../core/auth/auth.service';
+import { ClubContextService } from '../../../../core/club/club-context.service';
 
 @Component({
   selector: 'app-attendance-list',
@@ -12,7 +12,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 })
 export class AttendanceListComponent {
   readonly state = inject(CheckinStateService);
-  readonly auth = inject(AuthService);
+  readonly club = inject(ClubContextService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
 
   confirmError: string | null = null;

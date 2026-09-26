@@ -34,4 +34,11 @@ export const environment = {
   useAuthEmulator: true,
   authEmulatorHost: emulatorHost,
   authEmulatorPort: 9099, // must match firebase.json's emulators.auth.port
+  // The one club scripts/migrate-to-clubs.mjs provisions today — bare `/`
+  // redirects here (see app.routes.ts), and legacyClubRedirectGuard sends
+  // already-shared, un-prefixed /checkin and /preview links here too. Not a
+  // "default club" concept beyond that: there's no club-picker UI yet (see
+  // CLAUDE.md's multi-club groundwork known gap) — this is just where a
+  // visitor with no more specific destination ends up.
+  defaultClubSlug: 'kings-speakers-12',
 };

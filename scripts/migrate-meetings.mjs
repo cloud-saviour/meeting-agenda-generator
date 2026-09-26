@@ -52,24 +52,29 @@ async function main() {
   const app = initializeApp({ projectId: PROJECT_ID });
   const firestore = getFirestore(app);
 
-  const saved = await firestore.collection('savedAgendas').get();
-  const fromAgendas = new Set();
-  for (const d of saved.docs) {
-    await firestore.collection('meetings').doc(d.id).set(fromSavedAgenda(d.data()));
-    fromAgendas.add(d.id);
-  }
-  console.log(`Wrote ${saved.size} meetings doc(s) from savedAgendas.`);
+  // Every collection here is club-scoped (clubs/{clubId}/...), so each club is
+  // backfilled independently — run migrate-to-clubs first on a fresh environment.
+  const clubs = await firestore.collection('clubs').get();
+  for (const club of clubs.docs) {
+    const saved = await club.ref.collection('savedAgendas').get();
+    const fromAgendas = new Set();
+    for (const d of saved.docs) {
+      await club.ref.collection('meetings').doc(d.id).set(fromSavedAgenda(d.data()));
+      fromAgendas.add(d.id);
+    }
+    console.log(`[${club.id}] Wrote ${saved.size} meetings doc(s) from savedAgendas.`);
 
-  const checkins = await firestore.collection('checkins').get();
-  let fromCheckins = 0;
-  for (const d of checkins.docs) {
-    if (fromAgendas.has(d.id)) continue;
-    const meeting = d.data().meeting;
-    if (!meeting) continue;
-    await firestore.collection('meetings').doc(d.id).set(fromCheckinMeeting(meeting));
-    fromCheckins++;
+    const checkins = await club.ref.collection('checkins').get();
+    let fromCheckins = 0;
+    for (const d of checkins.docs) {
+      if (fromAgendas.has(d.id)) continue;
+      const meeting = d.data().meeting;
+      if (!meeting) continue;
+      await club.ref.collection('meetings').doc(d.id).set(fromCheckinMeeting(meeting));
+      fromCheckins++;
+    }
+    console.log(`[${club.id}] Wrote ${fromCheckins} meetings doc(s) from legacy checkins.meeting (no saved agenda).`);
   }
-  console.log(`Wrote ${fromCheckins} meetings doc(s) from legacy checkins.meeting (no saved agenda).`);
 
   console.log('Done. savedAgendas and checkins were left untouched.');
   process.exit(0);

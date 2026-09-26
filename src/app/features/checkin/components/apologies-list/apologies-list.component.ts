@@ -1,11 +1,11 @@
 import { Component, inject } from '@angular/core';
 import { CheckinStateService } from '../../services/checkin-state.service';
-import { AuthService } from '../../../../core/auth/auth.service';
+import { ClubContextService } from '../../../../core/club/club-context.service';
 
 /**
  * Admin-only display of check-in's `apologies` list — there was previously
  * no render surface for it anywhere in the app. Gated entirely behind
- * `auth.isAppAdmin()` in the template: apologies were never shown to
+ * `club.isAppAdmin()` in the template: apologies were never shown to
  * anyone before this, and this component exists purely so an admin can
  * correct a bogus/duplicate apology entry (see
  * CheckinStateService.adminRemoveApology()), not as a new public display.
@@ -17,7 +17,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 })
 export class ApologiesListComponent {
   readonly state = inject(CheckinStateService);
-  readonly auth = inject(AuthService);
+  readonly club = inject(ClubContextService);
 
   removeError: string | null = null;
   private readonly pendingRemove = new Set<string>();

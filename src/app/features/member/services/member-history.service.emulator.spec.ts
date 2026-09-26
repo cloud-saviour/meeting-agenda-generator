@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { Injector } from '@angular/core';
+import { Injector, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
@@ -8,20 +8,30 @@ import type { Firestore } from 'firebase/firestore';
 import { MemberHistoryService } from './member-history.service';
 import { MemberHistoryRecord } from '../models/member.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { ClubContextService } from '../../../core/club/club-context.service';
+
+const testClubId = 'test-club';
+
+function fakeClubContextService(clubId: string | null = testClubId) {
+  return { currentClubId: signal<string | null>(clubId) } as unknown as ClubContextService;
+}
 
 /**
  * loadHistory() calls Firestore's collection()/getDocs()/where() directly,
  * so this suite exercises it against the real emulator, same "test the
  * real thing" philosophy as every other Firestore-backed service here.
- * Seeds `memberHistory` docs directly (bypassing AttendanceConfirmationService,
- * which has its own emulator spec covering the write side and rules).
+ * Seeds `clubs/{clubId}/memberHistory` docs directly (bypassing
+ * AttendanceConfirmationService, which has its own emulator spec covering
+ * the write side and rules).
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /memberHistory/{recordId} {
-      allow read, write: if true;
+    match /clubs/{clubId} {
+      match /memberHistory/{recordId} {
+        allow read, write: if true;
+      }
     }
   }
 }
@@ -65,18 +75,22 @@ describe('MemberHistoryService (Firestore emulator)', () => {
     await testEnv.clearFirestore();
   });
 
-  function createService(): MemberHistoryService {
+  function createService(clubId: string | null = testClubId): MemberHistoryService {
     const child = Injector.create({
       parent: parentInjector,
-      providers: [MemberHistoryService, { provide: FIRESTORE, useValue: firestore }],
+      providers: [
+        MemberHistoryService,
+        { provide: FIRESTORE, useValue: firestore },
+        { provide: ClubContextService, useValue: fakeClubContextService(clubId) },
+      ],
     });
     return child.get(MemberHistoryService);
   }
 
   it('filters out records with no involvement, and sorts newest first by the denormalized date', async () => {
-    await setDoc(doc(firestore, 'memberHistory', '1_u1'), record({ meetingId: '1', uid: 'u1', date: '2026-01-01', theme: 'Theme One', attended: true }));
-    await setDoc(doc(firestore, 'memberHistory', '2_u1'), record({ meetingId: '2', uid: 'u1', date: '2026-01-15' })); // no involvement at all
-    await setDoc(doc(firestore, 'memberHistory', '3_u1'), record({ meetingId: '3', uid: 'u1', date: '2026-02-01', theme: 'Theme Three', spoke: true }));
+    await setDoc(doc(firestore, 'clubs', testClubId, 'memberHistory', '1_u1'), record({ meetingId: '1', uid: 'u1', date: '2026-01-01', theme: 'Theme One', attended: true }));
+    await setDoc(doc(firestore, 'clubs', testClubId, 'memberHistory', '2_u1'), record({ meetingId: '2', uid: 'u1', date: '2026-01-15' })); // no involvement at all
+    await setDoc(doc(firestore, 'clubs', testClubId, 'memberHistory', '3_u1'), record({ meetingId: '3', uid: 'u1', date: '2026-02-01', theme: 'Theme Three', spoke: true }));
 
     const service = createService();
     const history = await service.loadHistory('u1');
@@ -87,8 +101,8 @@ describe('MemberHistoryService (Firestore emulator)', () => {
   });
 
   it('only returns records for the given uid', async () => {
-    await setDoc(doc(firestore, 'memberHistory', '1_u1'), record({ meetingId: '1', uid: 'u1', attended: true }));
-    await setDoc(doc(firestore, 'memberHistory', '1_someone-else'), record({ meetingId: '1', uid: 'someone-else', attended: true }));
+    await setDoc(doc(firestore, 'clubs', testClubId, 'memberHistory', '1_u1'), record({ meetingId: '1', uid: 'u1', attended: true }));
+    await setDoc(doc(firestore, 'clubs', testClubId, 'memberHistory', '1_someone-else'), record({ meetingId: '1', uid: 'someone-else', attended: true }));
 
     const service = createService();
     const history = await service.loadHistory('u1');
@@ -97,9 +111,15 @@ describe('MemberHistoryService (Firestore emulator)', () => {
   });
 
   it('returns an empty list for a uid with no records at all', async () => {
-    await setDoc(doc(firestore, 'memberHistory', '1_someone-else'), record({ meetingId: '1', uid: 'someone-else', attended: true }));
+    await setDoc(doc(firestore, 'clubs', testClubId, 'memberHistory', '1_someone-else'), record({ meetingId: '1', uid: 'someone-else', attended: true }));
 
     const service = createService();
+    const history = await service.loadHistory('u1');
+    expect(history).toEqual([]);
+  });
+
+  it('returns an empty list when no club is resolved', async () => {
+    const service = createService(null);
     const history = await service.loadHistory('u1');
     expect(history).toEqual([]);
   });

@@ -9,14 +9,26 @@ import { defaultAgenda } from './default-agenda';
 import { APP_LOCALE } from '../../../core/utils/locale';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { CommitteeRosterService } from './committee-roster.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
+import { Club } from '../../../core/models/club.models';
 
+// Placeholders used only before the current club's own branding
+// (clubs/{clubId} — name/subLine/addressLine/mission/website/facebookPage/
+// logoLeft/logoRight) has loaded — see the constructor's reseed effect
+// below. Every real club has all of these fields set at provisioning time
+// (scripts/migrate-to-clubs.mjs), so in practice this window is brief; a
+// blank string here is safe either way since the admin can always retype it.
 const DEFAULT_LOGO_LEFT = 'logo.png';
 const DEFAULT_LOGO_RIGHT = 'crown.png';
 
 /** `vpe` ("Mission Contact VPE name") is seeded from the committee roster's
  * VP Education member, same as default-agenda.ts seeds agenda item rows —
- * a one-time default the admin can still freely retype, not a live sync. */
-function defaultMeeting(no: string, cmt: CommitteeMember[]): MeetingData {
+ * a one-time default the admin can still freely retype, not a live sync.
+ * `club` is the CURRENT club's own branding (see ClubContextService) — this
+ * used to be hardcoded here directly (one club's real name/address baked
+ * into application code); now it's per-club data, with an empty-string
+ * fallback for the brief window before that club doc has loaded. */
+function defaultMeeting(no: string, cmt: CommitteeMember[], club: Club | null): MeetingData {
   const vpEducation = cmt.find((m) => m.roleId === 'vpEducation');
   return {
     no,
@@ -25,19 +37,18 @@ function defaultMeeting(no: string, cmt: CommitteeMember[]): MeetingData {
     st: '18:15',
     theme: '',
     word: '',
-    club: '"King\'s Speakers" Club #12',
-    sub: 'Phobians,',
-    addr: '378 Queen\'s Cres, Lynnwood, Pretoria, 0001',
-    mission:
-      'Agora empowers you to become a brilliant communicator and a confident leader who will actively build a better world.',
+    club: club?.name ?? '',
+    sub: club?.subLine ?? '',
+    addr: club?.addressLine ?? '',
+    mission: club?.missionStatement ?? '',
     vpe: vpEducation?.name || '',
     hotSeat: '',
     reserve: '',
     apologies: '',
     apologySyncUids: {},
-    period: 'Aug 2025 – February 2026',
-    web: 'http://www.agoraspeakers.org/',
-    fb: 'Agora Speakers South Africa',
+    period: '',
+    web: club?.website ?? '',
+    fb: club?.facebookPage ?? '',
   };
 }
 
@@ -45,6 +56,7 @@ function defaultMeeting(no: string, cmt: CommitteeMember[]): MeetingData {
 export class AgendaStateService {
   private readonly roleDefs = inject(RoleDefinitionService);
   private readonly committeeRoster = inject(CommitteeRosterService);
+  private readonly clubContext = inject(ClubContextService);
 
   // ── Private counters ──────────────────────────────────────────────────────
   private agId = 0;
@@ -57,7 +69,7 @@ export class AgendaStateService {
   // whatever number was hardcoded, before the admin touches anything.
   // Uses committeeRoster.all() directly, not this.cmt() — `cmt` is declared
   // below and wouldn't be initialized yet at this point in construction.
-  readonly meeting = signal<MeetingData>(defaultMeeting('', this.committeeRoster.all()));
+  readonly meeting = signal<MeetingData>(defaultMeeting('', this.committeeRoster.all(), this.clubContext.currentClub()));
 
   readonly spks = signal<Speaker[]>([]);
 
@@ -77,8 +89,8 @@ export class AgendaStateService {
   // CheckinStateService so members can no longer claim them either.
   readonly overriddenRoles = signal<Set<string>>(new Set());
 
-  readonly logoLeft = signal<string>(DEFAULT_LOGO_LEFT);
-  readonly logoRight = signal<string>(DEFAULT_LOGO_RIGHT);
+  readonly logoLeft = signal<string>(this.clubContext.currentClub()?.logoLeft ?? DEFAULT_LOGO_LEFT);
+  readonly logoRight = signal<string>(this.clubContext.currentClub()?.logoRight ?? DEFAULT_LOGO_RIGHT);
 
   // ── Computed ──────────────────────────────────────────────────────────────
   readonly agendaFileName = computed(() => {
@@ -124,17 +136,36 @@ export class AgendaStateService {
     // value is itself a defined, non-empty-looking array, so the effect's own
     // first (pre-Firestore) run would otherwise consume it and set the guard
     // before real data ever arrives.
+    //
+    // Also catches up the CURRENT club's own branding (name/address/mission/
+    // logos — see defaultMeeting()'s `club` param) the same way, once
+    // ClubContextService.currentClub() resolves — the `meeting`/`logoLeft`/
+    // `logoRight` field initializers above may have run before that club doc
+    // arrived, same race as the committee roster. Both conditions gate the
+    // same one-time reseed rather than two separate effects, since they're
+    // really the same "construction-time defaults need correcting once real
+    // data shows up" concern.
     effect(() => {
-      const ready = this.committeeRoster.ready();
+      const rosterReady = this.committeeRoster.ready();
       const roster = this.committeeRoster.all();
+      const club = this.clubContext.currentClub();
       untracked(() => {
-        if (!ready || this.hasSeededFromCommitteeRoster || this.hasLoadedSnapshot) return;
+        if (!rosterReady || !club || this.hasSeededFromCommitteeRoster || this.hasLoadedSnapshot) return;
         this.hasSeededFromCommitteeRoster = true;
         this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));
         const vpEducation = roster.find((m) => m.roleId === 'vpEducation');
-        if (vpEducation?.name && !this.meeting().vpe) {
-          this.meeting.update((m) => ({ ...m, vpe: vpEducation.name }));
-        }
+        this.meeting.update((m) => ({
+          ...m,
+          vpe: m.vpe || vpEducation?.name || '',
+          club: m.club || club.name,
+          sub: m.sub || club.subLine,
+          addr: m.addr || club.addressLine,
+          mission: m.mission || club.missionStatement,
+          web: m.web || club.website,
+          fb: m.fb || club.facebookPage,
+        }));
+        if (this.logoLeft() === DEFAULT_LOGO_LEFT) this.logoLeft.set(club.logoLeft);
+        if (this.logoRight() === DEFAULT_LOGO_RIGHT) this.logoRight.set(club.logoRight);
       });
     });
   }
@@ -349,12 +380,13 @@ export class AgendaStateService {
   resetAll(): void {
     this.agId = 0;
     this.spId = 0;
-    this.meeting.set(defaultMeeting('', this.cmt()));
+    const club = this.clubContext.currentClub();
+    this.meeting.set(defaultMeeting('', this.cmt(), club));
     this.spks.set([]);
     this.overriddenRoles.set(new Set());
     this.agItems.set(defaultAgenda(this.cmt(), () => ++this.agId));
-    this.logoLeft.set(DEFAULT_LOGO_LEFT);
-    this.logoRight.set(DEFAULT_LOGO_RIGHT);
+    this.logoLeft.set(club?.logoLeft ?? DEFAULT_LOGO_LEFT);
+    this.logoRight.set(club?.logoRight ?? DEFAULT_LOGO_RIGHT);
   }
 
   /** Replaces agenda items wholesale (e.g. from an imported snapshot) and resets the id counter. */
@@ -419,10 +451,11 @@ export class AgendaStateService {
   }
 
   resetLogo(side: 'left' | 'right'): void {
+    const club = this.clubContext.currentClub();
     if (side === 'left') {
-      this.logoLeft.set(DEFAULT_LOGO_LEFT);
+      this.logoLeft.set(club?.logoLeft ?? DEFAULT_LOGO_LEFT);
     } else {
-      this.logoRight.set(DEFAULT_LOGO_RIGHT);
+      this.logoRight.set(club?.logoRight ?? DEFAULT_LOGO_RIGHT);
     }
   }
 }

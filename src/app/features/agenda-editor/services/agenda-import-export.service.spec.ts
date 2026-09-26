@@ -4,6 +4,8 @@ import { AgendaImportExportService } from './agenda-import-export.service';
 import { AgendaStateService } from './agenda-state.service';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 import { CommitteeRosterService } from './committee-roster.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
+import { Club } from '../../../core/models/club.models';
 
 // AgendaStateService only ever calls roleDefs.activeMeetingRoles() (to
 // default a new agenda item's role) — nothing here exercises that path, so
@@ -17,6 +19,14 @@ const fakeCommitteeRosterService = {
   ready: () => true,
 } as unknown as CommitteeRosterService;
 
+// Same reasoning again — AgendaStateService reads this to seed a brand-new
+// agenda's club/sub/addr/mission/web/fb/logo defaults.
+const fakeClub: Club = {
+  slug: 'test-club', name: 'Test Club', subLine: '', addressLine: '', logoLeft: '', logoRight: '',
+  missionStatement: '', website: '', facebookPage: '', createdAt: '', active: true,
+};
+const fakeClubContextService = { currentClub: () => fakeClub } as unknown as ClubContextService;
+
 describe('AgendaImportExportService', () => {
   let importExport: AgendaImportExportService;
   let state: AgendaStateService;
@@ -26,6 +36,7 @@ describe('AgendaImportExportService', () => {
       providers: [
         { provide: RoleDefinitionService, useValue: fakeRoleDefinitionService },
         { provide: CommitteeRosterService, useValue: fakeCommitteeRosterService },
+        { provide: ClubContextService, useValue: fakeClubContextService },
       ],
     });
     importExport = TestBed.inject(AgendaImportExportService);

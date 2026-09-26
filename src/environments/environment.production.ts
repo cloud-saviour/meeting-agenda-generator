@@ -20,4 +20,5 @@ export const environment = {
   useAuthEmulator: false,
   authEmulatorHost: '',
   authEmulatorPort: 9099,
+  defaultClubSlug: 'kings-speakers-12',
 };

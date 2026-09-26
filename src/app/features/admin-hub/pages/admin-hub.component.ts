@@ -1,12 +1,13 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
+import { ClubLinkPipe } from '../../../core/club/club-link.pipe';
 import { AuthService } from '../../../core/auth/auth.service';
 
 @Component({
   selector: 'app-admin-hub',
   standalone: true,
-  imports: [RouterLink, NavbarComponent],
+  imports: [RouterLink, NavbarComponent, ClubLinkPipe],
   templateUrl: './admin-hub.component.html',
 })
 export class AdminHubComponent {

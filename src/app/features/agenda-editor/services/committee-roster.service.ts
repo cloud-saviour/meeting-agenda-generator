@@ -1,11 +1,13 @@
-import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { doc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { CommitteeMember } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
 import { AuditAction } from '../../../core/audit/audit-log.models';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
+const CLUBS_COLLECTION = 'clubs';
 const COLLECTION = 'committeeRoster';
 const DOC_ID = 'current';
 
@@ -16,8 +18,8 @@ interface CommitteeRosterDoc {
 /**
  * Persists the Executive Committee roster (who currently holds each
  * committee role) — Firestore-backed, a single document at
- * `committeeRoster/current` holding the whole roster as one array, one
- * entry per *assigned* role. `roleId` is a genuine unique key: an
+ * `clubs/{clubId}/committeeRoster/current` holding the whole roster as one
+ * array, one entry per *assigned* role. `roleId` is a genuine unique key: an
  * unassigned role simply has no entry at all, not a blank placeholder —
  * unlike the earlier fixed-7-slot model this replaced, there's no fixed
  * slot count to pad to, so nothing here can legitimately collide on a
@@ -30,15 +32,20 @@ interface CommitteeRosterDoc {
  * transaction *is* warranted — this isn't it): a genuine double-admin
  * collision just means one assignment needs re-doing, an acceptable risk
  * for a small club's admin tooling.
+ *
+ * Multi-club: the `onSnapshot()` below re-subscribes via `effect()`
+ * whenever `clubContext.currentClubId()` changes — see RoleDefinitionService
+ * for the same pattern and why (this is a `providedIn: 'root'` singleton).
  */
 @Injectable({ providedIn: 'root' })
 export class CommitteeRosterService implements OnDestroy {
   private readonly firestore = inject(FIRESTORE);
   private readonly auth = inject(AuthService);
+  private readonly clubContext = inject(ClubContextService);
   private readonly zone = inject(NgZone);
 
   private readonly roster = signal<CommitteeMember[]>([]);
-  private readonly unsubscribe: () => void;
+  private unsubscribe: (() => void) | undefined;
 
   readonly all = computed(() => this.roster());
 
@@ -49,28 +56,44 @@ export class CommitteeRosterService implements OnDestroy {
    * own state exactly once at construction (e.g. AgendaStateService's
    * one-time default-agenda seed) need this to tell "still the initial
    * placeholder" apart from "Firestore genuinely has nothing" — both look
-   * identical in content otherwise.
+   * identical in content otherwise. Reset to false on every club switch too
+   * — a newly-resolved club's roster hasn't loaded yet either.
    */
   readonly ready = signal(false);
 
   constructor() {
-    this.unsubscribe = onSnapshot(
-      doc(this.firestore, COLLECTION, DOC_ID),
-      (snap) =>
-        this.zone.run(() => {
-          const data = snap.data() as CommitteeRosterDoc | undefined;
-          // Defensive: legacy dev/emulator data may still hold blank-roleId
-          // padded slots from the old fixed-7-slot model — an unassigned
-          // role is now "absent", not "present with roleId ''".
-          this.roster.set((data?.members ?? []).filter((m) => m.roleId));
-          this.ready.set(true);
-        }),
-      (err) => this.zone.run(() => console.error('committeeRoster snapshot listener failed', err))
-    );
+    effect(() => {
+      const clubId = this.clubContext.currentClubId();
+      this.unsubscribe?.();
+      this.unsubscribe = undefined;
+      this.roster.set([]);
+      this.ready.set(false);
+      if (!clubId) return;
+
+      this.unsubscribe = onSnapshot(
+        doc(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION, DOC_ID),
+        (snap) =>
+          this.zone.run(() => {
+            const data = snap.data() as CommitteeRosterDoc | undefined;
+            // Defensive: legacy dev/emulator data may still hold blank-roleId
+            // padded slots from the old fixed-7-slot model — an unassigned
+            // role is now "absent", not "present with roleId ''".
+            this.roster.set((data?.members ?? []).filter((m) => m.roleId));
+            this.ready.set(true);
+          }),
+        (err) => this.zone.run(() => console.error('committeeRoster snapshot listener failed', err))
+      );
+    });
   }
 
   ngOnDestroy(): void {
-    this.unsubscribe();
+    this.unsubscribe?.();
+  }
+
+  private docRef() {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('CommitteeRosterService called with no club resolved');
+    return doc(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION, DOC_ID);
   }
 
   /** Assigns (or reassigns) roleId to the given person — replaces any existing entry for that role. */
@@ -96,9 +119,9 @@ export class CommitteeRosterService implements OnDestroy {
   private persist(members: CommitteeMember[], auditAction?: AuditAction, auditSummary?: string): Promise<void> {
     const payload: CommitteeRosterDoc = { members: JSON.parse(JSON.stringify(members)) };
     const batch = writeBatch(this.firestore);
-    batch.set(doc(this.firestore, COLLECTION, DOC_ID), payload);
+    batch.set(this.docRef(), payload);
     if (auditAction && auditSummary) {
-      appendAuditEntry(this.firestore, batch, auditAction, auditSummary, this.auth.currentUser());
+      appendAuditEntry(this.firestore, batch, auditAction, auditSummary, this.auth.currentUser(), this.clubContext.currentClubId() ?? undefined);
     }
     return batch.commit().catch((err) => {
       console.error('committeeRoster write failed', err);

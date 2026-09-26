@@ -4,7 +4,28 @@ import { TestBed } from '@angular/core/testing';
 import { AgendaStateService } from './agenda-state.service';
 import { CommitteeRosterService } from './committee-roster.service';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
 import { AgendaItem, CommitteeMember } from '../models/agenda.models';
+import { Club } from '../../../core/models/club.models';
+
+// AgendaStateService reads clubContext.currentClub() to seed a brand-new
+// agenda's club/sub/addr/mission/web/fb/logo defaults (see defaultMeeting())
+// — a plain constant is enough here, since no test in this suite exercises
+// club-switching itself, only the fields defaultMeeting() reads off it.
+const fakeClub: Club = {
+  slug: 'test-club',
+  name: 'Test Club',
+  subLine: 'Test Sub',
+  addressLine: 'Test Address',
+  logoLeft: 'test-logo-left.png',
+  logoRight: 'test-logo-right.png',
+  missionStatement: 'Test mission',
+  website: 'https://example.com',
+  facebookPage: 'Test Facebook',
+  createdAt: '',
+  active: true,
+};
+const fakeClubContextService = { currentClub: () => fakeClub } as unknown as ClubContextService;
 
 // AgendaStateService only ever calls roleDefs.activeMeetingRoles() (to
 // default a new agenda item's role) — nothing here exercises that path, so
@@ -45,6 +66,7 @@ function makeService(): { state: AgendaStateService; roster: CommitteeRosterServ
     providers: [
       { provide: RoleDefinitionService, useValue: fakeRoleDefinitionService },
       { provide: CommitteeRosterService, useClass: FakeCommitteeRosterService },
+      { provide: ClubContextService, useValue: fakeClubContextService },
     ],
   });
   return {
@@ -322,13 +344,16 @@ describe('AgendaStateService — resetAll', () => {
     expect(state.cmt()).toEqual(cmtBefore);
   });
 
-  it('resets logos back to their defaults', () => {
+  // Resets to the CURRENT CLUB's own logo (see ClubContextService/Club
+  // model), not a hardcoded app-wide default — fakeClub above stands in for
+  // "whatever club is currently resolved."
+  it('resets logos back to the current club\'s own defaults', () => {
     const { state } = makeService();
     state.setLogo('left', 'data:custom-logo');
 
     state.resetAll();
 
-    expect(state.logoLeft()).toBe('logo.png');
+    expect(state.logoLeft()).toBe(fakeClub.logoLeft);
   });
 });
 
@@ -354,6 +379,7 @@ describe('AgendaStateService — committee-roster reseed vs loadSnapshot race', 
       providers: [
         { provide: RoleDefinitionService, useValue: fakeRoleDefinitionService },
         { provide: CommitteeRosterService, useClass: FakeCommitteeRosterService },
+        { provide: ClubContextService, useValue: fakeClubContextService },
       ],
     });
     const roster = TestBed.inject(CommitteeRosterService) as unknown as FakeCommitteeRosterService;

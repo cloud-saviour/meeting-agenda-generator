@@ -10,24 +10,27 @@ import { CheckinStateService } from './checkin-state.service';
 import { CheckinContactsService } from './checkin-contacts.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
+
+const testClubId = 'test-club';
+
+/** AuthService now only carries the GLOBAL real-claim tier — see ClubContextService for the per-club grant. */
+function fakeAuthService(user: Pick<User, 'uid' | 'displayName' | 'email'> | null = null, isAdmin = false) {
+  return { currentUser: signal(user), isAdmin: signal(isAdmin) } as unknown as AuthService;
+}
 
 /**
- * `isAppAdmin` defaults to mirror `isAdmin` so every existing call site
- * (`createService(user, true)`) keeps meaning "a real-claim admin" — pass it
- * explicitly to simulate a Firestore-granted (non-claim) admin instead
- * (`isAdmin: false, isAppAdmin: true`), which is the case the `releaseRole()`
- * `isAdmin()`-vs-`isAppAdmin()` bug missed.
+ * `isAppAdmin` simulates a Firestore-granted (non-claim) admin of the
+ * current club — pass it explicitly (`createService(user, false, true)`) to
+ * exercise the "granted, not a real claim" path, which is the case the
+ * `releaseRole()` `isAdmin()`-vs-`isAppAdmin()` bug missed.
  */
-function fakeAuthService(
-  user: Pick<User, 'uid' | 'displayName' | 'email'> | null = null,
-  isAdmin = false,
-  isAppAdmin = isAdmin
-) {
-  return { currentUser: signal(user), isAdmin: signal(isAdmin), isAppAdmin: signal(isAppAdmin) } as unknown as AuthService;
+function fakeClubContextService(isAppAdmin = false) {
+  return { currentClubId: signal<string | null>(testClubId), isAppAdmin: signal(isAppAdmin) } as unknown as ClubContextService;
 }
 
 async function auditEntriesFor(firestore: Firestore, action: string) {
-  const snap = await getDocs(query(collection(firestore, 'auditLog'), where('action', '==', action)));
+  const snap = await getDocs(query(collection(firestore, 'clubs', testClubId, 'auditLog'), where('action', '==', action)));
   return snap.docs.map((d) => d.data());
 }
 
@@ -131,7 +134,8 @@ describe('CheckinStateService (Firestore emulator)', () => {
         CheckinStateService,
         { provide: FIRESTORE, useValue: firestore },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
-        { provide: AuthService, useValue: fakeAuthService(signedInUser, isAdmin, isAppAdmin) },
+        { provide: AuthService, useValue: fakeAuthService(signedInUser, isAdmin) },
+        { provide: ClubContextService, useValue: fakeClubContextService(isAppAdmin) },
         { provide: CheckinContactsService, useValue: noopContacts },
       ],
     });
@@ -618,15 +622,15 @@ describe('CheckinStateService (Firestore emulator)', () => {
     expect(await svcA.claimRole('toastmaster')).toBe(true);
     expect(await svcB.claimRole('toastmaster')).toBe(false);
 
-    const afterClaim = await getDoc(doc(firestore, 'checkins', 'm12'));
+    const afterClaim = await getDoc(doc(firestore, 'clubs', testClubId, 'checkins', 'm12'));
     expect(afterClaim.data()?.['roles']?.['toastmaster']?.uid).toBe('member-a');
 
     await svcB.releaseRole('toastmaster'); // not svcB's claim — no-op
-    const afterNoopRelease = await getDoc(doc(firestore, 'checkins', 'm12'));
+    const afterNoopRelease = await getDoc(doc(firestore, 'clubs', testClubId, 'checkins', 'm12'));
     expect(afterNoopRelease.data()?.['roles']?.['toastmaster']?.uid).toBe('member-a');
 
     await svcA.releaseRole('toastmaster');
-    const afterRelease = await getDoc(doc(firestore, 'checkins', 'm12'));
+    const afterRelease = await getDoc(doc(firestore, 'clubs', testClubId, 'checkins', 'm12'));
     expect(afterRelease.data()?.['roles']?.['toastmaster']?.uid).toBe('');
   });
 
@@ -639,7 +643,7 @@ describe('CheckinStateService (Firestore emulator)', () => {
     const other = createService(); // never calls loadMeeting('m11')
     await other.deleteMeeting('m11');
 
-    const snap = await getDoc(doc(firestore, 'checkins', 'm11'));
+    const snap = await getDoc(doc(firestore, 'clubs', testClubId, 'checkins', 'm11'));
     expect(snap.exists()).toBe(false);
   });
 
@@ -993,8 +997,8 @@ describe('CheckinStateService (Firestore emulator)', () => {
     }
 
     it('reads the header from meetings/{id} but keeps id and maxSpeakers from the check-in doc', async () => {
-      await setDoc(doc(firestore, 'checkins', 'h1'), legacyCheckinDoc('h1'));
-      await setDoc(doc(firestore, 'meetings', 'h1'), sharedHeader);
+      await setDoc(doc(firestore, 'clubs', testClubId, 'checkins', 'h1'), legacyCheckinDoc('h1'));
+      await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h1'), sharedHeader);
       const service = createService();
       service.loadMeeting('h1');
 
@@ -1003,7 +1007,7 @@ describe('CheckinStateService (Firestore emulator)', () => {
     });
 
     it('falls back to the legacy header stored inside checkins/{id} when no meetings doc exists yet', async () => {
-      await setDoc(doc(firestore, 'checkins', 'h2'), legacyCheckinDoc('h2'));
+      await setDoc(doc(firestore, 'clubs', testClubId, 'checkins', 'h2'), legacyCheckinDoc('h2'));
       const service = createService();
       service.loadMeeting('h2');
 
@@ -1012,18 +1016,18 @@ describe('CheckinStateService (Firestore emulator)', () => {
     });
 
     it('updates live when the meetings doc changes — no reload, no push from the editor', async () => {
-      await setDoc(doc(firestore, 'meetings', 'h3'), sharedHeader);
+      await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h3'), sharedHeader);
       const service = createService();
       service.loadMeeting('h3');
       await waitFor(() => service.meeting().theme === 'Shared Theme');
 
-      await setDoc(doc(firestore, 'meetings', 'h3'), { ...sharedHeader, theme: 'Edited Theme' });
+      await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h3'), { ...sharedHeader, theme: 'Edited Theme' });
 
       await waitFor(() => service.meeting().theme === 'Edited Theme');
     });
 
     it("switching meetings never shows the previous meeting's header under the new id", async () => {
-      await setDoc(doc(firestore, 'meetings', 'h4a'), sharedHeader);
+      await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h4a'), sharedHeader);
       const service = createService();
       service.loadMeeting('h4a');
       await waitFor(() => service.meeting().theme === 'Shared Theme');

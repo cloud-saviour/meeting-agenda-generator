@@ -1,11 +1,12 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
+import { ClubLinkPipe } from '../../../core/club/club-link.pipe';
 
 @Component({
   selector: 'app-admin-roles-hub',
   standalone: true,
-  imports: [RouterLink, NavbarComponent],
+  imports: [RouterLink, NavbarComponent, ClubLinkPipe],
   templateUrl: './admin-roles-hub.component.html',
 })
 export class AdminRolesHubComponent {}

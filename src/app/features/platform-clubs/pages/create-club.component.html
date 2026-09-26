@@ -1,0 +1,70 @@
+<app-navbar title="Create a Club" [fixed]="true"
+  [links]="[
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:640px;">
+
+  @if (createdSlug(); as slug) {
+    <div class="card p-4 text-center">
+      <div class="fs-1 mb-2">&#127881;</div>
+      <h2 class="fs-5 fw-bold">Club created</h2>
+      <p class="text-muted small">The standard roles were added{{ firstAdminUid() ? ' and the first admin was granted access' : '' }}.</p>
+      <div class="d-flex justify-content-center gap-2">
+        <a class="btn btn-primary btn-sm" [routerLink]="['/c', slug]">Go to the club</a>
+        <button class="btn btn-outline-secondary btn-sm" (click)="createAnother()">Create another</button>
+      </div>
+    </div>
+  } @else {
+    <form class="card p-3" (ngSubmit)="submit()">
+      <h3 class="section-title">New club</h3>
+      <p class="text-muted small">Platform admins only. The club gets its own agendas, roles, roster, check-ins and admins — nothing is shared with other clubs.</p>
+
+      <label class="form-label small fw-semibold" for="club-name">Club name</label>
+      <input id="club-name" class="form-control form-control-sm mb-3" type="text" name="name"
+        [ngModel]="name()" (ngModelChange)="onNameChange($event)" required>
+
+      <label class="form-label small fw-semibold" for="club-slug">Web address</label>
+      <div class="input-group input-group-sm mb-1">
+        <span class="input-group-text">/c/</span>
+        <input id="club-slug" class="form-control" type="text" name="slug" [maxlength]="slugMaxLength"
+          [ngModel]="slug()" (ngModelChange)="onSlugChange($event)" (blur)="checkSlug()" required>
+      </div>
+      @if (slug() && !slugValid()) {
+        <div class="text-danger small mb-2">Use lowercase letters, digits and single hyphens only.</div>
+      } @else if (slugTaken()) {
+        <div class="text-danger small mb-2">That address is already taken — pick another.</div>
+      } @else {
+        <div class="text-muted small mb-2">Lowercase letters, digits and hyphens. Members will see this in their links.</div>
+      }
+
+      <label class="form-label small fw-semibold" for="club-sub">Sub-line <span class="text-muted fw-normal">(optional)</span></label>
+      <input id="club-sub" class="form-control form-control-sm mb-3" type="text" name="subLine"
+        [ngModel]="subLine()" (ngModelChange)="subLine.set($event)">
+
+      <label class="form-label small fw-semibold" for="club-address">Address <span class="text-muted fw-normal">(optional)</span></label>
+      <input id="club-address" class="form-control form-control-sm mb-3" type="text" name="addressLine"
+        [ngModel]="addressLine()" (ngModelChange)="addressLine.set($event)">
+
+      <label class="form-label small fw-semibold" for="club-admin">First club admin <span class="text-muted fw-normal">(optional)</span></label>
+      <select id="club-admin" class="form-select form-select-sm mb-1" name="firstAdmin"
+        [ngModel]="firstAdminUid()" (ngModelChange)="firstAdminUid.set($event)">
+        <option value="">None — I'll grant admins later</option>
+        @for (m of members(); track m.uid) {
+          <option [value]="m.uid">{{ m.displayName }} — {{ m.email }}</option>
+        }
+      </select>
+      <div class="text-muted small mb-3">Must already have an account. They can then grant other admins for this club.</div>
+
+      @if (error()) {
+        <div class="alert alert-danger py-1 px-2 small">{{ error() }}</div>
+      }
+
+      <button class="btn btn-primary btn-sm align-self-start" type="submit" [disabled]="!canSubmit()">
+        {{ submitting() ? 'Creating…' : 'Create club' }}
+      </button>
+    </form>
+  }
+
+</div>

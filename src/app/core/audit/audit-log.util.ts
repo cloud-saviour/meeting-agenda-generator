@@ -2,6 +2,7 @@ import { DocumentData, DocumentReference, Firestore, WithFieldValue, collection,
 import { User } from 'firebase/auth';
 import { AuditAction } from './audit-log.models';
 
+const CLUBS_COLLECTION = 'clubs';
 const COLLECTION = 'auditLog';
 
 /**
@@ -30,19 +31,31 @@ interface AuditEntryWriter {
  * `actor` is normally `AuthService.currentUser()` at the call site;
  * `uid`/`email` fall back to `''` if somehow null. For most audited
  * collections an unauthenticated caller could never reach here anyway,
- * since their write rule already requires `isAppAdmin()` — the one
+ * since their write rule already requires `isAppAdmin(clubId)` — the one
  * exception is `checkins/**`, which has no rules backstop at all
  * (`allow read, write: if true`), so those callers must check
- * `isAppAdmin()` themselves before calling this.
+ * `isAppAdmin(clubId)` themselves before calling this.
+ *
+ * Multi-club: `clubId` writes to `clubs/{clubId}/auditLog` — every current
+ * call site has one, since every audited action happens inside a specific
+ * club's own admin UI. `clubId` is optional only so a caller with
+ * genuinely no club context (none exist today) doesn't need a dummy value;
+ * omitting it falls back to the legacy flat top-level `auditLog`, which has
+ * no rule allowing a client write in the new ruleset — passing `undefined`
+ * here is a bug, not a supported "global audit entry" path.
  */
 export function appendAuditEntry(
   firestore: Firestore,
   writer: AuditEntryWriter,
   action: AuditAction,
   summary: string,
-  actor: User | null
+  actor: User | null,
+  clubId?: string
 ): void {
-  writer.set(doc(collection(firestore, COLLECTION)), {
+  const ref = clubId
+    ? doc(collection(firestore, CLUBS_COLLECTION, clubId, COLLECTION))
+    : doc(collection(firestore, COLLECTION));
+  writer.set(ref, {
     action,
     actorUid: actor?.uid ?? '',
     actorEmail: actor?.email ?? '',

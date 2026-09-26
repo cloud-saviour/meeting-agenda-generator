@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
-import { AuthService } from '../../../../core/auth/auth.service';
+import { ClubContextService } from '../../../../core/club/club-context.service';
 import { CheckinSpeaker } from '../../models/checkin.models';
 
 @Component({
@@ -13,7 +13,7 @@ import { CheckinSpeaker } from '../../models/checkin.models';
 })
 export class SpeakerSignupComponent {
   readonly state = inject(CheckinStateService);
-  readonly auth = inject(AuthService);
+  readonly club = inject(ClubContextService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
 
   title = '';

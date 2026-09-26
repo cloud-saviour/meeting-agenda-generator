@@ -3,9 +3,11 @@ import { arrayRemove, arrayUnion, collection, doc, getDocs, query, where, writeB
 import { MemberHistoryRecord } from '../../member/models/member.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
 import { AuditAction } from '../../../core/audit/audit-log.models';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
+const CLUBS_COLLECTION = 'clubs';
 const COLLECTION = 'memberHistory';
 
 interface MeetingMeta {
@@ -44,17 +46,24 @@ function emptyRecord(meetingId: string, uid: string, meta: MeetingMeta | undefin
 export class AttendanceConfirmationService {
   private readonly firestore = inject(FIRESTORE);
   private readonly auth = inject(AuthService);
+  private readonly clubContext = inject(ClubContextService);
 
   private readonly confirmations = signal<Map<string, MemberHistoryRecord>>(new Map());
   readonly confirmationsForCurrentMeeting = this.confirmations.asReadonly();
   private loadedMeetingId: string | null = null;
+
+  private collectionRef() {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('AttendanceConfirmationService called with no club resolved');
+    return collection(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION);
+  }
 
   /** Idempotent per meetingId, same pattern as CheckinStateService.loadMeeting(). */
   async loadForMeeting(meetingId: string): Promise<void> {
     if (meetingId === this.loadedMeetingId) return;
     this.loadedMeetingId = meetingId;
 
-    const snap = await getDocs(query(collection(this.firestore, COLLECTION), where('meetingId', '==', meetingId)));
+    const snap = await getDocs(query(this.collectionRef(), where('meetingId', '==', meetingId)));
     const map = new Map<string, MemberHistoryRecord>();
     for (const d of snap.docs) {
       const record = d.data() as MemberHistoryRecord;
@@ -184,7 +193,7 @@ export class AttendanceConfirmationService {
     auditAction: AuditAction,
     auditSummary: string
   ): Promise<void> {
-    const ref = doc(this.firestore, COLLECTION, `${meetingId}_${uid}`);
+    const ref = doc(this.collectionRef(), `${meetingId}_${uid}`);
     const updatedAt = new Date().toISOString();
 
     try {
@@ -194,7 +203,7 @@ export class AttendanceConfirmationService {
         { meetingId, uid, ...(meta ? { date: meta.date, theme: meta.theme } : {}), ...firestorePatch, updatedAt },
         { merge: true }
       );
-      appendAuditEntry(this.firestore, batch, auditAction, auditSummary, this.auth.currentUser());
+      appendAuditEntry(this.firestore, batch, auditAction, auditSummary, this.auth.currentUser(), this.clubContext.currentClubId() ?? undefined);
       await batch.commit();
     } catch (err) {
       console.error('memberHistory confirm failed', err);
