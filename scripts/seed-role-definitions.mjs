@@ -37,7 +37,7 @@ if (!isProd) {
 }
 
 const PROJECT_ID = isProd ? 'agenda-planner-101c4' : 'meeting-agenda-generator';
-const CLUB_SLUG = 'kings-speakers-12'; // must match scripts/migrate-to-clubs.mjs
+const CLUB_SLUG = process.argv.find((a) => a.startsWith('--club='))?.slice(7) ?? 'kings-speakers-12'; // default matches scripts/migrate-to-clubs.mjs; override with --club=<slug>
 
 const MEETING_ROLES = [
   { id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true },

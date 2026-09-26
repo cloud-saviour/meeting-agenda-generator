@@ -1602,6 +1602,8 @@ copies every collection listed above into the new nested paths (`members` is
 deliberately excluded — it was never club-scoped). Writes are batched under
 Firestore's 500-writes-per-batch limit.
 
+**Provisioning a new club — `scripts/create-club.mjs`** (`npm run create:club -- --slug=my-club --name="My Club" [--admin-email=a@b.c]`, `:prod` for the real project): creates `clubs/{clubId}` + `clubSlugs/{slug}` atomically, refuses a taken slug, and optionally grants an existing account as that club's admin (`clubs/{clubId}/appAdmins`). Follow with `npm run seed:roles -- --club=<slug>` (roles are per-club data). Verified in the browser against the emulator: a member who is admin of only club B reaches `/c/club-b/admin/*`, sees none of club A's agendas, and is redirected to `/login` on `/c/<clubA>/admin/*`; bare `/checkin?meeting=..` redirects to the default club with the query intact; an unknown slug falls back to the default club.
+
 **Firestore rules (`firestore.rules`)**: the new nested rules live under
 `match /clubs/{clubId} { ... }`, with an `isAppAdmin(cid)` helper
 (`isAdmin() || isGrantedAdmin(cid)`, where `isGrantedAdmin(cid)` checks
