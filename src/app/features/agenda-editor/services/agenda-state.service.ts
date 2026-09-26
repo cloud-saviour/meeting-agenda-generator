@@ -46,6 +46,7 @@ function defaultMeeting(no: string, cmt: CommitteeMember[], club: Club | null): 
     reserve: '',
     apologies: '',
     apologySyncUids: {},
+    speakerSyncIds: {},
     period: '',
     web: club?.website ?? '',
     fb: club?.facebookPage ?? '',

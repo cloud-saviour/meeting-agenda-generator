@@ -672,8 +672,11 @@ already public-read. The stored published document therefore still only
 changes when an admin re-publishes; what a viewer *sees* is the published
 snapshot plus live check-in merged on top.
 
-One inherited limitation, unchanged by this and shared with the editor: the
-speaker merge only adds and updates, never removes. A member who cancels a
+Each check-in speaker sign-up is imported into Prepared Speakers only ONCE
+(`MeetingData.speakerSyncIds`, persisted with the agenda like `apologySyncUids`),
+so an admin deleting the row is not undone by the next sync. One inherited
+limitation, shared with the editor: the speaker merge only adds and updates,
+never removes. A member who cancels a
 signup after it was imported stays on the agenda until an admin deletes the
 row by hand.
 

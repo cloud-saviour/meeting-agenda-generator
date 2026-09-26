@@ -146,3 +146,55 @@ describe('CheckinAgendaSyncService — apologies', () => {
     expect(ctx.state.meeting().apologies).toBe('');
   });
 });
+
+describe('CheckinAgendaSyncService — speakers', () => {
+  let ctx: ReturnType<typeof setup>;
+
+  function signup(id: string, name: string): CheckinSpeaker {
+    return { id, name, uid: 'u-' + id, title: 'T', level: '', timePref: '5-7', evaluator: null };
+  }
+
+  beforeEach(() => {
+    ctx = setup();
+  });
+
+  it('imports a new sign-up as a Prepared Speaker', () => {
+    ctx.fake.speakersSignal.set([signup('s1', 'Ann')]);
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    expect(ctx.state.spks().map((s) => s.name)).toEqual(['Ann']);
+  });
+
+  it('does NOT re-import a speaker the admin deleted, even while the sign-up is still on check-in', () => {
+    ctx.fake.speakersSignal.set([signup('s1', 'Ann')]);
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    ctx.state.removeSpeaker(ctx.state.spks()[0].id);
+
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    expect(ctx.state.spks()).toEqual([]);
+  });
+
+  it('still imports a DIFFERENT sign-up made after the admin deleted one', () => {
+    ctx.fake.speakersSignal.set([signup('s1', 'Ann')]);
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    ctx.state.removeSpeaker(ctx.state.spks()[0].id);
+
+    ctx.fake.speakersSignal.set([signup('s1', 'Ann'), signup('s2', 'Ben')]);
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    expect(ctx.state.spks().map((s) => s.name)).toEqual(['Ben']);
+  });
+
+  it('keeps the tracking in the saved meeting data, so a reload does not bring the speaker back', () => {
+    ctx.fake.speakersSignal.set([signup('s1', 'Ann')]);
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    expect(ctx.state.meeting().speakerSyncIds).toEqual({ s1: 'Ann' });
+  });
+
+  it('still keeps the evaluator of an imported speaker in sync', () => {
+    ctx.fake.speakersSignal.set([signup('s1', 'Ann')]);
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    ctx.fake.speakersSignal.set([{ ...signup('s1', 'Ann'), evaluator: { uid: 'e', name: 'Eve' } }]);
+    ctx.sync.apply('M1', ctx.state, ctx.checkin);
+    expect(ctx.state.spks()[0].evaluator).toBe('Eve');
+  });
+});
