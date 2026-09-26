@@ -371,7 +371,7 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
     await service.publish('160', makeSnapshot({ no: '160', theme: 'Old' }));
     await service.publish('161', makeSnapshot({ no: '161', theme: 'New' }));
 
-    expect((await getDoc(doc(firestore, 'publishedAgendas', '160'))).exists()).toBe(false);
+    expect((await getDoc(doc(firestore, 'clubs', testClubId, 'publishedAgendas', '160'))).exists()).toBe(false);
     expect((await getDoc(doc(firestore, 'clubs', testClubId, 'meetings', '160'))).data()?.['theme']).toBe('Old');
     expect((await getDoc(doc(firestore, 'clubs', testClubId, 'meetings', '161'))).data()?.['theme']).toBe('New');
   });

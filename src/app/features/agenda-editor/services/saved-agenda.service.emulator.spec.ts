@@ -306,6 +306,6 @@ describe('SavedAgendaService (Firestore emulator)', () => {
     await expect(service.save(makeSnapshot({ no: '160' }))).rejects.toThrow();
 
     expect((await getDoc(doc(firestore, 'clubs', testClubId, 'meetings', '160'))).exists()).toBe(false);
-    expect((await getDoc(doc(firestore, 'savedAgendas', '160'))).exists()).toBe(false);
+    expect((await getDoc(doc(firestore, 'clubs', testClubId, 'savedAgendas', '160'))).exists()).toBe(false);
   });
 });

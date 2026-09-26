@@ -997,7 +997,7 @@ describe('CheckinStateService (Firestore emulator)', () => {
     }
 
     it('reads the header from meetings/{id} but keeps id and maxSpeakers from the check-in doc', async () => {
-      await setDoc(doc(firestore, 'checkins', 'h1'), legacyCheckinDoc('h1'));
+      await setDoc(doc(firestore, 'clubs', testClubId, 'checkins', 'h1'), legacyCheckinDoc('h1'));
       await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h1'), sharedHeader);
       const service = createService();
       service.loadMeeting('h1');
@@ -1007,7 +1007,7 @@ describe('CheckinStateService (Firestore emulator)', () => {
     });
 
     it('falls back to the legacy header stored inside checkins/{id} when no meetings doc exists yet', async () => {
-      await setDoc(doc(firestore, 'checkins', 'h2'), legacyCheckinDoc('h2'));
+      await setDoc(doc(firestore, 'clubs', testClubId, 'checkins', 'h2'), legacyCheckinDoc('h2'));
       const service = createService();
       service.loadMeeting('h2');
 
