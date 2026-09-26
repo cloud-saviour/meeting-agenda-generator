@@ -13,6 +13,8 @@
     "test": "ng test",
     "test:emulator": "ng run meeting-agenda-generator:test-emulator",
     "emulators": "firebase emulators:start --only firestore,auth --import=./.emulator-data --export-on-exit=./.emulator-data",
+    "backfill:memberships": "node scripts/backfill-memberships.mjs",
+    "backfill:memberships:prod": "node scripts/backfill-memberships.mjs --prod",
     "create:club": "node scripts/create-club.mjs",
     "create:club:prod": "node scripts/create-club.mjs --prod",
     "migrate:to-clubs": "node scripts/migrate-to-clubs.mjs",

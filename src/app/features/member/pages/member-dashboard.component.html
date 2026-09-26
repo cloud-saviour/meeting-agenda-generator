@@ -2,6 +2,26 @@
 </app-navbar>
 
 <div class="container" style="max-width:640px; padding-top:24px; padding-bottom:40px;">
+  @if (myClubs().length > 0) {
+    <div class="card p-4 shadow-sm mb-4">
+      <h2 class="fs-6 fw-bold mb-3">My Clubs</h2>
+      <div class="list-group list-group-flush">
+        @for (m of myClubs(); track m.club.id) {
+          <div class="list-group-item d-flex align-items-center gap-2 px-0">
+            <span class="flex-grow-1 small fw-semibold">{{ m.club.name }}</span>
+            @switch (m.status) {
+              @case ('active') { <span class="badge bg-success-subtle text-success-emphasis">Member</span> }
+              @case ('pending') { <span class="badge bg-warning-subtle text-warning-emphasis">Pending approval</span> }
+              @case ('rejected') { <span class="badge bg-secondary-subtle text-secondary-emphasis">Declined</span> }
+              @default { <span class="badge bg-secondary-subtle text-secondary-emphasis">Removed</span> }
+            }
+            <a class="btn btn-outline-primary btn-sm" [routerLink]="['/c', m.club.slug]">Open</a>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
   <div class="card p-4 shadow-sm mb-4">
     @if (!profileLoaded()) {
       <p class="text-muted small mb-0">Loading your profile…</p>

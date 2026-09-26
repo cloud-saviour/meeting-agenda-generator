@@ -25,8 +25,9 @@ export interface Club {
   website: string;
   facebookPage: string;
   createdAt: string;
-  /** Placeholder for future suspension/billing — not read or written by
-   *  anything yet in this pass; always true for every club created now. */
+  /** Deactivate/reactivate switch. `false` closes the club to everyone but
+   *  platform admins (see ClubContextService.unavailable); the data is kept.
+   *  New clubs are created active. */
   active: boolean;
 }
 

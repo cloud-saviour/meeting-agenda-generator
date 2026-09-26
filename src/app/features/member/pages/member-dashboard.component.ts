@@ -1,16 +1,18 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { MemberProfileService } from '../services/member-profile.service';
 import { MemberHistoryService } from '../services/member-history.service';
 import { MemberHistoryEntry, MemberProfile } from '../models/member.models';
 import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
 import { PublishedAgendaService } from '../../agenda-editor/services/published-agenda.service';
+import { MembershipService, MyClub } from '../../membership/services/membership.service';
 
 @Component({
   selector: 'app-member-dashboard',
   standalone: true,
-  imports: [FormsModule, NavbarComponent],
+  imports: [FormsModule, RouterLink, NavbarComponent],
   templateUrl: './member-dashboard.component.html',
 })
 export class MemberDashboardComponent {
@@ -18,6 +20,9 @@ export class MemberDashboardComponent {
   private readonly memberProfile = inject(MemberProfileService);
   private readonly memberHistory = inject(MemberHistoryService);
   private readonly publishedAgenda = inject(PublishedAgendaService);
+  private readonly membership = inject(MembershipService);
+
+  readonly myClubs = signal<MyClub[]>([]);
 
   /**
    * Both "Preview Agenda" and "Meeting Check-in" only appear when a meeting is
@@ -57,6 +62,10 @@ export class MemberDashboardComponent {
       this.displayNameInput = profile?.displayName ?? this.auth.currentUser()?.displayName ?? '';
     });
     this.memberHistory.loadHistory(uid).then((entries) => this.history.set(entries));
+    this.membership
+      .listMyClubs()
+      .then((clubs) => this.myClubs.set(clubs))
+      .catch((err) => console.error('listMyClubs failed', err));
   }
 
   startEdit() {
