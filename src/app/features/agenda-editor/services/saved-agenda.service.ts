@@ -5,6 +5,7 @@ import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ClubContextService } from '../../../core/club/club-context.service';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
+import { MEETINGS_COLLECTION, meetingDocFromSnapshot } from '../../../core/models/meeting-doc.models';
 
 const CLUBS_COLLECTION = 'clubs';
 const COLLECTION = 'savedAgendas';
@@ -82,6 +83,12 @@ export class SavedAgendaService implements OnDestroy {
     return doc(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION, no);
   }
 
+  private meetingDocRef(no: string) {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('SavedAgendaService called with no club resolved');
+    return doc(this.firestore, CLUBS_COLLECTION, clubId, MEETINGS_COLLECTION, no);
+  }
+
   /**
    * No-ops when snapshot.no is blank — a saved agenda must have a real
    * meeting number. Rethrows on failure (unlike this file's other
@@ -97,6 +104,7 @@ export class SavedAgendaService implements OnDestroy {
     const payload: SavedAgendaDoc = { ...snapshot, updatedAt: new Date().toISOString() };
     const batch = writeBatch(this.firestore);
     batch.set(this.docRef(snapshot.no), payload);
+    batch.set(this.meetingDocRef(snapshot.no), meetingDocFromSnapshot(snapshot));
     appendAuditEntry(
       this.firestore,
       batch,

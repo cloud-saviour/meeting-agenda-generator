@@ -9,6 +9,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { ClubContextService } from '../../../core/club/club-context.service';
 import { AuditAction } from '../../../core/audit/audit-log.models';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
+import { MEETINGS_COLLECTION, MeetingDoc } from '../../../core/models/meeting-doc.models';
 
 const CLUBS_COLLECTION = 'clubs';
 const CHECKINS_COLLECTION = 'checkins';
@@ -73,8 +74,23 @@ export class CheckinStateService implements OnDestroy {
   private readonly snapshot = signal<CheckinSnapshot>(this.emptySnapshotPlaceholder());
   private currentMeetingId: string | null = null;
   private unsubscribeSnapshot: (() => void) | undefined;
+  private unsubscribeMeetingDoc: (() => void) | undefined;
+  private readonly meetingDoc = signal<MeetingDoc | null>(null);
 
-  readonly meeting = computed(() => this.snapshot().meeting);
+  /**
+   * Header fields come from the shared `meetings/{id}` doc — the one stored
+   * copy the agenda editor also writes (see meeting-doc.models.ts). Until
+   * that doc exists for a meeting (nobody has saved/published it since it
+   * shipped), falls back to the legacy copy still stored inside
+   * `checkins/{id}.meeting`, so a not-yet-backfilled meeting keeps its
+   * header instead of going blank. `id` and `maxSpeakers` are check-in's
+   * own and always come from the checkin doc.
+   */
+  readonly meeting = computed<CheckinMeeting>(() => {
+    const own = this.snapshot().meeting;
+    const shared = this.meetingDoc();
+    return shared ? { ...own, ...shared } : own;
+  });
   readonly attendees = computed(() => this.snapshot().attendees);
   readonly roles = computed(() => this.snapshot().roles);
   readonly speakers = computed(() => this.snapshot().speakers);
@@ -123,6 +139,7 @@ export class CheckinStateService implements OnDestroy {
 
   ngOnDestroy(): void {
     this.unsubscribeSnapshot?.();
+    this.unsubscribeMeetingDoc?.();
   }
 
   /**
@@ -135,7 +152,16 @@ export class CheckinStateService implements OnDestroy {
   loadMeeting(meetingId: string): void {
     if (meetingId === this.currentMeetingId) return;
     this.unsubscribeSnapshot?.();
+    this.unsubscribeMeetingDoc?.();
     this.currentMeetingId = meetingId;
+    // Cleared on switch so the previous meeting's header never shows under the new id.
+    this.meetingDoc.set(null);
+
+    this.unsubscribeMeetingDoc = onSnapshot(
+      this.meetingDocRef(meetingId),
+      (snap) => this.zone.run(() => this.meetingDoc.set(snap.exists() ? (snap.data() as MeetingDoc) : null)),
+      (err) => this.zone.run(() => console.error('meetings doc listener failed', err))
+    );
 
     const ref = this.checkinRef(meetingId);
     this.unsubscribeSnapshot = onSnapshot(
@@ -550,13 +576,6 @@ export class CheckinStateService implements OnDestroy {
   }
 
   // ── Meeting config (admin) ──────────────────────────────────────────────
-  updateMeeting(patch: Partial<CheckinMeeting>): Promise<void> {
-    return this.mutate((s) => {
-      const next = { ...s, meeting: { ...s.meeting, ...patch } };
-      return { next, result: undefined };
-    }).then(() => undefined);
-  }
-
   resetAll(): Promise<void> {
     if (!this.currentMeetingId) return Promise.resolve();
     const ref = this.checkinRef(this.currentMeetingId);
@@ -580,6 +599,12 @@ export class CheckinStateService implements OnDestroy {
   /** Builds this meeting's doc ref under the CURRENT club (see ClubContextService) — throws if
    *  called with no club resolved, which shouldn't happen: every route that reaches this service
    *  sits behind clubContextGuard, which resolves the club before any child component renders. */
+  private meetingDocRef(meetingId: string) {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('meetingDocRef() called with no club resolved');
+    return doc(this.firestore, CLUBS_COLLECTION, clubId, MEETINGS_COLLECTION, meetingId);
+  }
+
   private checkinRef(meetingId: string) {
     const clubId = this.clubContext.currentClubId();
     if (!clubId) throw new Error('checkinRef() called with no club resolved');

@@ -3,7 +3,7 @@ import { Injector, NgZone, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { CheckinStateService } from './checkin-state.service';
@@ -961,6 +961,81 @@ describe('CheckinStateService (Firestore emulator)', () => {
 
       const entries = await auditEntriesFor(firestore, 'checkin.adminRemove');
       expect(entries.some((e) => (e['summary'] as string).includes('Alice'))).toBe(true);
+    });
+  });
+
+  describe('meeting() header — sourced from the shared meetings/{id} doc', () => {
+    const sharedHeader = {
+      date: '2026-09-27',
+      theme: 'Shared Theme',
+      word: 'candour',
+      start: '19:00',
+      club: 'Shared Club',
+      sub: 'Shared Sub',
+      addr: '1 Shared Street',
+    };
+
+    function legacyCheckinDoc(id: string) {
+      return {
+        meeting: {
+          id,
+          date: '2026-01-01',
+          theme: 'Legacy Theme',
+          word: 'legacy',
+          start: '18:15',
+          maxSpeakers: 5,
+          club: 'Legacy Club',
+          sub: '',
+          addr: '',
+        },
+        attendees: [],
+        roles: {},
+        speakers: [],
+        lockedRoles: [],
+        apologies: [],
+      };
+    }
+
+    it('reads the header from meetings/{id} but keeps id and maxSpeakers from the check-in doc', async () => {
+      await setDoc(doc(firestore, 'checkins', 'h1'), legacyCheckinDoc('h1'));
+      await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h1'), sharedHeader);
+      const service = createService();
+      service.loadMeeting('h1');
+
+      await waitFor(() => service.meeting().theme === 'Shared Theme');
+      expect(service.meeting()).toEqual({ ...sharedHeader, id: 'h1', maxSpeakers: 5 });
+    });
+
+    it('falls back to the legacy header stored inside checkins/{id} when no meetings doc exists yet', async () => {
+      await setDoc(doc(firestore, 'checkins', 'h2'), legacyCheckinDoc('h2'));
+      const service = createService();
+      service.loadMeeting('h2');
+
+      await waitFor(() => service.meeting().theme === 'Legacy Theme');
+      expect(service.meeting().maxSpeakers).toBe(5);
+    });
+
+    it('updates live when the meetings doc changes — no reload, no push from the editor', async () => {
+      await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h3'), sharedHeader);
+      const service = createService();
+      service.loadMeeting('h3');
+      await waitFor(() => service.meeting().theme === 'Shared Theme');
+
+      await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h3'), { ...sharedHeader, theme: 'Edited Theme' });
+
+      await waitFor(() => service.meeting().theme === 'Edited Theme');
+    });
+
+    it("switching meetings never shows the previous meeting's header under the new id", async () => {
+      await setDoc(doc(firestore, 'clubs', testClubId, 'meetings', 'h4a'), sharedHeader);
+      const service = createService();
+      service.loadMeeting('h4a');
+      await waitFor(() => service.meeting().theme === 'Shared Theme');
+
+      service.loadMeeting('h4b'); // no meetings doc, no checkins doc
+
+      await waitFor(() => service.meeting().id === 'h4b');
+      expect(service.meeting().theme).toBe('');
     });
   });
 });

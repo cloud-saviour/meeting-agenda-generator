@@ -276,6 +276,18 @@ async function main() {
   // need the single-published-meeting invariant preserved.
   await seedNamedDoc(club.collection('publishedAgendas'), MEETING_ID, { ...agendaSnapshot, publishedAt: new Date().toISOString() });
 
+  // The shared header doc the app itself writes inside save()/publish() —
+  // check-in reads its header from here (see MeetingDoc).
+  await seedNamedDoc(club.collection('meetings'), MEETING_ID, {
+    date: MEETING.date,
+    theme: MEETING.theme,
+    word: MEETING.word,
+    start: MEETING.st,
+    club: MEETING.club,
+    sub: MEETING.sub,
+    addr: MEETING.addr,
+  });
+
   const checkinSnapshot = buildCheckinSnapshot(members, adminUid);
   await seedNamedDoc(club.collection('checkins'), MEETING_ID, checkinSnapshot);
 
