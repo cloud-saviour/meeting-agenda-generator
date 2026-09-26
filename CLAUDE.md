@@ -484,7 +484,7 @@ meeting number (`CheckinStateService.loadMeeting()`, keyed by `?meeting=`),
 so different meetings don't share a sheet.
 
 **The meeting header (date/theme/word/start/club/sub/addr) has exactly one
-stored copy: `meetings/{meetingNo}`** — see `MeetingDoc` in
+stored copy: `clubs/{clubId}/meetings/{meetingNo}`** — see `MeetingDoc` in
 `core/models/meeting-doc.models.ts`. It is written **only inside the
 existing `SavedAgendaService.save()` and `PublishedAgendaService.publish()`
 batches** (`meetingDocFromSnapshot()` maps the agenda's `st` to `start`),
@@ -510,7 +510,7 @@ header at all.
 **Behavior change to know about:** an unsaved edit to the header no longer
 reaches `/checkin` — it appears when the admin clicks Save (or Publish),
 which they already must do for the published agenda to update.
-`meetings/{no}` is **not** deleted when an agenda is deleted or
+`clubs/{clubId}/meetings/{no}` is **not** deleted when an agenda is deleted or
 unpublished, same as `checkins/{no}` itself is left alone.
 
 **Transitional fallback (Stage 1 — remove in Stage 2):** until a meeting has
@@ -697,7 +697,10 @@ row by hand.
   back a planned reminder-email feature (email every past attendee, member
   or anonymous) without ever exposing an attendee's email on the public
   `checkins` collection.
-- `meetings/{meetingNo}` (no dedicated service) — the single stored copy of
+- `clubs/{clubId}/meetings/{meetingNo}` (no dedicated service; club-scoped
+  like every other per-club collection — each of the three services that
+  touches it resolves the path through a private `meetingDocRef()` and throws
+  if no club is resolved) — the single stored copy of
   a meeting's 7 header fields, shared by the editor and check-in. Written
   by `SavedAgendaService.save()` and `PublishedAgendaService.publish()` (one
   extra `batch.set()` in each existing batch, via `meetingDocFromSnapshot()`
@@ -710,17 +713,19 @@ row by hand.
 
   **Rolling out to an existing environment, in this order** (each step is
   reversible until the next): (1) `npm run migrate:meetings:prod`
-  (`scripts/migrate-meetings.mjs` — backfills a `meetings` doc for every
-  `savedAgendas` doc, and for any `checkins` doc with no saved agenda from
+  (`scripts/migrate-meetings.mjs` — loops over every `clubs/{clubId}` and
+  backfills that club's `meetings` doc for each of its `savedAgendas` docs,
+  and for any of its `checkins` docs with no saved agenda from
   its legacy `meeting` field; idempotent id-keyed upserts, never deletes,
   never touches its sources; needs ADC, same as
-  `migrate:role-definitions:prod`); (2) `npm run deploy:rules` so the
+  `migrate:role-definitions:prod`; **run `migrate:to-clubs` first** — with
+  no `clubs` docs it has nothing to iterate); (2) `npm run deploy:rules` so the
   `meetings` rule is live; (3) `npm run deploy` (or `deploy:all`). Rolling
   back is redeploying the previous bundle: it still pushes/reads the legacy
   `checkins.meeting` fields, which Stage 1 never touched. The migration is
   not strictly required for correctness (the read path falls back to the
   legacy fields), but it is a hard precondition for Stage 2 (Known gaps #4).
-  `npm run seed:test-data` also seeds `meetings/TEST-1` for local QA.
+  `npm run seed:test-data` also seeds `clubs/{clubId}/meetings/TEST-1` for local QA.
 - `RoleDefinitionService` — one Firestore document per role, at
   `roleDefinitions/{roleId}`, kept live via `onSnapshot()` on the whole
   collection. Covers **both** meeting roles (Evening Chairman, Grammarian,
@@ -1378,7 +1383,9 @@ exceptions that still check `isAdmin()` specifically:
   now (implicit deny) — nothing in the app reads or writes it anymore
   (see Persistence above), and its data is left in place, unused, until a
   deliberate later cleanup deploy removes it outright.
-- `meetings/{meetingNo}` — **public read, app-admin write**. Public because
+- `clubs/{clubId}/meetings/{meetingNo}` — **public read, `isAppAdmin(clubId)`
+  write** (a nested rule inside the `clubs/{clubId}` block, like
+  `publishedAgendas`). Public because
   `/checkin` is anonymous and already showed every one of these fields;
   written only inside `SavedAgendaService.save()`/`PublishedAgendaService.publish()`'s
   batches, so **deploy the rules before (or with) the bundle that writes it**
@@ -1676,7 +1683,7 @@ club's actual role-holder *data* is isolated, not that fixed structure.
    meeting header ... has exactly one stored copy" under Two independent
    features above). **Phase 0** (the `RoleDefinitionService` merge and
    `AgendaSnapshot.cmt` removal) and **Phase 1 Stage 1** (the new
-   `meetings/{meetingNo}` collection, folded into the existing save/publish
+   `clubs/{clubId}/meetings/{meetingNo}` collection, folded into the existing save/publish
    batches, with the push effect deleted) are done. What's left is
    **Stage 2, deliberately a separate later deploy** so Stage 1 stays
    rollback-safe: an old bundle can still read the untouched legacy fields
