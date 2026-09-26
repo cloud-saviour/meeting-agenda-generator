@@ -64,14 +64,6 @@ export class AgendaEditorComponent implements OnDestroy {
   // number as "not dirty" regardless of what this holds.
   private lastSavedJson: string;
 
-  // Same idea, for the meeting-fields push effect below — lets it skip a
-  // no-op checkinState.updateMeeting() call, keyed per meeting number.
-  private readonly lastPushedMeetingJsonByNo = new Map<string, string>();
-
-  // Debounce timer for the meeting-fields push effect below — Firestore writes
-  // are no longer free the way an in-memory/localStorage write was.
-  private meetingSyncTimer: ReturnType<typeof setTimeout> | undefined;
-
   // Warns on an actual tab close/refresh/external navigation with unsaved
   // changes — in-app route changes (My Agendas, Home, etc.) go through
   // Angular's router instead, which this listener can't intercept; see
@@ -129,42 +121,6 @@ export class AgendaEditorComponent implements OnDestroy {
       untracked(() => {
         this.checkinSync.apply(this.state.meeting().no, this.state, this.checkinState);
       });
-    });
-
-    // Push meeting details (theme/date/word/start/club/sub/addr) into
-    // check-in's own CheckinMeeting record, so the header members see at
-    // /checkin reflects the real agenda instead of check-in's own separate,
-    // otherwise-never-set defaults. One-way (agenda is the source of truth)
-    // — nothing reads these fields back from check-in. Tracks the whole
-    // `meeting()` signal for the same reason as the auto-save effect below:
-    // simplicity over narrowly scoping seven fields. Debounced, unlike
-    // before: this is now a real Firestore write per call, not a free
-    // in-memory one, so it shouldn't fire on every keystroke.
-    //
-    // Skips the write when none of the 7 pushed fields actually changed
-    // since the last push for this meeting number — same pattern as the
-    // auto-save effect's lastSavedJsonByNo below. Without this, ANY change
-    // to `meeting()` (e.g. apologySyncUids being updated by the check-in
-    // sync effect below, which is part of this same signal) re-triggers a
-    // real checkinState.updateMeeting() write even when none of these 7
-    // fields moved — and that write's own runTransaction() round-trip
-    // re-fires checkins' onSnapshot listener, which re-runs the check-in
-    // sync effect, which can touch `meeting()` again, sustaining a
-    // feedback loop through repeated real Firestore round-trips (caught by
-    // an auditLog entry storm: ~100 redundant agenda.publish entries for
-    // one meeting in under an hour, all with identical content).
-    effect(() => {
-      const m = this.state.meeting();
-      if (!m.no) return;
-      clearTimeout(this.meetingSyncTimer);
-      this.meetingSyncTimer = setTimeout(() => {
-        const pushed = { date: m.date, theme: m.theme, word: m.word, start: m.st, club: m.club, sub: m.sub, addr: m.addr };
-        const json = JSON.stringify(pushed);
-        if (this.lastPushedMeetingJsonByNo.get(m.no) === json) return;
-        this.lastPushedMeetingJsonByNo.set(m.no, json);
-        this.checkinState.loadMeeting(m.no);
-        this.checkinState.updateMeeting(pushed);
-      }, 500);
     });
 
     // Dirty-tracking: the mirror image of the check-in-sync effect above —

@@ -5,6 +5,7 @@ import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ClubContextService } from '../../../core/club/club-context.service';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
+import { MEETINGS_COLLECTION, meetingDocFromSnapshot } from '../../../core/models/meeting-doc.models';
 
 const CLUBS_COLLECTION = 'clubs';
 const COLLECTION = 'publishedAgendas';
@@ -125,6 +126,12 @@ export class PublishedAgendaService implements OnDestroy {
     return doc(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION, meetingId);
   }
 
+  private meetingDocRef(meetingId: string) {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('PublishedAgendaService called with no club resolved');
+    return doc(this.firestore, CLUBS_COLLECTION, clubId, MEETINGS_COLLECTION, meetingId);
+  }
+
   /**
    * Exclusive publish: at most one meeting is ever published at a time.
    * Reads the whole collection, deletes every doc whose id isn't the one
@@ -145,6 +152,7 @@ export class PublishedAgendaService implements OnDestroy {
           if (d.id !== meetingId) batch.delete(d.ref);
         }
         batch.set(this.docRef(meetingId), payload);
+        batch.set(this.meetingDocRef(meetingId), meetingDocFromSnapshot(data));
         appendAuditEntry(
           this.firestore,
           batch,

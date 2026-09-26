@@ -19,6 +19,8 @@
     "seed:roles:prod": "node scripts/seed-role-definitions.mjs --prod",
     "migrate:role-definitions": "node scripts/migrate-role-definitions.mjs",
     "migrate:role-definitions:prod": "node scripts/migrate-role-definitions.mjs --prod",
+    "migrate:meetings": "node scripts/migrate-meetings.mjs",
+    "migrate:meetings:prod": "node scripts/migrate-meetings.mjs --prod",
     "seed:admin": "node scripts/seed-admin-user.mjs",
     "seed:admin:prod": "node scripts/seed-admin-user.mjs --prod",
     "seed:test-data": "node scripts/seed-test-data.mjs",
