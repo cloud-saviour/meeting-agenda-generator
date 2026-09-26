@@ -65,6 +65,9 @@
       </label>
       <button class="btn btn-outline-secondary btn-sm" (click)="resetLogo('left')">Reset</button>
     </div>
+    @if (logoWarning.left) {
+      <div class="text-warning-emphasis small mt-1">⚠ {{ logoWarning.left }}</div>
+    }
   </div>
   <div class="mb-2">
     <label class="form-label small mb-1">Right Logo</label>
@@ -75,6 +78,9 @@
       </label>
       <button class="btn btn-outline-secondary btn-sm" (click)="resetLogo('right')">Reset</button>
     </div>
+    @if (logoWarning.right) {
+      <div class="text-warning-emphasis small mt-1">⚠ {{ logoWarning.right }}</div>
+    }
   </div>
 </div>
 

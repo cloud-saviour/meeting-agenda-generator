@@ -13,9 +13,15 @@
     @if (isAppAdmin()) {
       <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
         <div class="fs-1 mb-2">&#128221;</div>
-        <h2 class="fs-6 fw-bold">Manage Agendas</h2>
+        <h2 class="fs-6 fw-bold">Agendas</h2>
         <p class="text-muted small mb-0">Build a new agenda or reopen a saved one</p>
-        <a routerLink="/admin/manage-agendas" class="stretched-link" aria-label="Open Manage Agendas"></a>
+        <a routerLink="/admin/manage-agendas" class="stretched-link" aria-label="Open Agendas"></a>
+      </div>
+      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+        <div class="fs-1 mb-2">&#128736;</div>
+        <h2 class="fs-6 fw-bold">Admin</h2>
+        <p class="text-muted small mb-0">Manage roles, admins, and the audit log</p>
+        <a routerLink="/admin/hub" class="stretched-link" aria-label="Open Admin"></a>
       </div>
     } @else if (isSignedIn()) {
       <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
@@ -39,33 +45,6 @@
         <h2 class="fs-6 fw-bold">Meeting #{{ m.no }} Check-in{{ isSignedIn() ? '' : ' As Guest' }}</h2>
         <p class="text-muted small mb-0">{{ m.theme || 'Meeting ' + m.no }} — check in, claim a role, or sign up to speak</p>
         <a routerLink="/checkin" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Open Meeting Check-in"></a>
-      </div>
-    }
-
-    @if (isAppAdmin()) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
-        <div class="fs-1 mb-2">&#9881;</div>
-        <h2 class="fs-6 fw-bold">Manage Roles</h2>
-        <p class="text-muted small mb-0">Admin: manage meeting roles and committee roles</p>
-        <a routerLink="/admin/manage-roles" class="stretched-link" aria-label="Open Manage Roles"></a>
-      </div>
-    }
-
-    @if (isAppAdmin()) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
-        <div class="fs-1 mb-2">&#128081;</div>
-        <h2 class="fs-6 fw-bold">Manage Admins</h2>
-        <p class="text-muted small mb-0">Grant or revoke admin access for existing members</p>
-        <a routerLink="/admin/manage-admins" class="stretched-link" aria-label="Open Manage Admins"></a>
-      </div>
-    }
-
-    @if (isAdmin()) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
-        <div class="fs-1 mb-2">&#128270;</div>
-        <h2 class="fs-6 fw-bold">Audit Log</h2>
-        <p class="text-muted small mb-0">Super admin: see who granted or revoked admin access, and when</p>
-        <a routerLink="/admin/audit-log" class="stretched-link" aria-label="Open Audit Log"></a>
       </div>
     }
 

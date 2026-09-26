@@ -2,6 +2,12 @@
 
   <!-- APP BAR -->
   <app-navbar title="Agora Agenda Planner" [printHidden]="true" [links]="navLinks">
+    @if (isLivePublished) {
+      <span class="badge bg-success-subtle text-success-emphasis align-self-center"
+        title="This meeting is currently published — edits here reach /preview and check-in live, no publish step needed">
+        ● Live
+      </span>
+    }
     <button class="btn btn-sm" [class.btn-danger]="isDirty" [class.btn-outline-light]="!isDirty"
       [disabled]="saving || !state.meeting().no"
       [title]="!state.meeting().no ? 'Set a meeting number before saving' : ''"
@@ -18,12 +24,6 @@
       {{ docxBusy ? 'Building…' : '⬇ DOCX' }}
     </button>
     <button class="btn btn-danger btn-sm" (click)="printAgenda()">&#128438; Print / PDF</button>
-    @if (isLivePublished) {
-      <span class="badge bg-success-subtle text-success-emphasis align-self-center"
-        title="This meeting is currently published — edits here reach /preview and check-in live, no publish step needed">
-        ● Live
-      </span>
-    }
     <a class="btn btn-outline-light btn-sm" routerLink="/admin/manage-roles">⚙ Manage Roles</a>
     @if (isLivePublished) {
       <button class="btn btn-outline-light btn-sm" (click)="copyCheckinLink()">
