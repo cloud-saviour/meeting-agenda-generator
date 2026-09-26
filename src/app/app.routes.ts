@@ -3,7 +3,7 @@ import { memberGuard } from './core/auth/member.guard';
 import { superAdminGuard } from './core/auth/super-admin.guard';
 import { clubContextGuard } from './core/club/club-context.guard';
 import { clubAdminGuard } from './core/club/club-admin.guard';
-import { legacyClubRedirectGuard } from './core/club/legacy-club-redirect.guard';
+import { legacyClubPrefixGuard, legacyClubRedirectGuard } from './core/club/legacy-club-redirect.guard';
 import { agendaEditorCanDeactivateGuard } from './features/agenda-editor/pages/agenda-editor-can-deactivate.guard';
 import { environment } from '../environments/environment';
 
@@ -32,6 +32,14 @@ export const routes: Routes = [
   // so no `loadComponent` is needed on either of these.
   { path: 'checkin', canActivate: [legacyClubRedirectGuard('checkin')], children: [] },
   { path: 'preview', canActivate: [legacyClubRedirectGuard('preview')], children: [] },
+
+  // Bookmarked un-prefixed admin/member pages (any sub-path) — prefixed with
+  // the default club rather than dropped on the 404 fallback.
+  {
+    matcher: (segments) => (segments[0]?.path === 'admin' || segments[0]?.path === 'member' ? { consumed: segments } : null),
+    canActivate: [legacyClubPrefixGuard],
+    children: [],
+  },
 
   {
     // clubContextGuard resolves :clubSlug to a club before any child route
