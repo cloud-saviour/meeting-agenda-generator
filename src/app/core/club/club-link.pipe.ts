@@ -10,10 +10,10 @@ import { ClubContextService } from './club-context.service';
  * of hand-threading `ClubContextService.currentClubSlug()` through every
  * component that needs an internal link.
  *
- * `/login` and `/signup` are passed through UNCHANGED — they're the two
+ * `/login`, `/signup` and `/platform/...` are passed through UNCHANGED — they're the two
  * deliberately club-agnostic routes (a Firebase account is global, not
- * club-scoped, see AuthService's class doc), so they must never gain a
- * `/c/<slug>` prefix.
+ * club-scoped, see AuthService's class doc; platform pages span every
+ * club), so they must never gain a `/c/<slug>` prefix.
  *
  * Impure (`pure: false`): the transform depends on
  * `ClubContextService.currentClubSlug()`, a signal read internally rather
@@ -27,7 +27,7 @@ export class ClubLinkPipe implements PipeTransform {
   private readonly clubContext = inject(ClubContextService);
 
   transform(path: string): string {
-    if (path === '/login' || path === '/signup') return path;
+    if (path === '/login' || path === '/signup' || path.startsWith('/platform/')) return path;
     const slug = this.clubContext.currentClubSlug();
     if (!slug) return path;
     return path === '/' ? `/c/${slug}` : `/c/${slug}${path}`;

@@ -1,13 +1,25 @@
 <div class="card p-3 mb-3">
   <h3 class="section-title">Meeting Roles</h3>
+  @if (!state.isCheckedIn()) {
+    <p class="text-muted">Check in above first, then you can take a role.</p>
+  }
+  @if (notice) {
+    <div class="alert alert-success" role="status">{{ notice }}</div>
+  }
   @if (claimError) {
-    <div class="alert alert-danger py-1 px-2 small mb-2">{{ claimError }}</div>
+    <div class="alert alert-danger" role="alert">{{ claimError }}</div>
   }
   <div class="list-group list-group-flush">
     @for (def of activeRoles(); track def.id) {
-      <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+      <div class="list-group-item d-flex flex-wrap align-items-center gap-2 py-3">
+        <span class="flex-grow-1">
+          <span class="fw-semibold d-block">{{ def.label }}</span>
+          @if (roles[def.id]?.uid) {
+            <span class="text-muted">{{ roles[def.id].name }}</span>
+          }
+        </span>
         @if (isLocked(def.id)) {
-          <span class="badge bg-secondary-subtle text-secondary-emphasis">🔒 Assigned by organizer</span>
+          <span class="badge bg-secondary-subtle text-secondary-emphasis">🔒 Set by the organiser</span>
         } @else if (isMine(def.id)) {
           <span class="badge bg-warning-subtle text-warning-emphasis">Yours</span>
         } @else if (isTaken(def.id)) {
@@ -15,23 +27,19 @@
         } @else {
           <span class="badge bg-success-subtle text-success-emphasis">Open</span>
         }
-        <span class="flex-grow-1 fw-semibold small">{{ def.label }}</span>
-        @if (roles[def.id]?.uid) {
-          <span class="text-muted small">{{ roles[def.id].name }}</span>
-        }
         @if (!isLocked(def.id)) {
           @if (isMine(def.id) || (club.isAppAdmin() && isTaken(def.id))) {
-            <button class="btn btn-outline-secondary btn-sm" (click)="release(def.id)">Release</button>
+            <app-confirm-button label="Give up this role" question="Give up this role?" yesLabel="Yes, give it up"
+              (confirmed)="release(def.id)"></app-confirm-button>
           } @else if (!isTaken(def.id)) {
-            <button class="btn btn-danger btn-sm" [disabled]="!state.isCheckedIn()"
-              [title]="attendanceTooltip" (click)="claim(def.id)">Claim</button>
+            <button class="btn btn-danger" [disabled]="!state.isCheckedIn()" (click)="claim(def.id)">Take this role</button>
           }
         }
         @if (club.isAppAdmin() && roles[def.id]?.uid) {
           @if (isRoleConfirmed(roles[def.id].uid, def.id)) {
-            <button type="button" class="btn btn-success btn-sm" [disabled]="isRoleConfirmPending(def.id)" (click)="toggleRoleConfirm(def.id)">{{ isRoleConfirmPending(def.id) ? '…' : '✓ Confirmed' }}</button>
+            <button type="button" class="btn btn-success" [disabled]="isRoleConfirmPending(def.id)" (click)="toggleRoleConfirm(def.id)">{{ isRoleConfirmPending(def.id) ? '…' : '✓ Confirmed' }}</button>
           } @else {
-            <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isRoleConfirmPending(def.id)" (click)="toggleRoleConfirm(def.id)">{{ isRoleConfirmPending(def.id) ? 'Confirming…' : 'Confirm done' }}</button>
+            <button type="button" class="btn btn-outline-secondary" [disabled]="isRoleConfirmPending(def.id)" (click)="toggleRoleConfirm(def.id)">{{ isRoleConfirmPending(def.id) ? 'Confirming…' : 'Confirm done' }}</button>
           }
         }
       </div>

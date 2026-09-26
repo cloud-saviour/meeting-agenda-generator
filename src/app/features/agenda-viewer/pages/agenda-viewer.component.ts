@@ -101,8 +101,8 @@ export class AgendaViewerComponent {
       this.refreshed = true;
       setTimeout(() => (this.refreshed = false), 2000);
     } catch {
+      // Stays visible (no timer) until the next refresh attempt, so it can't be missed.
       this.refreshError = true;
-      setTimeout(() => (this.refreshError = false), 2000);
     } finally {
       this.refreshing = false;
     }

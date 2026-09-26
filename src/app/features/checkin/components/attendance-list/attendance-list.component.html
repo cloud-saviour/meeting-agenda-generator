@@ -1,36 +1,36 @@
 <div class="card p-3 mb-3">
-  <h3 class="section-title">Attendance ({{ attendees.length }})</h3>
+  <h3 class="section-title">Who is coming ({{ attendees.length }})</h3>
   @if (attendees.length) {
-    <div class="d-flex flex-wrap gap-2">
+    <div class="list-group list-group-flush">
       @for (a of attendees; track a.uid) {
-        @if (editingUid === a.uid) {
-          <span class="badge rounded-pill text-bg-light border d-inline-flex align-items-center gap-1">
-            <input class="form-control form-control-sm py-0" style="width:130px" type="text"
+        <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
+          @if (editingUid === a.uid) {
+            <input class="form-control" style="max-width:280px" type="text" aria-label="Name"
               [(ngModel)]="editName" name="editName" (keyup.enter)="saveEdit()">
-            <button type="button" class="btn btn-danger btn-sm py-0 px-1" [disabled]="isEditPending(a.uid)" (click)="saveEdit()">Save</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" (click)="cancelEdit()">Cancel</button>
-          </span>
-        } @else {
-          <span class="badge rounded-pill text-bg-light border d-inline-flex align-items-center gap-1">
-            <b>{{ a.name }}</b>
-            <span class="text-muted">{{ a.joinedAt }}</span>
+            <button type="button" class="btn btn-danger" [disabled]="isEditPending(a.uid)" (click)="saveEdit()">Save</button>
+            <button type="button" class="btn btn-outline-secondary" (click)="cancelEdit()">Cancel</button>
+          } @else {
+            <span class="flex-grow-1">
+              <span class="fw-semibold">{{ a.name }}</span>
+              <span class="text-muted"> · checked in at {{ a.joinedAt }}</span>
+            </span>
             @if (club.isAppAdmin()) {
               @if (isConfirmed(a.uid)) {
-                <button type="button" class="btn btn-success btn-sm py-0 px-1" [disabled]="isConfirmPending(a.uid)" (click)="toggleConfirm(a.uid)">{{ isConfirmPending(a.uid) ? '…' : '✓ Confirmed' }}</button>
+                <button type="button" class="btn btn-success" [disabled]="isConfirmPending(a.uid)" (click)="toggleConfirm(a.uid)">{{ isConfirmPending(a.uid) ? '…' : '✓ Confirmed' }}</button>
               } @else {
-                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" [disabled]="isConfirmPending(a.uid)" (click)="toggleConfirm(a.uid)">{{ isConfirmPending(a.uid) ? 'Confirming…' : 'Confirm present' }}</button>
+                <button type="button" class="btn btn-outline-secondary" [disabled]="isConfirmPending(a.uid)" (click)="toggleConfirm(a.uid)">{{ isConfirmPending(a.uid) ? 'Confirming…' : 'Confirm present' }}</button>
               }
-              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" (click)="startEdit(a.uid, a.name)">Edit</button>
-              <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1" [disabled]="isRemovePending(a.uid)" (click)="remove(a.uid, a.name)">{{ isRemovePending(a.uid) ? '…' : 'Remove' }}</button>
+              <button type="button" class="btn btn-outline-secondary" (click)="startEdit(a.uid, a.name)">Edit</button>
+              <button type="button" class="btn btn-outline-danger" [disabled]="isRemovePending(a.uid)" (click)="remove(a.uid, a.name)">{{ isRemovePending(a.uid) ? '…' : 'Remove' }}</button>
             }
-          </span>
-        }
+          }
+        </div>
       }
     </div>
   } @else {
-    <div class="text-muted fst-italic small">No one has checked in yet — be the first!</div>
+    <div class="text-muted fst-italic">No one has checked in yet. Be the first!</div>
   }
   @if (confirmError) {
-    <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ confirmError }}</div>
+    <div class="alert alert-danger mt-2 mb-0" role="alert">{{ confirmError }}</div>
   }
 </div>

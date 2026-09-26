@@ -3,10 +3,10 @@
      [class.flex-shrink-0]="!fixed"
      [class.d-print-none]="printHidden">
   <img src="logo.png" alt="Agora" height="30">
-  <span class="navbar-brand mb-0 fs-6 fw-bold">{{ title }}</span>
+  <span class="navbar-brand mb-0 fs-5 fw-bold">{{ title }}</span>
   @if (currentUser(); as u) {
-    <span class="text-light small text-truncate" style="max-width:220px;" [title]="u.email">
-      {{ u.displayName || 'Unnamed' }}
+    <span class="text-light text-truncate" style="max-width:260px;" [title]="u.email">
+      {{ u.displayName || u.email }}
     </span>
   }
   <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
@@ -15,7 +15,7 @@
       <a class="btn btn-outline-light btn-sm" [routerLink]="link.path | clubLink" [queryParams]="link.queryParams">{{ link.label }}</a>
     }
     @if (currentUser()) {
-      <button class="btn btn-outline-light btn-sm" (click)="signOut()">🚪 Sign Out</button>
+      <button class="btn btn-outline-light btn-sm" (click)="signOut()">🚪 Sign out</button>
     }
   </div>
 </nav>

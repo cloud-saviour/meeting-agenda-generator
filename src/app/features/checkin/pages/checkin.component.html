@@ -4,10 +4,10 @@
 <div class="container py-4" style="max-width:760px;">
 
   <div class="card p-3 mb-3 border-start border-danger border-4">
-    <h2 class="fs-5">
+    <h2 class="fs-4">
       {{ state.meeting().theme || 'Upcoming Meeting' }}{{ meetingId !== 'default' ? ' #' + meetingId : '' }}
     </h2>
-    <div class="d-flex flex-wrap gap-3 text-muted small">
+    <div class="d-flex flex-wrap gap-3 text-muted">
       <span>Date: <b class="text-body">{{ dateStr || 'TBC' }}</b></span>
       <span>Starts: <b class="text-body">{{ state.meeting().start }}</b></span>
       @if (state.meeting().word) {
@@ -15,12 +15,9 @@
       }
     </div>
     @if (state.meeting().club || state.meeting().sub || state.meeting().addr) {
-      <div class="d-flex flex-wrap gap-3 text-muted small mt-1">
-        @if (state.meeting().club) {
-          <span>Club: <b class="text-body">{{ state.meeting().club }}</b></span>
-        }
-        @if (state.meeting().sub) {
-          <span>Sub Name: <b class="text-body">{{ state.meeting().sub }}</b></span>
+      <div class="d-flex flex-wrap gap-3 text-muted mt-1">
+        @if (state.meeting().club || state.meeting().sub) {
+          <span>Club: <b class="text-body">{{ state.meeting().club }} {{ state.meeting().sub }}</b></span>
         }
         @if (state.meeting().addr) {
           <span>Address: <b class="text-body">{{ state.meeting().addr }}</b></span>
@@ -30,45 +27,52 @@
   </div>
 
   @if (needsGuestIdentification) {
-    <div class="card p-4 shadow-sm mx-auto" style="max-width:360px;">
+    <div class="card p-4 shadow-sm mx-auto" style="max-width:480px;">
       <div class="text-center mb-3">
-        <h2 class="fs-6 fw-bold mb-0">Check In As Guest</h2>
-        <p class="text-muted small mb-0">Enter your email to continue — you'll use the same email to come back and amend your check-in later.</p>
+        <h2 class="fs-4 fw-bold">Check in as a guest</h2>
+        <p class="text-muted mb-0">Type your email address to carry on. Use the same email next time to change your check-in.</p>
       </div>
       <div class="mb-3">
-        <label class="form-label small mb-1">Your Email</label>
-        <input class="form-control form-control-sm" type="email" [(ngModel)]="guestEmailInput" name="guestEmailInput"
+        <label class="form-label fw-semibold" for="guest-email">Your email address</label>
+        <input id="guest-email" class="form-control form-control-lg" type="email" [(ngModel)]="guestEmailInput" name="guestEmailInput"
           (keydown.enter)="identifyAsGuest()" autocomplete="email">
       </div>
       @if (guestEmailError) {
-        <div class="alert alert-danger py-1 px-2 small mb-3">{{ guestEmailError }}</div>
+        <div class="alert alert-danger mb-3" role="alert">{{ guestEmailError }}</div>
       }
-      <button class="btn btn-danger btn-sm w-100" [disabled]="guestIdentifying" (click)="identifyAsGuest()">
+      <button class="btn btn-danger btn-lg w-100 mb-2" [disabled]="guestIdentifying" (click)="identifyAsGuest()">
         {{ guestIdentifying ? 'Continuing…' : 'Continue' }}
       </button>
-      <a class="btn btn-link btn-sm w-100" routerLink="/login">Have an account? Sign in instead</a>
+      <a class="btn btn-link w-100" routerLink="/login">I have an account — sign in instead</a>
     </div>
   } @else {
     <div class="card p-3 mb-3" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
       <div class="d-flex flex-row align-items-end gap-2 flex-wrap">
         <div class="flex-grow-1" style="min-width:180px;">
-          <label class="form-label small mb-1">Your Name</label>
-          <input class="form-control" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Full name" (keyup.enter)="checkIn()" [disabled]="isNameLocked">
+          <label class="form-label fw-semibold" for="checkin-name">Your name</label>
+          <input id="checkin-name" class="form-control form-control-lg" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Your full name" (keyup.enter)="checkIn()" [disabled]="isNameLocked">
         </div>
-        <button class="btn btn-danger" (click)="checkIn()">
-          {{ state.isCheckedIn() ? 'Update' : "I'm Attending" }}
+        <button class="btn btn-danger btn-lg" (click)="checkIn()">
+          {{ state.isCheckedIn() ? 'Save my name' : "I'm attending" }}
         </button>
-        @if (state.isCheckedIn()) {
-          <span class="text-success fw-bold small">&#10003; Checked in</span>
-          <button class="btn btn-outline-secondary" (click)="uncheckIn()">Not Attending</button>
-        }
       </div>
+      @if (state.isCheckedIn()) {
+        <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
+          <span class="text-success fw-bold fs-5">&#10003; You are checked in</span>
+          <app-confirm-button label="I can't come after all" buttonClass="btn btn-outline-secondary"
+            question="You will lose any role, speech or evaluation you took. Carry on?" yesLabel="Yes, I can't come"
+            (confirmed)="uncheckIn()"></app-confirm-button>
+        </div>
+      }
       @if (checkInError) {
-        <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ checkInError }}</div>
+        <div class="alert alert-danger mt-3 mb-0" role="alert">{{ checkInError }}</div>
+      }
+      @if (checkInNotice) {
+        <div class="alert alert-success mt-3 mb-0" role="status">{{ checkInNotice }}</div>
       }
       @if (!state.isCheckedIn()) {
-        <div class="alert alert-warning py-1 px-2 small mt-2 mb-0">
-          Enter your name and tap "I'm Attending" above before you can claim a role, sign up to speak, or evaluate a speech below.
+        <div class="alert alert-warning fs-5 mt-3 mb-0">
+          <b>Step 1:</b> type your name and tap "I'm attending". After that you can take a role, sign up to speak, or evaluate a speech below.
         </div>
       }
     </div>

@@ -2,17 +2,17 @@
 
   <div class="text-center mb-4">
     <img src="logo.png" alt="Agora" height="60" class="mb-2">
-    <h1 class="fs-4 fw-bold" style="color:var(--dark)">Agora Agenda Planner</h1>
-    <p class="text-muted small mb-0">Choose your club</p>
+    <h1 class="fs-3 fw-bold" style="color:var(--dark)">Agora Agenda Planner</h1>
+    <p class="fs-5 mb-0">Choose your club</p>
   </div>
 
   <div class="w-100" style="max-width:640px;">
     @if (loading()) {
-      <p class="text-muted small text-center">Loading clubs…</p>
+      <p class="text-muted text-center">Loading clubs…</p>
     } @else if (error()) {
-      <div class="alert alert-danger small">{{ error() }}</div>
+      <div class="alert alert-danger" role="alert">{{ error() }}</div>
     } @else if (clubs().length === 0 && myClubs().length === 0) {
-      <p class="text-muted small text-center">No clubs are available right now.</p>
+      <p class="text-muted text-center">No clubs are available right now.</p>
     } @else {
 
       @if (myClubs().length > 0) {
@@ -25,10 +25,10 @@
                   <span class="fw-semibold">{{ c.name }}</span>
                   <span class="badge bg-success-subtle text-success-emphasis ms-1">Member</span>
                   @if (c.addressLine) {
-                    <div class="text-muted small">{{ c.addressLine }}</div>
+                    <div class="text-muted">{{ c.addressLine }}</div>
                   }
                 </span>
-                <a class="btn btn-primary btn-sm" [routerLink]="['/c', c.slug]" [attr.aria-label]="'Open ' + c.name">Open</a>
+                <a class="btn btn-primary" [routerLink]="['/c', c.slug]" [attr.aria-label]="'Open ' + c.name">Open</a>
               </div>
             }
           </div>
@@ -44,10 +44,10 @@
                 <span class="flex-grow-1">
                   <span class="fw-semibold">{{ c.name }}</span>
                   @if (c.addressLine) {
-                    <div class="text-muted small">{{ c.addressLine }}</div>
+                    <div class="text-muted">{{ c.addressLine }}</div>
                   }
                 </span>
-                <a class="btn btn-outline-primary btn-sm" [routerLink]="['/c', c.slug]" [attr.aria-label]="'Open ' + c.name">Open</a>
+                <a class="btn btn-outline-primary" [routerLink]="['/c', c.slug]" [attr.aria-label]="'Open ' + c.name">Open</a>
               </div>
             }
           </div>
@@ -56,5 +56,10 @@
     }
   </div>
 
-  <a routerLink="/login" class="small mt-4">Administrator sign in</a>
+  @if (!signedIn()) {
+    <div class="d-flex flex-wrap justify-content-center gap-2 mt-4">
+      <a routerLink="/login" class="btn btn-danger">Sign in</a>
+      <a routerLink="/signup" class="btn btn-outline-danger">Create an account</a>
+    </div>
+  }
 </div>

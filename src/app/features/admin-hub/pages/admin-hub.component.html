@@ -5,23 +5,23 @@
 </app-navbar>
 
 <div class="d-flex flex-column align-items-center" style="margin-top:32px;">
-  <div class="d-flex flex-wrap justify-content-center gap-4 px-3" style="max-width:640px;">
+  <div class="tile-grid px-3">
 
-    <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+    <div class="card tile text-center p-4 shadow-sm position-relative">
       <div class="fs-1 mb-2">&#9881;</div>
       <h2 class="fs-6 fw-bold">Manage Roles</h2>
       <p class="text-muted small mb-0">Admin: manage meeting roles and committee roles</p>
       <a [routerLink]="'/admin/manage-roles' | clubLink" class="stretched-link" aria-label="Open Manage Roles"></a>
     </div>
 
-    <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+    <div class="card tile text-center p-4 shadow-sm position-relative">
       <div class="fs-1 mb-2">&#128081;</div>
       <h2 class="fs-6 fw-bold">Manage Admins</h2>
       <p class="text-muted small mb-0">Grant or revoke admin access for existing members</p>
       <a [routerLink]="'/admin/manage-admins' | clubLink" class="stretched-link" aria-label="Open Manage Admins"></a>
     </div>
 
-    <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+    <div class="card tile text-center p-4 shadow-sm position-relative">
       <div class="fs-1 mb-2">&#129489;&#8205;&#129309;&#8205;&#129489;</div>
       <h2 class="fs-6 fw-bold">
         Members
@@ -34,21 +34,21 @@
     </div>
 
     @if (isAdmin()) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+      <div class="card tile text-center p-4 shadow-sm position-relative">
         <div class="fs-1 mb-2">&#128270;</div>
         <h2 class="fs-6 fw-bold">Audit Log</h2>
         <p class="text-muted small mb-0">Super admin: see who granted or revoked admin access, and when</p>
         <a [routerLink]="'/admin/audit-log' | clubLink" class="stretched-link" aria-label="Open Audit Log"></a>
       </div>
 
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+      <div class="card tile text-center p-4 shadow-sm position-relative">
         <div class="fs-1 mb-2">&#127970;</div>
         <h2 class="fs-6 fw-bold">Clubs</h2>
         <p class="text-muted small mb-0">Super admin: see, create and edit clubs</p>
         <a routerLink="/platform/clubs" class="stretched-link" aria-label="Manage clubs"></a>
       </div>
 
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+      <div class="card tile text-center p-4 shadow-sm position-relative">
         <div class="fs-1 mb-2">&#128101;</div>
         <h2 class="fs-6 fw-bold">All Members</h2>
         <p class="text-muted small mb-0">Super admin: see everyone and add them to a club</p>

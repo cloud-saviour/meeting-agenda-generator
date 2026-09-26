@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { ConfirmButtonComponent } from '../../../../layout/confirm-button/confirm-button.component';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
 import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
@@ -7,6 +8,7 @@ import { ClubContextService } from '../../../../core/club/club-context.service';
 @Component({
   selector: 'app-role-board',
   standalone: true,
+  imports: [ConfirmButtonComponent],
   templateUrl: './role-board.component.html',
 })
 export class RoleBoardComponent {
@@ -17,6 +19,8 @@ export class RoleBoardComponent {
   readonly activeRoles = this.roleDefs.activeMeetingRoles;
 
   claimError: string | null = null;
+  /** A plain-language success message shown after taking or giving up a role. */
+  notice: string | null = null;
   private readonly pendingRoleConfirm = new Set<string>();
 
   get roles() {
@@ -42,8 +46,13 @@ export class RoleBoardComponent {
     return this.state.lockedRoles().includes(roleId);
   }
 
+  private labelOf(roleId: string): string {
+    return this.activeRoles().find((r) => r.id === roleId)?.label ?? 'the role';
+  }
+
   async claim(roleId: string) {
     this.claimError = null;
+    this.notice = null;
     if (!this.state.isCheckedIn()) {
       this.claimError = 'Tap "I\'m Attending" above before claiming a role.';
       return;
@@ -51,12 +60,16 @@ export class RoleBoardComponent {
     const ok = await this.state.claimRole(roleId);
     if (!ok) {
       const owner = this.roles[roleId]?.name || 'someone else';
-      this.claimError = `Just taken by ${owner}.`;
+      this.claimError = `Sorry, ${owner} has just taken it.`;
+      return;
     }
+    this.notice = `You now have the role: ${this.labelOf(roleId)}.`;
   }
 
-  release(roleId: string) {
-    this.state.releaseRole(roleId);
+  async release(roleId: string) {
+    this.claimError = null;
+    await this.state.releaseRole(roleId);
+    this.notice = `Done. "${this.labelOf(roleId)}" is open again.`;
   }
 
   isRoleConfirmed(uid: string, roleId: string): boolean {

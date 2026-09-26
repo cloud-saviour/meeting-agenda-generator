@@ -1,7 +1,8 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { ClubDirectoryService, ClubRecord } from '../../../core/club/club-directory.service';
 import { MembershipService } from '../../membership/services/membership.service';
+import { AuthService } from '../../../core/auth/auth.service';
 
 /**
  * The bare `/` for members and guests: pick which club to open. Only active
@@ -20,6 +21,9 @@ export class ClubPickerComponent implements OnInit {
   private readonly directory = inject(ClubDirectoryService);
   private readonly router = inject(Router);
   private readonly membership = inject(MembershipService);
+  private readonly auth = inject(AuthService);
+
+  readonly signedIn = computed(() => this.auth.currentUser() !== null);
 
   /** Clubs the signed-in person is an approved member of, listed first. */
   readonly myClubs = signal<ClubRecord[]>([]);

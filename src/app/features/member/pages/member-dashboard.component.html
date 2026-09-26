@@ -1,21 +1,21 @@
 <app-navbar title="My Account" [fixed]="true" [links]="navLinks">
 </app-navbar>
 
-<div class="container" style="max-width:640px; padding-top:24px; padding-bottom:40px;">
+<div class="container" style="max-width:680px; padding-top:24px; padding-bottom:40px;">
   @if (myClubs().length > 0) {
     <div class="card p-4 shadow-sm mb-4">
-      <h2 class="fs-6 fw-bold mb-3">My Clubs</h2>
+      <h2 class="fs-4 fw-bold mb-3">My Clubs</h2>
       <div class="list-group list-group-flush">
         @for (m of myClubs(); track m.club.id) {
-          <div class="list-group-item d-flex align-items-center gap-2 px-0">
-            <span class="flex-grow-1 small fw-semibold">{{ m.club.name }}</span>
+          <div class="list-group-item d-flex flex-wrap align-items-center gap-2 px-0">
+            <span class="flex-grow-1 fw-semibold">{{ m.club.name }}</span>
             @switch (m.status) {
               @case ('active') { <span class="badge bg-success-subtle text-success-emphasis">Member</span> }
-              @case ('pending') { <span class="badge bg-warning-subtle text-warning-emphasis">Pending approval</span> }
+              @case ('pending') { <span class="badge bg-warning-subtle text-warning-emphasis">Waiting for approval</span> }
               @case ('rejected') { <span class="badge bg-secondary-subtle text-secondary-emphasis">Declined</span> }
               @default { <span class="badge bg-secondary-subtle text-secondary-emphasis">Removed</span> }
             }
-            <a class="btn btn-outline-primary btn-sm" [routerLink]="['/c', m.club.slug]">Open</a>
+            <a class="btn btn-outline-primary" [routerLink]="['/c', m.club.slug]">Open</a>
           </div>
         }
       </div>
@@ -24,42 +24,45 @@
 
   <div class="card p-4 shadow-sm mb-4">
     @if (!profileLoaded()) {
-      <p class="text-muted small mb-0">Loading your profile…</p>
+      <p class="text-muted mb-0">Loading your details…</p>
     } @else if (!profile()) {
-      <p class="mb-3 small">No member profile yet for this account.</p>
-      <button class="btn btn-danger btn-sm" [disabled]="busy" (click)="createMissingProfile()">
-        Create My Profile
+      <p class="mb-3">Your account does not have a member profile yet. Setting it up takes one tap and uses the name and email you signed in with.</p>
+      <button class="btn btn-danger btn-lg" [disabled]="busy" (click)="createMissingProfile()">
+        Set up my profile
       </button>
     } @else if (editing()) {
-      <label class="form-label small mb-1">Name</label>
-      <input class="form-control form-control-sm mb-2" type="text" [(ngModel)]="displayNameInput" name="displayName">
+      <label class="form-label fw-semibold" for="profile-name">Your name</label>
+      <input id="profile-name" class="form-control form-control-lg mb-3" type="text" [(ngModel)]="displayNameInput" name="displayName">
       @if (editError()) {
-        <div class="alert alert-danger py-1 px-2 small mb-2">{{ editError() }}</div>
+        <div class="alert alert-danger" role="alert">{{ editError() }}</div>
       }
-      <button class="btn btn-danger btn-sm me-2" [disabled]="busy" (click)="saveEdit()">Save</button>
-      <button class="btn btn-outline-secondary btn-sm" [disabled]="busy" (click)="editing.set(false); editError.set(null)">Cancel</button>
+      <button class="btn btn-danger btn-lg me-2" [disabled]="busy" (click)="saveEdit()">Save my name</button>
+      <button class="btn btn-outline-secondary btn-lg" [disabled]="busy" (click)="editing.set(false); editError.set(null)">Cancel</button>
     } @else {
-      <h1 class="fs-5 fw-bold mb-1">{{ profile()!.displayName }}</h1>
-      <p class="text-muted small mb-3">{{ profile()!.email }}</p>
-      <button class="btn btn-outline-secondary btn-sm" (click)="startEdit()">Edit Name</button>
+      <h1 class="fs-3 fw-bold mb-1">{{ profile()!.displayName }}</h1>
+      <p class="text-muted mb-3">{{ profile()!.email }}</p>
+      @if (nameSaved()) {
+        <div class="alert alert-success" role="status">Your name has been saved.</div>
+      }
+      <button class="btn btn-outline-secondary" (click)="startEdit()">Change my name</button>
     }
   </div>
 
   <div class="card p-4 shadow-sm">
-    <h2 class="fs-6 fw-bold mb-3">My Meeting History</h2>
+    <h2 class="fs-4 fw-bold mb-3">Meetings I have taken part in</h2>
     @if (history().length === 0) {
-      <p class="text-muted small mb-0">No meeting history yet.</p>
+      <p class="text-muted mb-0">Nothing here yet. A club admin adds a meeting once they have confirmed you took part.</p>
     } @else {
       <ul class="list-group list-group-flush">
         @for (entry of history(); track entry.meetingId) {
           <li class="list-group-item px-0">
-            <div class="fw-semibold small">{{ entry.theme || 'Meeting ' + entry.meetingId }}</div>
-            <div class="text-muted small">{{ entry.date }}</div>
-            <div class="small">
-              @if (entry.attended) { <span class="badge text-bg-secondary me-1">Attended</span> }
-              @for (role of entry.rolesConfirmed; track role) { <span class="badge text-bg-info me-1">{{ role }}</span> }
-              @if (entry.spoke) { <span class="badge text-bg-success me-1">Spoke</span> }
-              @if (entry.evaluatedSpeakerId) { <span class="badge text-bg-warning me-1">Evaluated a speaker</span> }
+            <div class="fw-semibold">{{ entry.theme || 'Meeting ' + entry.meetingId }}</div>
+            <div class="text-muted mb-1">{{ entry.date }}</div>
+            <div>
+              @if (entry.attended) { <span class="badge text-bg-secondary me-1">Came to the meeting</span> }
+              @for (role of entry.rolesConfirmed; track role) { <span class="badge text-bg-info me-1">{{ roleLabel(role) }}</span> }
+              @if (entry.spoke) { <span class="badge text-bg-success me-1">Gave a speech</span> }
+              @if (entry.evaluatedSpeakerId) { <span class="badge text-bg-warning me-1">Evaluated a speech</span> }
             </div>
           </li>
         }

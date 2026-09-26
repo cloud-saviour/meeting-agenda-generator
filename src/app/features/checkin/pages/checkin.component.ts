@@ -1,3 +1,4 @@
+import { ConfirmButtonComponent } from '../../../layout/confirm-button/confirm-button.component';
 import { Component, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -25,6 +26,7 @@ import { ClubContextService } from '../../../core/club/club-context.service';
     RoleBoardComponent,
     SpeakerSignupComponent,
     EvaluatorSlotsComponent,
+    ConfirmButtonComponent,
   ],
   templateUrl: './checkin.component.html',
 })
@@ -160,8 +162,11 @@ export class CheckinComponent {
     });
   }
 
+  checkInNotice: string | null = null;
+
   async checkIn() {
     this.checkInError = null;
+    this.checkInNotice = null;
     if (!this.nameInput.trim()) {
       this.checkInError = 'Enter your name.';
       return;
@@ -173,14 +178,14 @@ export class CheckinComponent {
     const success = await this.state.checkIn(this.nameInput);
     if (!success) {
       this.checkInError = 'Something went wrong — try again.';
+      return;
     }
+    this.checkInNotice = 'You are checked in. You can now take a role or sign up to speak below.';
   }
 
   async uncheckIn() {
-    const confirmed = confirm(
-      "Mark yourself as not attending? This will also release any role you've claimed, cancel your speech signup, and release any evaluator slot you hold — and you'll be listed as an apology on the agenda."
-    );
-    if (!confirmed) return;
+    // The "are you sure?" step is the inline ConfirmButtonComponent in the template.
     await this.state.uncheckIn();
+    this.checkInNotice = 'You are marked as not attending, and your roles and speech were given up.';
   }
 }

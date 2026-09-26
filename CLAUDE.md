@@ -1703,6 +1703,19 @@ services grew a club-resolution `effect()` too.
 
 **Explicitly out of scope this pass**: deleting a club, logo upload, a club-switcher for a user belonging to multiple clubs, club creation by non-platform admins, billing/subscriptions (`clubs/{clubId}.active` is a placeholder only), and making the hardcoded 7-role DOCX/committee footer structure (`docx.service.ts`'s `PRINTED_ROLE_IDS`, `default-agenda.ts`'s role-id vocabulary) configurable per club - only each club's actual role-holder *data* is isolated, not that fixed structure.
 
+## Accessibility baseline (members are often 60+)
+
+Root text is 18px (`html { font-size: 112.5% }` in `src/styles.css`); nothing visible
+below ~14px; every `.btn` / `.form-control` / `.form-select` is at least 44px tall, so
+existing `-sm` markup is still finger-sized; a 3px `:focus-visible` ring; link/badge
+colours meet 4.5:1. Home/hub tiles use `.tile-grid` + `.tile` (they grow with their text)
+- never give a tile a fixed height/width, it clips larger text. Wording is plain ("Take this
+role", "Give up this role", "I'm attending"). Destructive check-in actions use
+`layout/confirm-button` (`ConfirmButtonComponent`, an inline two-step "Are you sure? Yes / No")
+instead of `confirm()`. Disabled actions explain themselves with visible text, not tooltips,
+and actions show a visible success/error message. Club Home now has the shared navbar (with
+Sign out). `clubLink` leaves `/platform/...` paths unprefixed.
+
 ## Known gaps / next planned work
 
 1. ~~Stand up a real Firebase project~~ — **done**: `agenda-planner-101c4`,

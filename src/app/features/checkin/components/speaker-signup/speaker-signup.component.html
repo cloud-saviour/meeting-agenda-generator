@@ -1,24 +1,27 @@
 <div class="card p-3 mb-3">
-  <h3 class="section-title">Prepared Speakers ({{ speakers.length }} / {{ state.meeting().maxSpeakers }})</h3>
+  <h3 class="section-title">Prepared Speakers ({{ speakers.length }} of {{ state.meeting().maxSpeakers }})</h3>
+
+  @if (notice) {
+    <div class="alert alert-success" role="status">{{ notice }}</div>
+  }
 
   @if (speakers.length) {
     @for (s of speakers; track s.id) {
-      <div class="card bg-body-tertiary p-2 mb-2">
-        <div class="d-flex flex-wrap justify-content-between align-items-center mb-1">
-          <span class="fw-bold small">{{ s.name }}@if (isMine(s.uid)) { <span class="badge bg-warning-subtle text-warning-emphasis ms-1">You</span> }</span>
-          <div class="d-flex align-items-center gap-1">
+      <div class="card bg-body-tertiary p-3 mb-2">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+          <span class="fw-bold">{{ s.name }}@if (isMine(s.uid)) { <span class="badge bg-warning-subtle text-warning-emphasis ms-1">You</span> }</span>
+          <div class="d-flex flex-wrap align-items-center gap-2">
             @if (club.isAppAdmin()) {
               @if (isSpeechConfirmed(s.uid)) {
-                <button type="button" class="btn btn-success btn-sm" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? '…' : '✓ Confirmed' }}</button>
+                <button type="button" class="btn btn-success" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? '…' : '✓ Confirmed' }}</button>
               } @else {
-                <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? 'Confirming…' : 'Confirm spoke' }}</button>
+                <button type="button" class="btn btn-outline-secondary" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? 'Confirming…' : 'Confirm spoke' }}</button>
               }
-            }
-            @if (club.isAppAdmin()) {
-              <button class="btn btn-outline-secondary btn-sm" (click)="startEditSpeaker(s)">Edit</button>
+              <button class="btn btn-outline-secondary" (click)="startEditSpeaker(s)">Edit</button>
             }
             @if (isMine(s.uid) || club.isAppAdmin()) {
-              <button class="btn btn-outline-secondary btn-sm" (click)="remove(s.id)">Remove</button>
+              <app-confirm-button label="Remove sign-up" question="Remove this speech sign-up?" yesLabel="Yes, remove it"
+                (confirmed)="remove(s.id)"></app-confirm-button>
             }
           </div>
         </div>
@@ -26,62 +29,68 @@
         @if (editingSpeakerId === s.id) {
           <div class="row g-2">
             <div class="col-12">
-              <input class="form-control form-control-sm" type="text" [(ngModel)]="editTitle" name="editTitle" placeholder="Speech title">
+              <label class="form-label fw-semibold" [for]="'edit-title-' + s.id">Speech title</label>
+              <input [id]="'edit-title-' + s.id" class="form-control" type="text" [(ngModel)]="editTitle" name="editTitle">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold" [for]="'edit-level-' + s.id">Speech level (optional)</label>
+              <input [id]="'edit-level-' + s.id" class="form-control" type="text" [(ngModel)]="editLevel" name="editLevel">
             </div>
             <div class="col-6">
-              <input class="form-control form-control-sm" type="text" [(ngModel)]="editLevel" name="editLevel" placeholder="Level">
+              <label class="form-label fw-semibold" [for]="'edit-lo-' + s.id">Shortest (minutes)</label>
+              <input [id]="'edit-lo-' + s.id" class="form-control" type="number" min="1" max="60" [(ngModel)]="editTimeLo" name="editTimeLo" (ngModelChange)="onEditTimeLoChange()">
             </div>
             <div class="col-6">
-              <div class="input-group input-group-sm">
-                <input class="form-control" type="number" min="1" max="60" [(ngModel)]="editTimeLo" name="editTimeLo" (ngModelChange)="onEditTimeLoChange()">
-                <span class="input-group-text">–</span>
-                <input class="form-control" type="number" min="1" max="60" [(ngModel)]="editTimeHi" name="editTimeHi" (ngModelChange)="onEditTimeHiChange()">
-              </div>
+              <label class="form-label fw-semibold" [for]="'edit-hi-' + s.id">Longest (minutes)</label>
+              <input [id]="'edit-hi-' + s.id" class="form-control" type="number" min="1" max="60" [(ngModel)]="editTimeHi" name="editTimeHi" (ngModelChange)="onEditTimeHiChange()">
             </div>
             <div class="col-12 d-flex gap-2">
-              <button class="btn btn-danger btn-sm" [disabled]="isSpeakerEditPending(s.id)" (click)="saveEditSpeaker()">Save</button>
-              <button class="btn btn-outline-secondary btn-sm" (click)="cancelEditSpeaker()">Cancel</button>
+              <button class="btn btn-danger" [disabled]="isSpeakerEditPending(s.id)" (click)="saveEditSpeaker()">Save</button>
+              <button class="btn btn-outline-secondary" (click)="cancelEditSpeaker()">Cancel</button>
             </div>
           </div>
         } @else {
-          <div class="text-muted small">
-            "{{ s.title }}"@if (s.level) { &nbsp;&middot;&nbsp;{{ s.level }} } &nbsp;&middot;&nbsp; {{ s.timePref }} mins
+          <div class="text-muted">
+            "{{ s.title }}"@if (s.level) { &nbsp;&middot;&nbsp;{{ s.level }} } &nbsp;&middot;&nbsp; {{ s.timePref }} minutes
           </div>
         }
       </div>
     }
   } @else {
-    <div class="text-muted fst-italic small">No speakers signed up yet.</div>
+    <div class="text-muted fst-italic">No speakers have signed up yet.</div>
   }
 
   @if (error) {
-    <div class="alert alert-danger py-1 px-2 small mt-2 mb-0">{{ error }}</div>
+    <div class="alert alert-danger mt-2 mb-0" role="alert">{{ error }}</div>
   }
 
   @if (!alreadySignedUp && !isFull) {
     <div class="mt-3">
-      <div class="mb-2">
-        <label class="form-label small mb-1">Speech Title</label>
-        <input class="form-control form-control-sm" type="text" [(ngModel)]="title" name="title" placeholder="e.g. The Power of Pause">
+      <h4 class="fs-5 fw-bold">Sign up to speak</h4>
+      @if (!state.isCheckedIn()) {
+        <p class="text-muted">Check in above first, then you can sign up to speak.</p>
+      }
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="speech-title">Speech title</label>
+        <input id="speech-title" class="form-control form-control-lg" type="text" [(ngModel)]="title" name="title" placeholder="For example: The Power of Pause">
       </div>
-      <div class="row g-2 mb-2">
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="speech-level">Speech level (optional)</label>
+        <input id="speech-level" class="form-control form-control-lg" type="text" [(ngModel)]="level" name="level" placeholder="For example: CC5">
+      </div>
+      <div class="row g-2 mb-3">
         <div class="col-6">
-          <label class="form-label small mb-1">Pathways Project / Level</label>
-          <input class="form-control form-control-sm" type="text" [(ngModel)]="level" name="level" placeholder="e.g. CC5">
+          <label class="form-label fw-semibold" for="speech-lo">Shortest (minutes)</label>
+          <input id="speech-lo" class="form-control form-control-lg" type="number" min="1" max="60" [(ngModel)]="timeLo" name="timeLo" (ngModelChange)="onTimeLoChange()">
         </div>
         <div class="col-6">
-          <label class="form-label small mb-1">Time (mins)</label>
-          <div class="input-group input-group-sm">
-            <input class="form-control" type="number" min="1" max="60" [(ngModel)]="timeLo" name="timeLo" (ngModelChange)="onTimeLoChange()">
-            <span class="input-group-text">–</span>
-            <input class="form-control" type="number" min="1" max="60" [(ngModel)]="timeHi" name="timeHi" (ngModelChange)="onTimeHiChange()">
-          </div>
+          <label class="form-label fw-semibold" for="speech-hi">Longest (minutes)</label>
+          <input id="speech-hi" class="form-control form-control-lg" type="number" min="1" max="60" [(ngModel)]="timeHi" name="timeHi" (ngModelChange)="onTimeHiChange()">
         </div>
       </div>
-      <button class="btn btn-danger btn-sm" [disabled]="!state.isCheckedIn()"
-        [title]="attendanceTooltip" (click)="submit()">+ Sign Up to Speak</button>
+      <button class="btn btn-danger btn-lg" [disabled]="!state.isCheckedIn()" (click)="submit()">Sign up to speak</button>
     </div>
   } @else if (isFull && !alreadySignedUp) {
-    <div class="text-muted small mt-2">All speaker slots for this meeting are taken.</div>
+    <div class="text-muted mt-2">All the speaker places for this meeting are taken.</div>
   }
 </div>
