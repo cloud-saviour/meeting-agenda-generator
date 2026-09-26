@@ -23,3 +23,12 @@ export function legacyClubRedirectGuard(segment: string): CanActivateFn {
     });
   };
 }
+
+/**
+ * Same backward compatibility as above, for bookmarked un-prefixed
+ * `/admin/...` and `/member` pages: prepends the default club's `/c/<slug>`
+ * to the whole requested URL, so any sub-path, query string and fragment
+ * survive unchanged (`/admin/agendas?x=1` -> `/c/<slug>/admin/agendas?x=1`).
+ */
+export const legacyClubPrefixGuard: CanActivateFn = (_route, state) =>
+  inject(Router).parseUrl(`/c/${environment.defaultClubSlug}${state.url}`);
