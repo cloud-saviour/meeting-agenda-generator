@@ -31,6 +31,7 @@ export type AuditAction =
   | 'agenda.delete'
   | 'attendance.confirm'
   | 'attendance.unconfirm'
+  | 'club.create'
   | 'checkin.adminEdit'
   | 'checkin.adminRemove';
 

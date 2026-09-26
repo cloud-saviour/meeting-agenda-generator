@@ -124,5 +124,12 @@ export const routes: Routes = [
       },
     ],
   },
+  {
+    // Platform-admin-only and club-agnostic: it creates clubs, so it lives
+    // outside /c/<slug>. superAdminGuard checks the real global claim.
+    path: 'platform/clubs/new',
+    canActivate: [superAdminGuard],
+    loadComponent: () => import('./features/platform-clubs/pages/create-club.component').then((m) => m.CreateClubComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

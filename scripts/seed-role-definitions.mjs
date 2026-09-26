@@ -27,6 +27,7 @@
 // isAppAdmin(clubId) to write this collection, and the Admin SDK bypasses
 // security rules by design, same reasoning as scripts/seed-admin-user.mjs.
 
+import { readFileSync } from 'node:fs';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -39,26 +40,11 @@ if (!isProd) {
 const PROJECT_ID = isProd ? 'agenda-planner-101c4' : 'meeting-agenda-generator';
 const CLUB_SLUG = process.argv.find((a) => a.startsWith('--club='))?.slice(7) ?? 'kings-speakers-12'; // default matches scripts/migrate-to-clubs.mjs; override with --club=<slug>
 
-const MEETING_ROLES = [
-  { id: 'toastmaster', label: 'Evening Chairman', order: 0, active: true },
-  { id: 'generalEvaluator', label: 'Meeting Evaluator', order: 1, active: true },
-  { id: 'grammarian', label: 'Grammarian', order: 2, active: true },
-  { id: 'timer', label: 'Timekeeper', order: 3, active: true },
-  { id: 'ahCounter', label: 'Filler Word Counter', order: 4, active: true },
-  { id: 'evaluationChairman', label: 'Evaluation Chairman', order: 5, active: true },
-  { id: 'impromptuMaster', label: 'Impromptu Master', order: 6, active: true },
-  { id: 'evaluator', label: 'Evaluator', order: 7, active: true },
-];
-
-const COMMITTEE_ROLES = [
-  { id: 'president', label: 'President', order: 0, active: true },
-  { id: 'secretary', label: 'Secretary', order: 1, active: true },
-  { id: 'vpEducation', label: 'VP Education', order: 2, active: true },
-  { id: 'communityManager', label: 'Community Manager', order: 3, active: true },
-  { id: 'vpMembership', label: 'VP Membership', order: 4, active: true },
-  { id: 'rsaAmbassador', label: 'RSA Ambassador', order: 5, active: true },
-  { id: 'treasurer', label: 'Treasurer', order: 6, active: true },
-];
+// Single source of truth shared with the in-app "create a club" screen
+// (core/club/club-provisioning.service.ts) - edit the JSON, not this file.
+const STANDARD_ROLES = JSON.parse(readFileSync(new URL('../src/app/core/club/standard-roles.json', import.meta.url), 'utf8'));
+const MEETING_ROLES = STANDARD_ROLES.meeting;
+const COMMITTEE_ROLES = STANDARD_ROLES.committee;
 
 async function seedKind(ref, kind, roles) {
   const existing = await ref.where('kind', '==', kind).limit(1).get();
