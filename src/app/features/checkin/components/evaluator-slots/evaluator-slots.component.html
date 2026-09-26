@@ -16,6 +16,9 @@
             @if (isMine(s.evaluator?.uid)) {
               <span class="badge bg-warning-subtle text-warning-emphasis">You</span>
               <button class="btn btn-outline-secondary btn-sm" (click)="release(s.id)">Release</button>
+            } @else if (auth.isAppAdmin()) {
+              <span class="badge bg-danger-subtle text-danger-emphasis">{{ s.evaluator?.name }}</span>
+              <button class="btn btn-outline-secondary btn-sm" (click)="release(s.id)">Release</button>
             } @else {
               <span class="badge bg-danger-subtle text-danger-emphasis">{{ s.evaluator?.name }}</span>
             }

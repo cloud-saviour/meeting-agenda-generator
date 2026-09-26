@@ -50,6 +50,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/agenda-viewer/pages/agenda-draft-preview.component').then((m) => m.AgendaDraftPreviewComponent),
       },
       {
+        path: 'hub',
+        loadComponent: () => import('./features/admin-hub/pages/admin-hub.component').then((m) => m.AdminHubComponent),
+      },
+      {
         path: 'manage-agendas',
         loadComponent: () => import('./features/admin-agendas-hub/pages/admin-agendas-hub.component').then((m) => m.AdminAgendasHubComponent),
       },

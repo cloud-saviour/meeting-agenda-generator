@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
+import { waitForReady } from '../../../core/auth/wait-for-ready';
 import { MemberProfileService } from '../../member/services/member-profile.service';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
@@ -20,8 +21,23 @@ export class SignupComponent {
   displayName = '';
   email = '';
   password = '';
+  confirmPassword = '';
+  showPassword = false;
   error: string | null = null;
   busy = false;
+
+  constructor() {
+    // Unguarded route (anyone, signed in or not, can navigate here) — an
+    // already-signed-in account has no business seeing the create-account
+    // form, so bounce them home once auth state is known. waitForReady()
+    // avoids acting on the briefly-stale currentUser() a cold page load
+    // starts with, same as authGuard/memberGuard.
+    waitForReady(this.auth).then(() => {
+      if (this.auth.currentUser()) {
+        this.router.navigateByUrl('/');
+      }
+    });
+  }
 
   async submit() {
     this.error = null;
@@ -31,6 +47,10 @@ export class SignupComponent {
     }
     if (this.password.length < 6) {
       this.error = 'Password must be at least 6 characters.';
+      return;
+    }
+    if (this.password !== this.confirmPassword) {
+      this.error = 'Passwords do not match.';
       return;
     }
 

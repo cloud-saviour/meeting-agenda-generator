@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CheckinStateService } from '../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../services/attendance-confirmation.service';
 import { AttendanceListComponent } from '../components/attendance-list/attendance-list.component';
+import { ApologiesListComponent } from '../components/apologies-list/apologies-list.component';
 import { RoleBoardComponent } from '../components/role-board/role-board.component';
 import { SpeakerSignupComponent } from '../components/speaker-signup/speaker-signup.component';
 import { EvaluatorSlotsComponent } from '../components/evaluator-slots/evaluator-slots.component';
@@ -19,6 +20,7 @@ import { AuthService } from '../../../core/auth/auth.service';
     RouterLink,
     NavbarComponent,
     AttendanceListComponent,
+    ApologiesListComponent,
     RoleBoardComponent,
     SpeakerSignupComponent,
     EvaluatorSlotsComponent,

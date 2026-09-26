@@ -30,7 +30,9 @@ export type AuditAction =
   | 'agenda.unpublish'
   | 'agenda.delete'
   | 'attendance.confirm'
-  | 'attendance.unconfirm';
+  | 'attendance.unconfirm'
+  | 'checkin.adminEdit'
+  | 'checkin.adminRemove';
 
 /**
  * One immutable entry in the append-only `auditLog` collection — see
