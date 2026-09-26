@@ -339,6 +339,9 @@ src/app/
                       `AuthService.signOut()` directly rather than
                       navigating — Home is otherwise the one page with no
                       other way to sign out.
+                      A "Preview Agenda Meeting #<no>" tile (→ `/preview?meeting=<no>`,
+                      public) sits right after the check-in tile and is shown
+                      under the same `nearestEntry()` condition, for everyone.
                       The "Meeting Check-in" tile only appears when
                       `PublishedAgendaService.nearestEntry()` is non-null —
                       omitted entirely (not shown-disabled) when nothing's
