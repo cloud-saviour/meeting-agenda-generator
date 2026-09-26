@@ -59,12 +59,25 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.active == true;
-      allow update: if isAdmin()
+      // Platform admin: anything except slug/createdAt. A club's own admin
+      // (real claim or granted): only the branding fields below, never
+      // `active`/`slug`/`createdAt`, and logos (stored inline as data URLs)
+      // are capped so the club document stays well under Firestore's 1MB limit.
+      allow update: if (isAdmin()
         && request.resource.data.slug == resource.data.slug
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
-        && request.resource.data.active is bool;
+        && request.resource.data.active is bool)
+        || (isAppAdmin(clubId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['name', 'subLine', 'addressLine', 'missionStatement', 'website', 'facebookPage', 'logoLeft', 'logoRight'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.logoLeft is string
+        && request.resource.data.logoLeft.size() < 700000
+        && request.resource.data.logoRight is string
+        && request.resource.data.logoRight.size() < 700000);
       allow delete: if false;
 
       // Granted admin power for THIS club — a Firestore document, not a

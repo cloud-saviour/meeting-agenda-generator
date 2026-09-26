@@ -1,3 +1,4 @@
+import { ConfirmButtonComponent } from '../../../../layout/confirm-button/confirm-button.component';
 import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CheckinStateService } from '../../services/checkin-state.service';
@@ -8,7 +9,7 @@ import { CheckinSpeaker } from '../../models/checkin.models';
 @Component({
   selector: 'app-speaker-signup',
   standalone: true,
-  imports: [FormsModule],
+  imports: [ConfirmButtonComponent, FormsModule],
   templateUrl: './speaker-signup.component.html',
 })
 export class SpeakerSignupComponent {
@@ -28,6 +29,8 @@ export class SpeakerSignupComponent {
   timeLo = 7;
   timeHi = 10;
   error: string | null = null;
+  /** A plain-language success message shown after signing up or removing a sign-up. */
+  notice: string | null = null;
   private readonly pendingSpeechConfirm = new Set<string>();
 
   editingSpeakerId: string | null = null;
@@ -57,6 +60,7 @@ export class SpeakerSignupComponent {
 
   async submit() {
     this.error = null;
+    this.notice = null;
     if (!this.state.isCheckedIn()) {
       this.error = 'Tap "I\'m Attending" above before signing up to speak.';
       return;
@@ -76,6 +80,7 @@ export class SpeakerSignupComponent {
     }
     this.title = '';
     this.level = '';
+    this.notice = 'You are signed up to speak. Thank you!';
   }
 
   /** Mirrors AgendaStateService.updateSpeaker()'s own timeLo<=timeHi enforcement, for the same input-group UI. */
@@ -87,8 +92,10 @@ export class SpeakerSignupComponent {
     if (this.timeHi < this.timeLo) this.timeLo = this.timeHi;
   }
 
-  remove(id: string) {
-    this.state.removeSpeakerSignup(id);
+  async remove(id: string) {
+    this.error = null;
+    await this.state.removeSpeakerSignup(id);
+    this.notice = 'The speech sign-up was removed.';
   }
 
   isMine(uid: string): boolean {

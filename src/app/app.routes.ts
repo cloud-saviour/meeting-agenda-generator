@@ -108,6 +108,10 @@ export const routes: Routes = [
             loadComponent: () => import('./features/admin-committee-roles/pages/admin-committee-roles.component').then((m) => m.AdminCommitteeRolesComponent),
           },
           {
+            path: 'club',
+            loadComponent: () => import('./features/club-settings/pages/club-settings.component').then((m) => m.ClubSettingsComponent),
+          },
+          {
             path: 'manage-admins',
             loadComponent: () => import('./features/admin-admins/pages/admin-admins.component').then((m) => m.AdminAdminsComponent),
           },

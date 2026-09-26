@@ -9,14 +9,30 @@
      links) to pick up the brand red. */
   --bs-primary: var(--red);
   --bs-primary-rgb: 206, 60, 23;
-  --bs-link-color: var(--red);
-  --bs-link-color-rgb: 206, 60, 23;
-  --bs-link-hover-color: #b33210;
+  /* Links sit on the grey page (#e8eaed): the brand red is only 4.1:1 there, so links use a
+     darker red (5.6:1) to stay readable. Buttons keep the brand red. */
+  --bs-link-color: #A8300F;
+  --bs-link-color-rgb: 168, 48, 15;
+  --bs-link-hover-color: #8C2409;
   --bs-danger: var(--red);
   --bs-danger-rgb: 206, 60, 23;
 }
 
-body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
+/* Bigger by default for older members: 18px root (was a fixed 13px body), so every rem/em-based
+   Bootstrap size scales with it. Nothing visible should end up under 14px. */
+html { font-size: 112.5%; }
+body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 1rem; line-height: 1.5; }
+
+/* Touch targets: ~44px minimum for every button and input, including the many
+   existing `-sm` variants, so no template needs touching for this. */
+.btn, .btn-sm { min-height: 44px; padding: .5rem 1rem; font-size: 1rem; }
+.form-control, .form-select, .form-control-sm, .form-select-sm { min-height: 44px; font-size: 1rem; padding: .5rem .75rem; }
+.form-check-input { width: 1.35em; height: 1.35em; margin-top: .15em; }
+.badge { font-size: .85rem; padding: .4em .7em; }
+.badge.bg-info { color: #212529 !important; }
+
+/* A clear keyboard/tap focus ring (the default form ring below is very faint). */
+:focus-visible { outline: 3px solid #1a56db; outline-offset: 2px; }
 
 /* Bootstrap's precompiled CSS seeds *component* colors (buttons, subtle
    badges, alerts, focus rings) as static values on component-local custom
@@ -63,20 +79,25 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 13px; }
 }
 .form-control:focus, .form-select:focus {
   border-color: var(--red);
-  box-shadow: 0 0 0 .2rem rgba(206, 60, 23, .15);
+  box-shadow: 0 0 0 .25rem rgba(206, 60, 23, .35);
 }
+
+/* Home tiles: as many columns as fit (one on a phone), and they grow with the text
+   instead of being clipped by a fixed height. */
+.tile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; width: 100%; max-width: 980px; }
+.tile { min-height: 11rem; }
 
 /* Section heading — small uppercase label with a red underline.
    No Bootstrap utility covers this exact treatment. */
 .section-title {
-  font-size: .68rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .7px; color: var(--dark);
+  font-size: .85rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--dark);
   border-bottom: 2px solid var(--red); padding-bottom: 4px; margin-bottom: 10px;
 }
 
 /* CDK drag-drop visuals (unrelated to Bootstrap, must stay). */
 .drag-handle {
-  cursor: grab; color: #bbb; font-size: .9rem; flex-shrink: 0;
+  cursor: grab; color: #767676; font-size: .9rem; flex-shrink: 0;
   padding: 0 3px; user-select: none; line-height: 1;
 }
 .drag-handle:active { cursor: grabbing; }

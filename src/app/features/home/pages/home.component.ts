@@ -4,12 +4,13 @@ import { PublishedAgendaService } from '../../agenda-editor/services/published-a
 import { AuthService } from '../../../core/auth/auth.service';
 import { ClubContextService } from '../../../core/club/club-context.service';
 import { ClubLinkPipe } from '../../../core/club/club-link.pipe';
+import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 import { MembershipService } from '../../membership/services/membership.service';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [RouterLink, ClubLinkPipe],
+  imports: [RouterLink, ClubLinkPipe, NavbarComponent],
   templateUrl: './home.component.html',
 })
 export class HomeComponent {
@@ -34,9 +35,6 @@ export class HomeComponent {
   /** A signed-in non-admin member gets a "Member Profile" tile instead of "Sign In" — isAppAdmin() is checked first in the template, so this only ever matters for the non-admin case. */
   readonly isSignedIn = computed(() => this.auth.currentUser() !== null);
 
-  /** Home has no navbar (see CLAUDE.md), so it's the one page that needs its own "who am I signed in as" line rather than relying on NavbarComponent's. */
-  readonly currentUser = this.auth.currentUser;
-
   async requestToJoin(): Promise<void> {
     await this.runMembership(() => this.membership.requestToJoin());
   }
@@ -56,9 +54,5 @@ export class HomeComponent {
     } finally {
       this.membershipBusy.set(false);
     }
-  }
-
-  signOut(): void {
-    this.auth.signOut();
   }
 }

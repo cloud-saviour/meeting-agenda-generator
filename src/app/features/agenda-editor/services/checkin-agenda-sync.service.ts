@@ -80,9 +80,18 @@ export class CheckinAgendaSyncService {
    * slot on an existing signup, so that claim almost always lands AFTER the
    * speaker was imported). A Set could only ever tell "already imported"
    * from "new", silently dropping every later evaluator change.
+   *
+   * Each check-in sign-up is IMPORTED only once (`MeetingData.speakerSyncIds`).
+   * After that the row belongs to the admin: deleting it stays deleted, even
+   * though this sync re-runs on every check-in change and the sign-up may still
+   * be on the check-in sheet. A sign-up whose name already matches a row (added
+   * by hand, or imported before this tracking existed) is just marked as seen.
    */
   private applySpeakers(state: AgendaStateService, checkin: CheckinStateService): void {
     const spksByName = new Map(state.spks().map((s) => [s.name.trim().toLowerCase(), s]));
+    const synced: Record<string, string> = { ...(state.meeting().speakerSyncIds ?? {}) };
+    let syncedChanged = false;
+
     for (const sp of checkin.speakers()) {
       const key = sp.name.trim().toLowerCase();
       if (!key) continue;
@@ -93,8 +102,13 @@ export class CheckinAgendaSyncService {
         if (existing.evaluator !== checkinEvaluator) {
           state.updateSpeaker(existing.id, 'evaluator', checkinEvaluator);
         }
+        if (!(sp.id in synced)) {
+          synced[sp.id] = sp.name;
+          syncedChanged = true;
+        }
         continue;
       }
+      if (sp.id in synced) continue;
 
       const { timeLo, timeHi } = this.parseTimePref(sp.timePref);
       state.addSpeaker({
@@ -105,7 +119,11 @@ export class CheckinAgendaSyncService {
         timeLo,
         timeHi,
       });
+      synced[sp.id] = sp.name;
+      syncedChanged = true;
     }
+
+    if (syncedChanged) state.updateMeeting({ speakerSyncIds: synced });
   }
 
   /**

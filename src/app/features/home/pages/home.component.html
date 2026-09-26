@@ -1,95 +1,89 @@
-<div class="d-flex flex-column align-items-center justify-content-center vh-100 bg-body-secondary">
+<app-navbar title="Agora Agenda Planner" [fixed]="true"></app-navbar>
 
-  <div class="text-center mb-5">
+<div class="d-flex flex-column align-items-center bg-body-secondary py-4 px-3" style="min-height:calc(100vh - 62px);">
+
+  <div class="text-center mb-4">
     <img src="logo.png" alt="Agora" height="60" class="mb-2">
-    <h1 class="fs-4 fw-bold" style="color:var(--dark)">Agora Agenda Planner</h1>
-    @if (currentUser(); as u) {
-      <p class="text-muted small mb-0">Signed in as <span class="fw-semibold">{{ u.displayName || 'Unnamed' }}</span> — {{ u.email }}</p>
+    @if (clubName()) {
+      <p class="fs-5 mb-1">{{ clubName() }}</p>
     }
     @if (membership.status() === 'active') {
-      <p class="small text-success mb-0">&#10003; Member of {{ clubName() }}</p>
+      <p class="text-success fw-semibold mb-1">&#10003; You are a member of this club</p>
     }
-    <a routerLink="/" class="small">Switch club</a>
+    <a routerLink="/" class="fs-6">Choose a different club</a>
   </div>
 
-  <div class="d-flex flex-wrap justify-content-center gap-4 px-3" style="max-width:1100px;">
+  <div class="tile-grid">
 
     @if (isAppAdmin()) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+      <div class="card tile text-center p-4 shadow-sm position-relative">
         <div class="fs-1 mb-2">&#128221;</div>
-        <h2 class="fs-6 fw-bold">Agendas</h2>
-        <p class="text-muted small mb-0">Build a new agenda or reopen a saved one</p>
+        <h2 class="fs-5 fw-bold">Agendas</h2>
+        <p class="text-muted mb-0">Build a new agenda or reopen a saved one</p>
         <a [routerLink]="'/admin/manage-agendas' | clubLink" class="stretched-link" aria-label="Open Agendas"></a>
       </div>
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+      <div class="card tile text-center p-4 shadow-sm position-relative">
         <div class="fs-1 mb-2">&#128736;</div>
-        <h2 class="fs-6 fw-bold">Admin</h2>
-        <p class="text-muted small mb-0">Manage roles, admins, and the audit log</p>
+        <h2 class="fs-5 fw-bold">Admin</h2>
+        <p class="text-muted mb-0">Manage roles, admins, members and the audit log</p>
         <a [routerLink]="'/admin/hub' | clubLink" class="stretched-link" aria-label="Open Admin"></a>
       </div>
     }
 
-    @if (isSignedIn()) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
-        <div class="fs-1 mb-2">&#128100;</div>
-        <h2 class="fs-6 fw-bold">Member Profile</h2>
-        <p class="text-muted small mb-0">View your profile and meeting history</p>
-        <a [routerLink]="'/member' | clubLink" class="stretched-link" aria-label="Open Member Profile"></a>
+    @if (nextMeeting(); as m) {
+      <div class="card tile text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#9989;</div>
+        <h2 class="fs-5 fw-bold">Check in to Meeting #{{ m.no }}{{ isSignedIn() ? '' : ' (as a guest)' }}</h2>
+        <p class="text-muted mb-0">{{ m.theme || 'Meeting ' + m.no }} — say you are coming, take a role, or sign up to speak</p>
+        <a [routerLink]="'/checkin' | clubLink" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Check in to the meeting"></a>
       </div>
-    } @else {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
-        <div class="fs-1 mb-2">&#128272;</div>
-        <h2 class="fs-6 fw-bold">Sign In</h2>
-        <p class="text-muted small mb-0">Admin: sign in to manage agendas and roles</p>
-        <a routerLink="/login" class="stretched-link" aria-label="Open Sign In"></a>
+
+      <div class="card tile text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#128203;</div>
+        <h2 class="fs-5 fw-bold">See the Agenda for Meeting #{{ m.no }}</h2>
+        <p class="text-muted mb-0">{{ m.theme || 'Meeting ' + m.no }} — read the programme for this meeting</p>
+        <a [routerLink]="'/preview' | clubLink" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="See the agenda"></a>
       </div>
     }
 
-    @if (nextMeeting(); as m) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
-        <div class="fs-1 mb-2">&#128101;</div>
-        <h2 class="fs-6 fw-bold">Meeting #{{ m.no }} Check-in{{ isSignedIn() ? '' : ' As Guest' }}</h2>
-        <p class="text-muted small mb-0">{{ m.theme || 'Meeting ' + m.no }} — check in, claim a role, or sign up to speak</p>
-        <a [routerLink]="'/checkin' | clubLink" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Open Meeting Check-in"></a>
+    @if (isSignedIn()) {
+      <div class="card tile text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#128100;</div>
+        <h2 class="fs-5 fw-bold">My Account</h2>
+        <p class="text-muted mb-0">See your details and the meetings you have taken part in</p>
+        <a [routerLink]="'/member' | clubLink" class="stretched-link" aria-label="Open My Account"></a>
       </div>
-
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
-        <div class="fs-1 mb-2">&#128065;</div>
-        <h2 class="fs-6 fw-bold">Preview Agenda Meeting #{{ m.no }}</h2>
-        <p class="text-muted small mb-0">{{ m.theme || 'Meeting ' + m.no }} — see the agenda for this meeting</p>
-        <a [routerLink]="'/preview' | clubLink" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Open Preview Agenda"></a>
+    } @else {
+      <div class="card tile text-center p-4 shadow-sm position-relative">
+        <div class="fs-1 mb-2">&#128273;</div>
+        <h2 class="fs-5 fw-bold">Sign in to your account</h2>
+        <p class="text-muted mb-0">Members and administrators sign in here</p>
+        <a routerLink="/login" class="stretched-link" aria-label="Sign in"></a>
       </div>
     }
 
     @if (showMembershipTile()) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+      <div class="card tile text-center p-4 shadow-sm">
         @if (membership.status() === 'pending') {
           <div class="fs-1 mb-2">&#9203;</div>
-          <h2 class="fs-6 fw-bold">Membership pending</h2>
-          <p class="text-muted small mb-2">Waiting for a club admin to approve your request</p>
-          <button type="button" class="btn btn-outline-secondary btn-sm align-self-center" [disabled]="membershipBusy()" (click)="cancelRequest()">Cancel request</button>
+          <h2 class="fs-5 fw-bold">Request sent</h2>
+          <p class="text-muted mb-3">A club admin will approve you soon. You do not need to do anything else.</p>
+          <button type="button" class="btn btn-outline-secondary mt-auto" [disabled]="membershipBusy()" (click)="cancelRequest()">Cancel my request</button>
         } @else {
           <div class="fs-1 mb-2">&#129309;</div>
-          <h2 class="fs-6 fw-bold">Join this club</h2>
-          <p class="text-muted small mb-0">
-            @if (membership.status() === 'rejected') { Your last request was declined — you can ask again }
-            @else if (membership.status() === 'removed') { You were removed — you can ask to rejoin }
-            @else { Ask the club admins to approve your membership }
+          <h2 class="fs-5 fw-bold">Join this club</h2>
+          <p class="text-muted mb-3">
+            @if (membership.status() === 'rejected') { Your last request was declined. You can ask again. }
+            @else if (membership.status() === 'removed') { You were removed from this club. You can ask to rejoin. }
+            @else { Ask to become a member. A club admin will approve you. }
           </p>
-          <button type="button" class="stretched-link" style="background:none;border:none;padding:0;" [disabled]="membershipBusy()" (click)="requestToJoin()" aria-label="Request to join this club"></button>
+          <button type="button" class="btn btn-danger mt-auto" [disabled]="membershipBusy()" (click)="requestToJoin()">
+            {{ membershipBusy() ? 'Sending…' : 'Ask to join' }}
+          </button>
         }
         @if (membershipError()) {
-          <div class="text-danger small mt-1">{{ membershipError() }}</div>
+          <div class="alert alert-danger mt-3 mb-0" role="alert">{{ membershipError() }}</div>
         }
-      </div>
-    }
-
-    @if (isSignedIn()) {
-      <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
-        <div class="fs-1 mb-2">&#128682;</div>
-        <h2 class="fs-6 fw-bold">Sign Out</h2>
-        <p class="text-muted small mb-0">End your session on this device</p>
-        <button type="button" class="stretched-link" style="background:none;border:none;padding:0;" (click)="signOut()" aria-label="Sign Out"></button>
       </div>
     }
 

@@ -8,6 +8,7 @@ import { MemberHistoryEntry, MemberProfile } from '../models/member.models';
 import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
 import { PublishedAgendaService } from '../../agenda-editor/services/published-agenda.service';
 import { MembershipService, MyClub } from '../../membership/services/membership.service';
+import { RoleDefinitionService } from '../../../core/services/role-definition.service';
 
 @Component({
   selector: 'app-member-dashboard',
@@ -20,6 +21,10 @@ export class MemberDashboardComponent {
   private readonly memberProfile = inject(MemberProfileService);
   private readonly memberHistory = inject(MemberHistoryService);
   private readonly publishedAgenda = inject(PublishedAgendaService);
+  private readonly roleDefs = inject(RoleDefinitionService);
+
+  /** Shown after a successful name change, so saving never looks like nothing happened. */
+  readonly nameSaved = signal(false);
   private readonly membership = inject(MembershipService);
 
   readonly myClubs = signal<MyClub[]>([]);
@@ -68,7 +73,13 @@ export class MemberDashboardComponent {
       .catch((err) => console.error('listMyClubs failed', err));
   }
 
+  /** A role id like `vpEducation` shown as the club's own label ("VP Education"). */
+  roleLabel(roleId: string): string {
+    return this.roleDefs.all().find((r) => r.id === roleId)?.label ?? roleId;
+  }
+
   startEdit() {
+    this.nameSaved.set(false);
     this.editError.set(null);
     this.editing.set(true);
   }
@@ -112,6 +123,7 @@ export class MemberDashboardComponent {
       await this.memberProfile.updateProfile(uid, { displayName: name });
       this.profile.update((p) => (p ? { ...p, displayName: name } : p));
       this.editing.set(false);
+      this.nameSaved.set(true);
     } catch {
       this.editError.set('Could not save your name. Try again.');
     } finally {

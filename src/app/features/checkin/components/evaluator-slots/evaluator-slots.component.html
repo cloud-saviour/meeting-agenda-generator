@@ -1,44 +1,52 @@
 <div class="card p-3 mb-3">
-  <h3 class="section-title">Evaluations</h3>
+  <h3 class="section-title">Speech Evaluations</h3>
 
+  @if (speakers.length && !state.isCheckedIn()) {
+    <p class="text-muted">Check in above first, then you can choose a speech to evaluate.</p>
+  }
+  @if (notice) {
+    <div class="alert alert-success" role="status">{{ notice }}</div>
+  }
   @if (error) {
-    <div class="alert alert-danger py-1 px-2 small mb-2">{{ error }}</div>
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
   }
 
   @if (speakers.length) {
     <div class="list-group list-group-flush">
       @for (s of speakers; track s.id) {
-        <div class="list-group-item d-flex flex-wrap align-items-center gap-2">
-          <span class="flex-grow-1 small">
-            <b>{{ s.title || 'Untitled speech' }}</b> — {{ s.name }}
+        <div class="list-group-item d-flex flex-wrap align-items-center gap-2 py-3">
+          <span class="flex-grow-1">
+            <span class="fw-semibold d-block">{{ s.title || 'Untitled speech' }}</span>
+            <span class="text-muted">by {{ s.name }}</span>
           </span>
           @if (s.evaluator?.uid) {
             @if (isMine(s.evaluator?.uid)) {
-              <span class="badge bg-warning-subtle text-warning-emphasis">You</span>
-              <button class="btn btn-outline-secondary btn-sm" (click)="release(s.id)">Release</button>
+              <span class="badge bg-warning-subtle text-warning-emphasis">You are evaluating</span>
+              <app-confirm-button label="Stop evaluating" question="Stop evaluating this speech?" yesLabel="Yes, stop"
+                (confirmed)="release(s.id)"></app-confirm-button>
             } @else if (club.isAppAdmin()) {
-              <span class="badge bg-danger-subtle text-danger-emphasis">{{ s.evaluator?.name }}</span>
-              <button class="btn btn-outline-secondary btn-sm" (click)="release(s.id)">Release</button>
+              <span class="badge bg-danger-subtle text-danger-emphasis">Evaluator: {{ s.evaluator?.name }}</span>
+              <app-confirm-button label="Remove evaluator" question="Remove this evaluator?" yesLabel="Yes, remove"
+                (confirmed)="release(s.id)"></app-confirm-button>
             } @else {
-              <span class="badge bg-danger-subtle text-danger-emphasis">{{ s.evaluator?.name }}</span>
+              <span class="badge bg-danger-subtle text-danger-emphasis">Evaluator: {{ s.evaluator?.name }}</span>
             }
             @if (club.isAppAdmin()) {
               @if (isEvaluationConfirmed(s.evaluator?.uid, s.id)) {
-                <button type="button" class="btn btn-success btn-sm" [disabled]="isEvaluationConfirmPending(s.id)" (click)="toggleEvaluationConfirm(s.id)">{{ isEvaluationConfirmPending(s.id) ? '…' : '✓ Confirmed' }}</button>
+                <button type="button" class="btn btn-success" [disabled]="isEvaluationConfirmPending(s.id)" (click)="toggleEvaluationConfirm(s.id)">{{ isEvaluationConfirmPending(s.id) ? '…' : '✓ Confirmed' }}</button>
               } @else {
-                <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isEvaluationConfirmPending(s.id)" (click)="toggleEvaluationConfirm(s.id)">{{ isEvaluationConfirmPending(s.id) ? 'Confirming…' : 'Confirm done' }}</button>
+                <button type="button" class="btn btn-outline-secondary" [disabled]="isEvaluationConfirmPending(s.id)" (click)="toggleEvaluationConfirm(s.id)">{{ isEvaluationConfirmPending(s.id) ? 'Confirming…' : 'Confirm done' }}</button>
               }
             }
           } @else if (isSpeakerSelf(s.uid)) {
-            <span class="badge bg-success-subtle text-success-emphasis opacity-50">N/A</span>
+            <span class="text-muted">This is your own speech</span>
           } @else {
-            <button class="btn btn-danger btn-sm" [disabled]="!state.isCheckedIn()"
-              [title]="attendanceTooltip" (click)="claim(s.id)">Evaluate</button>
+            <button class="btn btn-danger" [disabled]="!state.isCheckedIn()" (click)="claim(s.id)">Evaluate this speech</button>
           }
         </div>
       }
     </div>
   } @else {
-    <div class="text-muted fst-italic small">No speeches to evaluate yet — check back once speakers sign up.</div>
+    <div class="text-muted fst-italic">No speeches yet. Check back once speakers have signed up.</div>
   }
 </div>

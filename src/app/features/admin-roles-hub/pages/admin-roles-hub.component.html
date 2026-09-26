@@ -6,16 +6,16 @@
 </app-navbar>
 
 <div class="d-flex flex-column align-items-center" style="margin-top:32px;">
-  <div class="d-flex flex-wrap justify-content-center gap-4 px-3" style="max-width:640px;">
+  <div class="tile-grid px-3">
 
-    <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+    <div class="card tile text-center p-4 shadow-sm position-relative">
       <div class="fs-1 mb-2">⚙</div>
       <h2 class="fs-6 fw-bold">Manage Meeting Roles</h2>
       <p class="text-muted small mb-0">Roles claimed live via check-in (Toastmaster, Grammarian, Timekeeper, ...)</p>
       <a [routerLink]="'/admin/roles' | clubLink" class="stretched-link" aria-label="Open Manage Meeting Roles"></a>
     </div>
 
-    <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
+    <div class="card tile text-center p-4 shadow-sm position-relative">
       <div class="fs-1 mb-2">🗂️</div>
       <h2 class="fs-6 fw-bold">Manage Committee Roles</h2>
       <p class="text-muted small mb-0">Executive committee titles assigned by the admin (President, Secretary, ...)</p>

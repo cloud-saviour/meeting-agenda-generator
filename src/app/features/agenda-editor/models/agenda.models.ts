@@ -29,6 +29,15 @@ export interface MeetingData {
    * treat a missing value as `{}` at every read site, never assume present.
    */
   apologySyncUids?: Record<string, string>;
+  /**
+   * Check-in speaker sign-up id → name, for every sign-up the check-in sync has
+   * already imported into the Prepared Speakers list. Each sign-up is imported
+   * at most once, so an admin deleting the row from the agenda is not undone by
+   * the next sync (which fires on every check-in change). Persisted with the
+   * agenda for the same reason as `apologySyncUids`. Optional: absent on agendas
+   * saved before this existed - treat a missing value as `{}`. Never rendered.
+   */
+  speakerSyncIds?: Record<string, string>;
 }
 
 export interface AgendaRowItem {

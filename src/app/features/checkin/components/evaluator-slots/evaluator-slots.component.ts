@@ -1,3 +1,4 @@
+import { ConfirmButtonComponent } from '../../../../layout/confirm-button/confirm-button.component';
 import { Component, inject } from '@angular/core';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
@@ -6,6 +7,7 @@ import { ClubContextService } from '../../../../core/club/club-context.service';
 @Component({
   selector: 'app-evaluator-slots',
   standalone: true,
+  imports: [ConfirmButtonComponent],
   templateUrl: './evaluator-slots.component.html',
 })
 export class EvaluatorSlotsComponent {
@@ -13,6 +15,8 @@ export class EvaluatorSlotsComponent {
   readonly club = inject(ClubContextService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   error: string | null = null;
+  /** A plain-language success message shown after choosing or stopping an evaluation. */
+  notice: string | null = null;
   private readonly pendingEvaluationConfirm = new Set<string>();
 
   get speakers() {
@@ -35,6 +39,7 @@ export class EvaluatorSlotsComponent {
 
   async claim(speakerId: string) {
     this.error = null;
+    this.notice = null;
     if (!this.state.isCheckedIn()) {
       this.error = 'Tap "I\'m Attending" above before claiming an evaluation.';
       return;
@@ -42,11 +47,16 @@ export class EvaluatorSlotsComponent {
     const ok = await this.state.claimEvaluatorSlot(speakerId);
     if (!ok) {
       this.error = 'You can evaluate only one speech, and not your own.';
+      return;
     }
+    const speaker = this.speakers.find((s) => s.id === speakerId);
+    this.notice = `You will evaluate ${speaker?.name ?? 'the'}'s speech.`;
   }
 
-  release(speakerId: string) {
-    this.state.releaseEvaluatorSlot(speakerId);
+  async release(speakerId: string) {
+    this.error = null;
+    await this.state.releaseEvaluatorSlot(speakerId);
+    this.notice = 'Done. That speech has no evaluator now.';
   }
 
   isEvaluationConfirmed(evaluatorUid: string | undefined, speakerId: string): boolean {
