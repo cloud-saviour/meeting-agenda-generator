@@ -17,18 +17,37 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
+    function isGrantedAdmin(cid) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/clubs/$(cid)/appAdmins/$(request.auth.uid));
+    }
+    function isAppAdmin(cid) {
+      return isAdmin() || isGrantedAdmin(cid);
+    }
     match /clubs/{clubId} {
       allow read: if true;
-      allow update: if isAdmin()
+      allow update: if (isAdmin()
         && request.resource.data.slug == resource.data.slug
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
-        && request.resource.data.active is bool;
+        && request.resource.data.active is bool)
+        || (isAppAdmin(clubId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['name', 'subLine', 'addressLine', 'missionStatement', 'website', 'facebookPage', 'logoLeft', 'logoRight'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.logoLeft is string
+        && request.resource.data.logoLeft.size() < 700000
+        && request.resource.data.logoRight is string
+        && request.resource.data.logoRight.size() < 700000);
       allow delete: if false;
+      match /appAdmins/{uid} {
+        allow read: if true;
+      }
       match /auditLog/{entryId} {
         allow read: if isAdmin();
-        allow create: if isAdmin()
+        allow create: if isAppAdmin(clubId)
           && request.resource.data.action is string
           && request.resource.data.actorUid is string
           && request.resource.data.at is string
@@ -117,6 +136,8 @@ describe('ClubDirectoryService (Firestore emulator)', () => {
       missionStatement: 'Mission',
       website: 'https://a.example',
       facebookPage: 'alpha',
+      logoLeft: 'data:left',
+      logoRight: 'crown.png',
       active: true,
     });
 
@@ -129,7 +150,7 @@ describe('ClubDirectoryService (Firestore emulator)', () => {
 
   it('updateClub() rejects a blank name before writing anything', async () => {
     await expect(
-      createService().updateClub('club-a-id', 'club-a', { name: '   ', subLine: '', addressLine: '', missionStatement: '', website: '', facebookPage: '', active: true })
+      createService().updateClub('club-a-id', 'club-a', { name: '   ', subLine: '', addressLine: '', missionStatement: '', website: '', facebookPage: '', logoLeft: 'logo.png', logoRight: 'crown.png', active: true })
     ).rejects.toThrow();
     expect((await createService().getClubBySlug('club-a'))?.name).toBe('Alpha Club');
   });
@@ -137,7 +158,7 @@ describe('ClubDirectoryService (Firestore emulator)', () => {
   it('updateClub() is rejected for a non-platform user, and the batch writes no audit entry', async () => {
     const memberDb = testEnv.authenticatedContext('random-member-uid').firestore() as unknown as Firestore;
     await expect(
-      createService(memberDb).updateClub('club-a-id', 'club-a', { name: 'Hijacked', subLine: '', addressLine: '', missionStatement: '', website: '', facebookPage: '', active: true })
+      createService(memberDb).updateClub('club-a-id', 'club-a', { name: 'Hijacked', subLine: '', addressLine: '', missionStatement: '', website: '', facebookPage: '', logoLeft: 'logo.png', logoRight: 'crown.png', active: true })
     ).rejects.toThrow();
 
     expect((await createService().getClubBySlug('club-a'))?.name).toBe('Alpha Club');
@@ -146,7 +167,7 @@ describe('ClubDirectoryService (Firestore emulator)', () => {
 
   it('deactivates and reactivates a club, recording each as its own audit entry', async () => {
     const service = createService();
-    const base = { name: 'Alpha Club', subLine: '', addressLine: '', missionStatement: '', website: '', facebookPage: '' };
+    const base = { name: 'Alpha Club', subLine: '', addressLine: '', missionStatement: '', website: '', facebookPage: '', logoLeft: 'logo.png', logoRight: 'crown.png' };
 
     await service.updateClub('club-a-id', 'club-a', { ...base, active: false }, true);
     expect((await service.getClubBySlug('club-a'))?.active).toBe(false);
@@ -159,6 +180,59 @@ describe('ClubDirectoryService (Firestore emulator)', () => {
       'Deactivated club "Alpha Club" (club-a)',
       'Reactivated club "Alpha Club" (club-a)',
     ]);
+  });
+
+  describe('updateClubDetails() — a club admin editing their own club', () => {
+    const details = { name: 'Alpha Better', subLine: 'S', addressLine: 'A', missionStatement: 'M', website: 'w', facebookPage: 'f', logoLeft: 'data:new-left', logoRight: 'crown.png' };
+
+    async function grantAdmin(uid: string, clubId: string): Promise<Firestore> {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore() as unknown as Firestore, 'clubs', clubId, 'appAdmins', uid), { uid });
+      });
+      return testEnv.authenticatedContext(uid).firestore() as unknown as Firestore;
+    }
+
+    it('lets a granted admin change branding and logos, and writes an audit entry', async () => {
+      const adminDb = await grantAdmin('club-a-admin', 'club-a-id');
+      await createService(adminDb).updateClubDetails('club-a-id', 'club-a', details);
+
+      const club = await createService().getClubBySlug('club-a');
+      expect(club).toMatchObject({ name: 'Alpha Better', logoLeft: 'data:new-left', active: true, slug: 'club-a' });
+      const audit = await getDocs(collection(platformDb, 'clubs', 'club-a-id', 'auditLog'));
+      expect(audit.docs.map((d) => d.data()['summary'])).toEqual(['Edited club "Alpha Better" (club-a)']);
+    });
+
+    it('rejects a granted admin editing a DIFFERENT club', async () => {
+      const adminDb = await grantAdmin('club-a-admin', 'club-a-id');
+      await expect(createService(adminDb).updateClubDetails('club-b-id', 'club-b', details)).rejects.toThrow();
+      expect((await createService().getClubBySlug('club-b'))?.name).toBe('Beta Club');
+    });
+
+    it('rejects a granted admin trying to change `active` (only platform admins may)', async () => {
+      const adminDb = await grantAdmin('club-a-admin', 'club-a-id');
+      await expect(
+        createService(adminDb).updateClub('club-a-id', 'club-a', { ...details, active: false }, true)
+      ).rejects.toThrow();
+      expect((await createService().getClubBySlug('club-a'))?.active).toBe(true);
+    });
+
+    it('rejects a signed-in non-admin and an anonymous visitor', async () => {
+      const memberDb = testEnv.authenticatedContext('random-member-uid').firestore() as unknown as Firestore;
+      const anonDb = testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
+      await expect(createService(memberDb).updateClubDetails('club-a-id', 'club-a', details)).rejects.toThrow();
+      await expect(createService(anonDb).updateClubDetails('club-a-id', 'club-a', details)).rejects.toThrow();
+    });
+
+    it('rejects an oversized logo', async () => {
+      const adminDb = await grantAdmin('club-a-admin', 'club-a-id');
+      await expect(
+        createService(adminDb).updateClubDetails('club-a-id', 'club-a', { ...details, logoLeft: 'x'.repeat(700000) })
+      ).rejects.toThrow();
+    });
+
+    it('rejects a blank name before writing anything', async () => {
+      await expect(createService().updateClubDetails('club-a-id', 'club-a', { ...details, name: '  ' })).rejects.toThrow();
+    });
   });
 
   it('listActiveClubs() returns only active clubs, and works for a signed-out visitor', async () => {

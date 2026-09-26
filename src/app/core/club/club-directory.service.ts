@@ -15,9 +15,12 @@ export interface ClubRecord extends Club {
  * immutable (firestore.rules enforces it). `active: false` closes the club
  * to everyone but platform admins (see ClubContextService.unavailable).
  */
-export type ClubEditableFields = Pick<
+export type ClubEditableFields = ClubDetailFields & Pick<Club, 'active'>;
+
+/** The branding fields a club's OWN admins may change (firestore.rules allows exactly these, never `active`). */
+export type ClubDetailFields = Pick<
   Club,
-  'name' | 'subLine' | 'addressLine' | 'missionStatement' | 'website' | 'facebookPage' | 'active'
+  'name' | 'subLine' | 'addressLine' | 'missionStatement' | 'website' | 'facebookPage' | 'logoLeft' | 'logoRight'
 >;
 
 /**
@@ -69,10 +72,36 @@ export class ClubDirectoryService {
       missionStatement: fields.missionStatement.trim(),
       website: fields.website.trim(),
       facebookPage: fields.facebookPage.trim(),
+      logoLeft: fields.logoLeft,
+      logoRight: fields.logoRight,
       active: fields.active,
     });
     const change = wasActive === fields.active ? 'Edited' : fields.active ? 'Reactivated' : 'Deactivated';
     appendAuditEntry(this.firestore, batch, 'club.update', `${change} club "${name}" (${slug})`, this.auth.currentUser(), clubId);
+    await batch.commit();
+  }
+
+  /**
+   * The club-admin edit: branding only, never `active` (rules enforce it, and
+   * a plain `update` of just these keys is what lets a non-platform admin
+   * through). Writes a `club.update` audit entry in the same batch.
+   */
+  async updateClubDetails(clubId: string, slug: string, fields: ClubDetailFields): Promise<void> {
+    const name = fields.name.trim();
+    if (!name) throw new Error('Club name is required.');
+
+    const batch = writeBatch(this.firestore);
+    batch.update(doc(this.firestore, 'clubs', clubId), {
+      name,
+      subLine: fields.subLine.trim(),
+      addressLine: fields.addressLine.trim(),
+      missionStatement: fields.missionStatement.trim(),
+      website: fields.website.trim(),
+      facebookPage: fields.facebookPage.trim(),
+      logoLeft: fields.logoLeft,
+      logoRight: fields.logoRight,
+    });
+    appendAuditEntry(this.firestore, batch, 'club.update', `Edited club "${name}" (${slug})`, this.auth.currentUser(), clubId);
     await batch.commit();
   }
 }

@@ -53,58 +53,17 @@
   </div>
 </div>
 
-<!-- Logos -->
+<!-- Club details (name, address, logos, ...) are edited once for the whole club on the Club Settings page -->
 <div class="mb-4">
-  <div class="section-title">Logos</div>
-  <div class="mb-2">
-    <label class="form-label small mb-1">Left Logo</label>
-    <div class="d-flex gap-2 align-items-center">
-      <img [src]="state.logoLeft()" class="border p-1" style="height:36px;object-fit:contain;">
-      <label class="btn btn-outline-secondary btn-sm mb-0">Change
-        <input type="file" accept="image/*" class="d-none" (change)="onLogoChange('left', $event)">
-      </label>
-      <button class="btn btn-outline-secondary btn-sm" (click)="resetLogo('left')">Reset</button>
-    </div>
-    @if (logoWarning.left) {
-      <div class="text-warning-emphasis small mt-1">⚠ {{ logoWarning.left }}</div>
-    }
-  </div>
-  <div class="mb-2">
-    <label class="form-label small mb-1">Right Logo</label>
-    <div class="d-flex gap-2 align-items-center">
-      <img [src]="state.logoRight()" class="border p-1" style="height:36px;object-fit:contain;">
-      <label class="btn btn-outline-secondary btn-sm mb-0">Change
-        <input type="file" accept="image/*" class="d-none" (change)="onLogoChange('right', $event)">
-      </label>
-      <button class="btn btn-outline-secondary btn-sm" (click)="resetLogo('right')">Reset</button>
-    </div>
-    @if (logoWarning.right) {
-      <div class="text-warning-emphasis small mt-1">⚠ {{ logoWarning.right }}</div>
-    }
-  </div>
-</div>
-
-<!-- Club Info -->
-<div class="mb-4">
-  <div class="section-title">Club Info</div>
-  <div class="row g-2 mb-2">
-    <div class="col-6">
-      <label class="form-label small mb-1">Club Name</label>
-      <input class="form-control form-control-sm" type="text" [value]="m.club" (input)="update('club', $any($event.target).value)">
-    </div>
-    <div class="col-6">
-      <label class="form-label small mb-1">Club Sub-Name / Group</label>
-      <input class="form-control form-control-sm" type="text" [value]="m.sub" (input)="update('sub', $any($event.target).value)">
-    </div>
-  </div>
-  <div class="mb-2">
-    <label class="form-label small mb-1">Club Address</label>
-    <input class="form-control form-control-sm" type="text" [value]="m.addr" (input)="update('addr', $any($event.target).value)">
-  </div>
-  <div class="mb-2">
-    <label class="form-label small mb-1">Mission Statement</label>
-    <textarea class="form-control form-control-sm" rows="2" [value]="m.mission" (input)="update('mission', $any($event.target).value)"></textarea>
-  </div>
+  <div class="section-title">Club and meeting contact</div>
+  <p class="small text-muted mb-2">
+    The club's name, address, mission and logos are set on the
+    <a [routerLink]="'/admin/club' | clubLink">Club Settings</a> page.
+  </p>
+  <button type="button" class="btn btn-outline-secondary mb-3" (click)="state.applyClubDetails()"
+    title="Copies the club's current name, address, mission, website, Facebook and logos into this agenda">
+    Use the latest club details
+  </button>
   <div class="mb-2">
     <label class="form-label small mb-1">Mission Contact VPE name</label>
     <input class="form-control form-control-sm" type="text" [value]="m.vpe" (input)="update('vpe', $any($event.target).value)">
@@ -112,13 +71,5 @@
   <div class="mb-2">
     <label class="form-label small mb-1">Committee Period</label>
     <input class="form-control form-control-sm" type="text" [value]="m.period" (input)="update('period', $any($event.target).value)">
-  </div>
-  <div class="mb-2">
-    <label class="form-label small mb-1">Website URL</label>
-    <input class="form-control form-control-sm" type="text" [value]="m.web" (input)="update('web', $any($event.target).value)">
-  </div>
-  <div class="mb-2">
-    <label class="form-label small mb-1">Facebook Group Name</label>
-    <input class="form-control form-control-sm" type="text" [value]="m.fb" (input)="update('fb', $any($event.target).value)">
   </div>
 </div>

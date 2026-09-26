@@ -1,0 +1,15 @@
+<app-navbar title="Club Settings" [fixed]="true"
+  [links]="[
+    { label: '⚙ Admin', path: '/admin/hub' },
+    { label: '🏠 Home', path: '/' }
+  ]">
+</app-navbar>
+
+<div class="container py-4" style="max-width:680px;">
+  @if (club(); as c) {
+    <app-club-details-form [club]="c" [saving]="saving()" [saved]="saved()" [error]="error()"
+      [backPath]="backPath()" (submitted)="save($event)"></app-club-details-form>
+  } @else {
+    <p class="text-muted">Loading…</p>
+  }
+</div>

@@ -15,6 +15,13 @@
     </div>
 
     <div class="card tile text-center p-4 shadow-sm position-relative">
+      <div class="fs-1 mb-2">&#127963;</div>
+      <h2 class="fs-6 fw-bold">Club Settings</h2>
+      <p class="text-muted small mb-0">Change the club's name, details and logos</p>
+      <a [routerLink]="'/admin/club' | clubLink" class="stretched-link" aria-label="Open Club Settings"></a>
+    </div>
+
+    <div class="card tile text-center p-4 shadow-sm position-relative">
       <div class="fs-1 mb-2">&#128081;</div>
       <h2 class="fs-6 fw-bold">Manage Admins</h2>
       <p class="text-muted small mb-0">Grant or revoke admin access for existing members</p>

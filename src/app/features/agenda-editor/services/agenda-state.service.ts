@@ -441,6 +441,27 @@ export class AgendaStateService {
     );
   }
 
+  /**
+   * Copies the club's CURRENT details (Club Settings) into this agenda: an
+   * already-saved agenda keeps the club text it was saved with until an admin
+   * asks for the update. Leaves VPE, committee period and everything else alone.
+   */
+  applyClubDetails(): void {
+    const club = this.clubContext.currentClub();
+    if (!club) return;
+    this.meeting.update((m) => ({
+      ...m,
+      club: club.name,
+      sub: club.subLine,
+      addr: club.addressLine,
+      mission: club.missionStatement,
+      web: club.website,
+      fb: club.facebookPage,
+    }));
+    this.logoLeft.set(club.logoLeft);
+    this.logoRight.set(club.logoRight);
+  }
+
   // ── Logo methods ──────────────────────────────────────────────────────────
   setLogo(side: 'left' | 'right', dataUrl: string): void {
     if (side === 'left') {

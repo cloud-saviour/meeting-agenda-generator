@@ -1,0 +1,79 @@
+<form class="card p-4 shadow-sm" (ngSubmit)="submit()">
+  <h2 class="fs-4 fw-bold mb-1">{{ club().name }}</h2>
+  <p class="text-muted">
+    Web address <code>/c/{{ club().slug }}</code> can't be changed. Agendas already saved keep the club text they were saved with;
+    new agendas and the club's header use what you save here.
+  </p>
+
+  <h3 class="section-title">Logos</h3>
+  @for (side of sides; track side) {
+    <div class="mb-3">
+      <div class="form-label fw-semibold">{{ side === 'left' ? 'Left logo' : 'Right logo' }}</div>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <img [src]="logo(side)" [alt]="side + ' logo'" class="border p-1 bg-white" style="height:56px;max-width:160px;object-fit:contain;">
+        <label class="btn btn-outline-secondary mb-0">Choose a picture
+          <input type="file" accept="image/*" class="d-none" (change)="onLogoChange(side, $event)">
+        </label>
+        <button type="button" class="btn btn-outline-secondary" (click)="undoLogo(side)">Undo change</button>
+      </div>
+      @if (logoMessage()[side]; as msg) {
+        <div class="text-warning-emphasis mt-1" role="status">{{ msg }}</div>
+      }
+    </div>
+  }
+
+  <h3 class="section-title mt-3">Club details</h3>
+
+  <label class="form-label fw-semibold" for="c-name">Club name</label>
+  <input id="c-name" class="form-control mb-3" type="text" name="name" required
+    [ngModel]="name()" (ngModelChange)="name.set($event)">
+
+  <label class="form-label fw-semibold" for="c-sub">Sub-line</label>
+  <input id="c-sub" class="form-control mb-3" type="text" name="subLine"
+    [ngModel]="subLine()" (ngModelChange)="subLine.set($event)">
+
+  <label class="form-label fw-semibold" for="c-address">Address</label>
+  <input id="c-address" class="form-control mb-3" type="text" name="addressLine"
+    [ngModel]="addressLine()" (ngModelChange)="addressLine.set($event)">
+
+  <label class="form-label fw-semibold" for="c-mission">Mission statement</label>
+  <textarea id="c-mission" class="form-control mb-3" rows="3" name="missionStatement"
+    [ngModel]="missionStatement()" (ngModelChange)="missionStatement.set($event)"></textarea>
+
+  <label class="form-label fw-semibold" for="c-web">Website</label>
+  <input id="c-web" class="form-control mb-3" type="text" name="website"
+    [ngModel]="website()" (ngModelChange)="website.set($event)">
+
+  <label class="form-label fw-semibold" for="c-fb">Facebook page</label>
+  <input id="c-fb" class="form-control mb-3" type="text" name="facebookPage"
+    [ngModel]="facebookPage()" (ngModelChange)="facebookPage.set($event)">
+
+  @if (showActive()) {
+    <div class="form-check form-switch mb-1">
+      <input id="c-active" class="form-check-input" type="checkbox" role="switch" name="active"
+        [ngModel]="active()" (ngModelChange)="active.set($event)">
+      <label class="form-check-label fw-semibold" for="c-active">Club is active</label>
+    </div>
+    <div class="mb-3" [class.text-muted]="active()" [class.text-danger]="!active()">
+      @if (active()) {
+        Members and guests can use this club.
+      } @else {
+        Deactivated: members and guests see "not available". Only platform admins can still open it. Data is kept.
+      }
+    </div>
+  }
+
+  @if (error()) {
+    <div class="alert alert-danger" role="alert">{{ error() }}</div>
+  }
+  @if (saved()) {
+    <div class="alert alert-success" role="status">Saved.</div>
+  }
+
+  <div class="d-flex gap-2">
+    <button class="btn btn-danger" type="submit" [disabled]="!canSave()">
+      {{ saving() ? 'Saving…' : 'Save changes' }}
+    </button>
+    <a class="btn btn-outline-secondary" [routerLink]="backPath()">Back</a>
+  </div>
+</form>
