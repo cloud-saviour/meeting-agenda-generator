@@ -16,13 +16,13 @@
             @if (isMine(s.evaluator?.uid)) {
               <span class="badge bg-warning-subtle text-warning-emphasis">You</span>
               <button class="btn btn-outline-secondary btn-sm" (click)="release(s.id)">Release</button>
-            } @else if (auth.isAppAdmin()) {
+            } @else if (club.isAppAdmin()) {
               <span class="badge bg-danger-subtle text-danger-emphasis">{{ s.evaluator?.name }}</span>
               <button class="btn btn-outline-secondary btn-sm" (click)="release(s.id)">Release</button>
             } @else {
               <span class="badge bg-danger-subtle text-danger-emphasis">{{ s.evaluator?.name }}</span>
             }
-            @if (auth.isAppAdmin()) {
+            @if (club.isAppAdmin()) {
               @if (isEvaluationConfirmed(s.evaluator?.uid, s.id)) {
                 <button type="button" class="btn btn-success btn-sm" [disabled]="isEvaluationConfirmPending(s.id)" (click)="toggleEvaluationConfirm(s.id)">{{ isEvaluationConfirmPending(s.id) ? '…' : '✓ Confirmed' }}</button>
               } @else {

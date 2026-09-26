@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { Injector, NgZone } from '@angular/core';
+import { Injector, NgZone, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
@@ -9,21 +9,30 @@ import { AuditLogService } from './audit-log.service';
 import { AppAdminService } from '../../admin-admins/services/app-admin.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { ClubContextService } from '../../../core/club/club-context.service';
+
+const testClubId = 'test-club';
+
+function fakeClubContextService(clubId: string | null = testClubId): ClubContextService {
+  return { currentClubId: signal<string | null>(clubId) } as unknown as ClubContextService;
+}
 
 /**
- * auditLog/{entryId} is the append-only trail of meaningful admin actions
- * across the app (see core/audit/audit-log.models.ts's AuditAction) — see
- * AuditLogService's class doc and core/audit/audit-log.util.ts's
- * appendAuditEntry(), the only writer (always in the same writeBatch() as
- * the audited change itself). This file exercises that pattern through
- * AppAdminService.grant()/revoke() specifically, since it's the simplest
- * audited mutator to drive directly — every other instrumented service
- * (RoleDefinitionService, PublishedAgendaService, etc.) follows the exact
- * same appendAuditEntry() call shape, verified by one dedicated test each
- * in their own spec files. Read is isAdmin()-only — even a granted admin,
- * who CAN perform the audited action, cannot see the trail of who did
- * what — which is the key security property this file regression-tests.
- * Run via `npm run test:emulator` with the emulator already running.
+ * clubs/{clubId}/auditLog/{entryId} is the append-only trail of meaningful
+ * admin actions for that club (see core/audit/audit-log.models.ts's
+ * AuditAction) — see AuditLogService's class doc and
+ * core/audit/audit-log.util.ts's appendAuditEntry(), the only writer
+ * (always in the same writeBatch() as the audited change itself). This
+ * file exercises that pattern through AppAdminService.grant()/revoke()
+ * specifically, since it's the simplest audited mutator to drive directly
+ * — every other instrumented service (RoleDefinitionService,
+ * PublishedAgendaService, etc.) follows the exact same appendAuditEntry()
+ * call shape, verified by one dedicated test each in their own spec files.
+ * Read is isAdmin()-only (the GLOBAL claim, not club-scoped) — even a
+ * granted admin, who CAN perform the audited action, cannot see the trail
+ * of who did what — which is the key security property this file
+ * regression-tests. Run via `npm run test:emulator` with the emulator
+ * already running.
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
@@ -32,26 +41,28 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
-    function isGrantedAdmin() {
-      return request.auth != null &&
-        exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid));
-    }
-    function isAppAdmin() {
-      return isAdmin() || isGrantedAdmin();
-    }
-    match /appAdmins/{uid} {
-      allow read: if request.auth != null && (request.auth.uid == uid || isAppAdmin());
-      allow create, update: if isAppAdmin() && request.auth.uid != uid;
-      allow delete: if isAppAdmin();
-    }
-    match /auditLog/{entryId} {
-      allow read: if isAdmin();
-      allow create: if isAppAdmin()
-        && request.resource.data.action is string
-        && request.resource.data.actorUid is string
-        && request.resource.data.at is string
-        && request.resource.data.summary is string;
-      allow update, delete: if false;
+    match /clubs/{clubId} {
+      function isGrantedAdmin(cid) {
+        return request.auth != null &&
+          exists(/databases/$(database)/documents/clubs/$(cid)/appAdmins/$(request.auth.uid));
+      }
+      function isAppAdmin(cid) {
+        return isAdmin() || isGrantedAdmin(cid);
+      }
+      match /appAdmins/{uid} {
+        allow read: if request.auth != null && (request.auth.uid == uid || isAppAdmin(clubId));
+        allow create, update: if isAppAdmin(clubId) && request.auth.uid != uid;
+        allow delete: if isAppAdmin(clubId);
+      }
+      match /auditLog/{entryId} {
+        allow read: if isAdmin();
+        allow create: if isAppAdmin(clubId)
+          && request.resource.data.action is string
+          && request.resource.data.actorUid is string
+          && request.resource.data.at is string
+          && request.resource.data.summary is string;
+        allow update, delete: if false;
+      }
     }
   }
 }
@@ -82,9 +93,6 @@ describe('AuditLogService (Firestore emulator)', () => {
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
     adminFirestore = testEnv.authenticatedContext('super-admin-uid', { admin: true }).firestore() as unknown as Firestore;
-
-    TestBed.configureTestingModule({});
-    parentInjector = TestBed.inject(Injector);
   });
 
   afterAll(async () => {
@@ -93,6 +101,13 @@ describe('AuditLogService (Firestore emulator)', () => {
 
   beforeEach(async () => {
     await testEnv.clearFirestore();
+    // Fetched fresh per test, not once in beforeAll: TestBed destroys its
+    // environment injector after every test by default, and these services'
+    // constructor effect()s (re-subscribing on clubContext.currentClubId()
+    // changes) need a live DestroyRef from this injector's ancestor chain —
+    // a stale parentInjector throws NG0205 on the second test onward.
+    TestBed.configureTestingModule({});
+    parentInjector = TestBed.inject(Injector);
   });
 
   afterEach(() => {
@@ -108,6 +123,7 @@ describe('AuditLogService (Firestore emulator)', () => {
       providers: [
         AuditLogService,
         { provide: FIRESTORE, useValue: firestore },
+        { provide: ClubContextService, useValue: fakeClubContextService() },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
       ],
     });
@@ -123,6 +139,7 @@ describe('AuditLogService (Firestore emulator)', () => {
         AppAdminService,
         { provide: FIRESTORE, useValue: firestore },
         { provide: AuthService, useValue: fakeAuth(uid, email) },
+        { provide: ClubContextService, useValue: fakeClubContextService() },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
       ],
     });
@@ -205,7 +222,7 @@ describe('AuditLogService (Firestore emulator)', () => {
 
   it('rejects a direct write missing required fields — server-side shape validation, not just client discipline', async () => {
     await expect(
-      addDoc(collection(adminFirestore, 'auditLog'), {
+      addDoc(collection(adminFirestore, 'clubs', testClubId, 'auditLog'), {
         action: 'admin.grant',
         actorUid: 'super-admin-uid',
         at: new Date().toISOString(),
@@ -222,7 +239,7 @@ describe('AuditLogService (Firestore emulator)', () => {
     await waitFor(() => auditLog.entries().length === 1);
     const entryId = auditLog.entries()[0].id;
 
-    await expect(updateDoc(doc(adminFirestore, 'auditLog', entryId), { action: 'admin.revoke' })).rejects.toThrow();
-    await expect(deleteDoc(doc(adminFirestore, 'auditLog', entryId))).rejects.toThrow();
+    await expect(updateDoc(doc(adminFirestore, 'clubs', testClubId, 'auditLog', entryId), { action: 'admin.revoke' })).rejects.toThrow();
+    await expect(deleteDoc(doc(adminFirestore, 'clubs', testClubId, 'auditLog', entryId))).rejects.toThrow();
   });
 });

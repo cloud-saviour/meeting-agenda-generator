@@ -5,8 +5,10 @@ import { CheckinAgendaSyncService } from './checkin-agenda-sync.service';
 import { AgendaStateService } from './agenda-state.service';
 import { CommitteeRosterService } from './committee-roster.service';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
 import { CheckinStateService } from '../../checkin/services/checkin-state.service';
 import { Attendee, CheckinMeeting, CheckinSpeaker, RoleClaim } from '../../checkin/models/checkin.models';
+import { Club } from '../../../core/models/club.models';
 
 const fakeRoleDefinitionService = { activeRoles: () => [] } as unknown as RoleDefinitionService;
 
@@ -14,6 +16,15 @@ const fakeCommitteeRosterService = {
   all: () => [],
   ready: () => true,
 } as unknown as CommitteeRosterService;
+
+// AgendaStateService reads this only to seed a brand-new agenda's defaults
+// (see agenda-state.service.spec.ts's own fake for the same reason) — this
+// suite never exercises that path directly, a plain constant is enough.
+const fakeClub: Club = {
+  slug: 'test-club', name: 'Test Club', subLine: '', addressLine: '', logoLeft: '', logoRight: '',
+  missionStatement: '', website: '', facebookPage: '', createdAt: '', active: true,
+};
+const fakeClubContextService = { currentClub: () => fakeClub } as unknown as ClubContextService;
 
 /**
  * Signal-backed stand-in for the Firestore-backed CheckinStateService — the
@@ -45,6 +56,7 @@ function setup() {
     providers: [
       { provide: RoleDefinitionService, useValue: fakeRoleDefinitionService },
       { provide: CommitteeRosterService, useValue: fakeCommitteeRosterService },
+      { provide: ClubContextService, useValue: fakeClubContextService },
     ],
   });
   const state = TestBed.inject(AgendaStateService);

@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { Injector, NgZone } from '@angular/core';
+import { Injector, NgZone, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
@@ -8,19 +8,26 @@ import type { Firestore } from 'firebase/firestore';
 import { RoleDefinitionService } from './role-definition.service';
 import { FIRESTORE } from '../firebase/firestore.provider';
 import { AuthService } from '../auth/auth.service';
+import { ClubContextService } from '../club/club-context.service';
+
+const testClubId = 'test-club';
+
+function fakeClubContextService(clubId: string | null = testClubId): ClubContextService {
+  return { currentClubId: signal<string | null>(clubId) } as unknown as ClubContextService;
+}
 
 /**
  * RoleDefinitionService has no localStorage fallback anymore — the role list
- * lives entirely in Firestore's `roleDefinitions` collection (seeded via
- * scripts/seed-role-definitions.mjs, not hardcoded in the app), covering
- * BOTH meeting roles and committee roles, discriminated by `kind`. Run via
- * `npm run test:emulator` with the emulator already running.
+ * lives entirely in Firestore's `clubs/{clubId}/roleDefinitions` collection
+ * (seeded via scripts/seed-role-definitions.mjs, not hardcoded in the app),
+ * covering BOTH meeting roles and committee roles, discriminated by `kind`.
+ * Run via `npm run test:emulator` with the emulator already running.
  *
  * isAdmin() requires the `admin` custom claim, not just an authenticated uid
  * (see firestore.rules) — authenticatedContext()'s second argument simulates
- * that claim directly, no Firestore fixture document needed. isAppAdmin()
- * also recognizes a Firestore-granted appAdmins/{uid} entry (see
- * AuthService/AppAdminService) — full parity with isAdmin() for this
+ * that claim directly, no Firestore fixture document needed. isAppAdmin(clubId)
+ * also recognizes a Firestore-granted clubs/{clubId}/appAdmins/{uid} entry
+ * (see AuthService/AppAdminService) — full parity with isAdmin() for this
  * collection, per firestore.rules.
  */
 const FIRESTORE_RULES = `
@@ -30,25 +37,27 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
-    function isGrantedAdmin() {
-      return request.auth != null &&
-        exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid));
-    }
-    function isAppAdmin() {
-      return isAdmin() || isGrantedAdmin();
-    }
-    match /appAdmins/{uid} {
-      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
-    }
-    match /roleDefinitions/{roleId} {
-      allow read: if true;
-      allow write: if isAppAdmin();
-    }
-    match /auditLog/{entryId} {
-      allow read: if isAdmin();
-      allow create: if isAppAdmin();
-      allow update, delete: if false;
+    match /clubs/{clubId} {
+      function isGrantedAdmin(cid) {
+        return request.auth != null &&
+          exists(/databases/$(database)/documents/clubs/$(cid)/appAdmins/$(request.auth.uid));
+      }
+      function isAppAdmin(cid) {
+        return isAdmin() || isGrantedAdmin(cid);
+      }
+      match /appAdmins/{uid} {
+        allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+        allow write: if isAdmin();
+      }
+      match /roleDefinitions/{roleId} {
+        allow read: if true;
+        allow write: if isAppAdmin(clubId);
+      }
+      match /auditLog/{entryId} {
+        allow read: if isAdmin();
+        allow create: if isAppAdmin(clubId);
+        allow update, delete: if false;
+      }
     }
   }
 }
@@ -78,9 +87,6 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
     firestore = testEnv.authenticatedContext('test-admin-uid', { admin: true }).firestore() as unknown as Firestore;
-
-    TestBed.configureTestingModule({});
-    parentInjector = TestBed.inject(Injector);
   });
 
   afterAll(async () => {
@@ -89,6 +95,13 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
 
   beforeEach(async () => {
     await testEnv.clearFirestore();
+    // Fetched fresh per test, not once in beforeAll: TestBed destroys its
+    // environment injector after every test by default, and this service's
+    // constructor effect() (re-subscribing on clubContext.currentClubId()
+    // changes) needs a live DestroyRef from this injector's ancestor chain —
+    // a stale parentInjector throws NG0205 on the second test onward.
+    TestBed.configureTestingModule({});
+    parentInjector = TestBed.inject(Injector);
   });
 
   afterEach(() => {
@@ -103,6 +116,7 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
         RoleDefinitionService,
         { provide: FIRESTORE, useValue: firestoreInstance },
         { provide: AuthService, useValue: fakeAuth(authUid, authEmail) },
+        { provide: ClubContextService, useValue: fakeClubContextService() },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
       ],
     });
@@ -158,7 +172,7 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
   });
 
   it('a document with no "kind" field (pre-merge legacy data) is treated as "meeting"', async () => {
-    await setDoc(doc(firestore, 'roleDefinitions', 'legacy-role'), { label: 'Legacy Role', order: 0, active: true });
+    await setDoc(doc(firestore, 'clubs', testClubId, 'roleDefinitions', 'legacy-role'), { label: 'Legacy Role', order: 0, active: true });
     const service = createService();
 
     await waitFor(() => service.all().some((r) => r.id === 'legacy-role'));
@@ -221,7 +235,7 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
   });
 
   it('allows writes from a Firestore-granted admin with no real claim — isAppAdmin() takes effect, not just isAdmin()', async () => {
-    await setDoc(doc(firestore, 'appAdmins', 'granted-uid'), {
+    await setDoc(doc(firestore, 'clubs', testClubId, 'appAdmins', 'granted-uid'), {
       uid: 'granted-uid',
       email: 'granted@example.com',
       displayName: 'Granted Admin',
@@ -242,7 +256,7 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
     const role = await service.create('meeting', 'Table Topics Master');
     await service.archive(role.id);
 
-    const snap = await getDocs(collection(firestore, 'auditLog'));
+    const snap = await getDocs(collection(firestore, 'clubs', testClubId, 'auditLog'));
     const entries = snap.docs.map((d) => d.data());
 
     expect(entries.some((e) => e['action'] === 'role.create' && e['summary'].includes('Table Topics Master'))).toBe(true);
@@ -254,7 +268,7 @@ describe('RoleDefinitionService (Firestore emulator)', () => {
     const role = await service.create('committee', 'Sergeant at Arms');
     await service.archive(role.id);
 
-    const snap = await getDocs(collection(firestore, 'auditLog'));
+    const snap = await getDocs(collection(firestore, 'clubs', testClubId, 'auditLog'));
     const entries = snap.docs.map((d) => d.data());
 
     expect(entries.some((e) => e['action'] === 'committeeRole.create' && e['summary'].includes('Sergeant at Arms'))).toBe(true);

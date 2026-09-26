@@ -12,6 +12,8 @@ import { AgendaItemsComponent } from '../components/agenda-items/agenda-items.co
 import { SpeakersFormComponent } from '../components/speakers-form/speakers-form.component';
 import { AgendaPreviewComponent } from '../components/agenda-preview/agenda-preview.component';
 import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
+import { ClubLinkPipe } from '../../../core/club/club-link.pipe';
+import { ClubContextService } from '../../../core/club/club-context.service';
 
 @Component({
   selector: 'app-agenda-editor',
@@ -19,6 +21,7 @@ import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.componen
   imports: [
     RouterLink,
     NavbarComponent,
+    ClubLinkPipe,
     MeetingFormComponent,
     AgendaItemsComponent,
     SpeakersFormComponent,
@@ -34,6 +37,7 @@ export class AgendaEditorComponent implements OnDestroy {
   private readonly savedAgendas = inject(SavedAgendaService);
   private readonly checkinState = inject(CheckinStateService);
   private readonly checkinSync = inject(CheckinAgendaSyncService);
+  private readonly clubContext = inject(ClubContextService);
   private readonly router = inject(Router);
 
   docxBusy = false;
@@ -258,8 +262,9 @@ export class AgendaEditorComponent implements OnDestroy {
 
   async copyCheckinLink() {
     const meetingNo = this.state.meeting().no;
-    if (!meetingNo) return;
-    const tree = this.router.createUrlTree(['/checkin'], { queryParams: { meeting: meetingNo } });
+    const slug = this.clubContext.currentClubSlug();
+    if (!meetingNo || !slug) return;
+    const tree = this.router.createUrlTree(['/c', slug, 'checkin'], { queryParams: { meeting: meetingNo } });
     const url = window.location.origin + this.router.serializeUrl(tree);
     if (await this.copyToClipboard(url)) {
       this.linkCopied = true;

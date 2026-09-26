@@ -6,9 +6,11 @@ import { APP_LOCALE } from '../../../core/utils/locale';
 import { sha256Hex } from '../../../core/utils/hash';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
 import { AuditAction } from '../../../core/audit/audit-log.models';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
+const CLUBS_COLLECTION = 'clubs';
 const CHECKINS_COLLECTION = 'checkins';
 
 function makeId(): string {
@@ -27,6 +29,7 @@ export class CheckinStateService implements OnDestroy {
   private readonly firestore = inject(FIRESTORE);
   private readonly zone = inject(NgZone);
   private readonly auth = inject(AuthService);
+  private readonly clubContext = inject(ClubContextService);
   private readonly contacts = inject(CheckinContactsService);
 
   // ── Identity ──────────────────────────────────────────────────────────
@@ -134,7 +137,7 @@ export class CheckinStateService implements OnDestroy {
     this.unsubscribeSnapshot?.();
     this.currentMeetingId = meetingId;
 
-    const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
+    const ref = this.checkinRef(meetingId);
     this.unsubscribeSnapshot = onSnapshot(
       ref,
       (snap) =>
@@ -347,7 +350,7 @@ export class CheckinStateService implements OnDestroy {
     return this.mutate((s) => {
       if (s.lockedRoles.includes(roleKey)) return { next: s, result: undefined };
       const existing = s.roles[roleKey];
-      if (!existing || (existing.uid !== this.currentUid && !this.auth.isAppAdmin())) {
+      if (!existing || (existing.uid !== this.currentUid && !this.clubContext.isAppAdmin())) {
         return { next: s, result: undefined };
       }
       const next = { ...s, roles: { ...s.roles, [roleKey]: { name: '', uid: '' } } };
@@ -393,7 +396,7 @@ export class CheckinStateService implements OnDestroy {
   removeSpeakerSignup(id: string): Promise<void> {
     return this.mutate((s) => {
       const sp = s.speakers.find((x) => x.id === id);
-      if (!sp || (sp.uid !== this.currentUid && !this.auth.isAppAdmin())) return { next: s, result: undefined };
+      if (!sp || (sp.uid !== this.currentUid && !this.clubContext.isAppAdmin())) return { next: s, result: undefined };
       const next = { ...s, speakers: s.speakers.filter((x) => x.id !== id) };
       return { next, result: undefined };
     }).then(() => undefined);
@@ -432,7 +435,7 @@ export class CheckinStateService implements OnDestroy {
         ...s,
         speakers: s.speakers.map((sp) => {
           if (sp.id !== speakerId) return sp;
-          if (!sp.evaluator || (sp.evaluator.uid !== this.currentUid && !this.auth.isAppAdmin())) return sp;
+          if (!sp.evaluator || (sp.evaluator.uid !== this.currentUid && !this.clubContext.isAppAdmin())) return sp;
           return { ...sp, evaluator: null };
         }),
       };
@@ -458,7 +461,7 @@ export class CheckinStateService implements OnDestroy {
     if (!trimmed) return Promise.resolve(false);
 
     return this.mutateAudited('checkin.adminEdit', (s) => {
-      if (!this.auth.isAppAdmin()) return { next: s, applied: false };
+      if (!this.clubContext.isAppAdmin()) return { next: s, applied: false };
 
       const touchesAnything =
         s.attendees.some((a) => a.uid === uid) ||
@@ -493,7 +496,7 @@ export class CheckinStateService implements OnDestroy {
     patch: Partial<Pick<CheckinSpeaker, 'title' | 'level' | 'timePref'>>
   ): Promise<boolean> {
     return this.mutateAudited('checkin.adminEdit', (s) => {
-      if (!this.auth.isAppAdmin()) return { next: s, applied: false };
+      if (!this.clubContext.isAppAdmin()) return { next: s, applied: false };
       const sp = s.speakers.find((x) => x.id === speakerId);
       if (!sp) return { next: s, applied: false };
 
@@ -513,7 +516,7 @@ export class CheckinStateService implements OnDestroy {
    */
   adminRemoveAttendee(uid: string): Promise<boolean> {
     return this.mutateAudited('checkin.adminRemove', (s) => {
-      if (!this.auth.isAppAdmin()) return { next: s, applied: false };
+      if (!this.clubContext.isAppAdmin()) return { next: s, applied: false };
       const attendee = s.attendees.find((a) => a.uid === uid);
       if (!attendee) return { next: s, applied: false };
 
@@ -537,7 +540,7 @@ export class CheckinStateService implements OnDestroy {
    *  status change, so it never touches attendees/roles/speakers. */
   adminRemoveApology(uid: string): Promise<boolean> {
     return this.mutateAudited('checkin.adminRemove', (s) => {
-      if (!this.auth.isAppAdmin()) return { next: s, applied: false };
+      if (!this.clubContext.isAppAdmin()) return { next: s, applied: false };
       const apology = s.apologies.find((a) => a.uid === uid);
       if (!apology) return { next: s, applied: false };
 
@@ -556,7 +559,7 @@ export class CheckinStateService implements OnDestroy {
 
   resetAll(): Promise<void> {
     if (!this.currentMeetingId) return Promise.resolve();
-    const ref = doc(this.firestore, CHECKINS_COLLECTION, this.currentMeetingId);
+    const ref = this.checkinRef(this.currentMeetingId);
     return runTransaction(this.firestore, async (tx) => {
       tx.set(ref, this.defaultSnapshot(this.currentMeetingId!));
     }).catch((err) => console.error('checkin resetAll failed', err));
@@ -570,8 +573,17 @@ export class CheckinStateService implements OnDestroy {
    * that was never opened in this browser session).
    */
   deleteMeeting(meetingId: string): Promise<void> {
-    const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
+    const ref = this.checkinRef(meetingId);
     return deleteDoc(ref).catch((err) => console.error('checkin deleteMeeting failed', err));
+  }
+
+  /** Builds this meeting's doc ref under the CURRENT club (see ClubContextService) — throws if
+   *  called with no club resolved, which shouldn't happen: every route that reaches this service
+   *  sits behind clubContextGuard, which resolves the club before any child component renders. */
+  private checkinRef(meetingId: string) {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('checkinRef() called with no club resolved');
+    return doc(this.firestore, CLUBS_COLLECTION, clubId, CHECKINS_COLLECTION, meetingId);
   }
 
   // ── Persistence (Firestore transactions) ─────────────────────────────────
@@ -592,7 +604,7 @@ export class CheckinStateService implements OnDestroy {
   ): Promise<T | undefined> {
     if (!this.currentMeetingId) return Promise.resolve(undefined);
     const meetingId = this.currentMeetingId;
-    const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
+    const ref = this.checkinRef(meetingId);
 
     return runTransaction(this.firestore, async (tx) => {
       const snap = await tx.get(ref);
@@ -624,7 +636,7 @@ export class CheckinStateService implements OnDestroy {
   ): Promise<boolean> {
     if (!this.currentMeetingId) return Promise.resolve(false);
     const meetingId = this.currentMeetingId;
-    const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
+    const ref = this.checkinRef(meetingId);
 
     return runTransaction(this.firestore, async (tx) => {
       const snap = await tx.get(ref);
@@ -634,7 +646,7 @@ export class CheckinStateService implements OnDestroy {
       const { next, applied, summary } = fn(current);
       tx.set(ref, next);
       if (applied) {
-        appendAuditEntry(this.firestore, tx, action, summary ?? action, this.auth.currentUser());
+        appendAuditEntry(this.firestore, tx, action, summary ?? action, this.auth.currentUser(), this.clubContext.currentClubId() ?? undefined);
       }
       return applied;
     }).catch((err) => {

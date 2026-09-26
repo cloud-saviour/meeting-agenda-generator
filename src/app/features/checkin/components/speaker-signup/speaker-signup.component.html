@@ -7,17 +7,17 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-1">
           <span class="fw-bold small">{{ s.name }}@if (isMine(s.uid)) { <span class="badge bg-warning-subtle text-warning-emphasis ms-1">You</span> }</span>
           <div class="d-flex align-items-center gap-1">
-            @if (auth.isAppAdmin()) {
+            @if (club.isAppAdmin()) {
               @if (isSpeechConfirmed(s.uid)) {
                 <button type="button" class="btn btn-success btn-sm" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? '…' : '✓ Confirmed' }}</button>
               } @else {
                 <button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="isSpeechConfirmPending(s.uid)" (click)="toggleSpeechConfirm(s.uid)">{{ isSpeechConfirmPending(s.uid) ? 'Confirming…' : 'Confirm spoke' }}</button>
               }
             }
-            @if (auth.isAppAdmin()) {
+            @if (club.isAppAdmin()) {
               <button class="btn btn-outline-secondary btn-sm" (click)="startEditSpeaker(s)">Edit</button>
             }
-            @if (isMine(s.uid) || auth.isAppAdmin()) {
+            @if (isMine(s.uid) || club.isAppAdmin()) {
               <button class="btn btn-outline-secondary btn-sm" (click)="remove(s.id)">Remove</button>
             }
           </div>

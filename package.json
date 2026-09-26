@@ -13,6 +13,8 @@
     "test": "ng test",
     "test:emulator": "ng run meeting-agenda-generator:test-emulator",
     "emulators": "firebase emulators:start --only firestore,auth --import=./.emulator-data --export-on-exit=./.emulator-data",
+    "migrate:to-clubs": "node scripts/migrate-to-clubs.mjs",
+    "migrate:to-clubs:prod": "node scripts/migrate-to-clubs.mjs --prod",
     "seed:roles": "node scripts/seed-role-definitions.mjs",
     "seed:roles:prod": "node scripts/seed-role-definitions.mjs --prod",
     "migrate:role-definitions": "node scripts/migrate-role-definitions.mjs",

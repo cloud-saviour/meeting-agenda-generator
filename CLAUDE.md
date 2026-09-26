@@ -1446,6 +1446,155 @@ mathematically consistent (table width === sum of column widths, on every
 nested table), or Word's layout engine breaks in ways that are very hard to
 debug from the rendered output alone.
 
+## Multi-club groundwork
+
+The app supports multiple independent clubs on one deployment now — **groundwork
+only**: the data model, Firestore rules, routing, and admin access are all
+club-scoped, but there is still no self-service "create a new club" UI. A new
+club is provisioned the same way an admin account always has been: by script.
+
+**Data model — nested `clubs/{clubId}/...` subcollections, not flat +
+a `clubId` field.** Every formerly-global collection (`checkins`,
+`roleDefinitions`, `committeeRoster`, `publishedAgendas`, `savedAgendas`,
+`memberHistory`, `checkinContacts`, `appAdmins`, `auditLog`) now lives at
+`clubs/{clubId}/<same name>/{same doc id}`. Nesting was chosen over a
+`clubId`-field-plus-`where()` filter specifically because meeting numbers
+(the doc id for `checkins`/`savedAgendas`/`publishedAgendas`) are only unique
+*within* a club — nesting lets two clubs both have a "meeting #1" for free,
+with no composite key to invent, and Firestore rules become plain path-variable
+checks instead of `resource.data.clubId == ...` checks on every document.
+`members/{uid}` is the one collection that stays **global** — a self-service
+Firebase login is one account independent of any club, not club data (see
+Authentication below).
+
+`clubId` is an opaque Firestore auto-id, never shown to users. `slug` is a
+separate, human-facing URL segment — kept distinct so a club's URL could be
+renamed later without touching every subcollection path. A small pointer
+collection, `clubSlugs/{slug} → { clubId }` (`core/models/club.models.ts`'s
+`ClubSlugPointer`), resolves a URL segment to a `clubId` with one `getDoc()` —
+public-read, no client write path (Admin-SDK/script-only, created atomically
+with its `clubs/{clubId}` doc). The `clubs/{clubId}` document itself
+(`Club` in `core/models/club.models.ts`: `slug`/`name`/`subLine`/
+`addressLine`/`logoLeft`/`logoRight`/`missionStatement`/`website`/
+`facebookPage`/`createdAt`/`active`) replaced the literals that used to be
+hardcoded directly in `agenda-state.service.ts` (the club's name, address,
+logo filenames, mission statement) — `active` is a placeholder for a future
+suspension feature, not wired to anything yet.
+
+**`core/club/club-context.service.ts`'s `ClubContextService`**
+(`providedIn: 'root'`) is the new per-request club identity, parallel to
+`AuthService` but resolved from the URL rather than from Firebase Auth:
+`currentClubSlug`/`currentClubId` (signals), `currentClub` (a live
+`onSnapshot(clubs/{clubId})`), `ready`, and `isAppAdmin` (`computed(() =>
+auth.isAdmin() || grantedAdmin())` — the real global claim OR a
+`clubs/{clubId}/appAdmins/{uid}` grant for *this specific* club).
+`setClub(slug)` is idempotent per slug and guards against a stale in-flight
+resolution being clobbered by a newer navigation. Every Firestore-backed
+service that used to subscribe once in its constructor (`RoleDefinitionService`,
+`CommitteeRosterService`, `PublishedAgendaService`, `SavedAgendaService`,
+`AppAdminService`, `AuditLogService`) now does so inside an `effect()` over
+`clubContext.currentClubId()`, tearing down and re-subscribing whenever the
+resolved club changes — the same "re-subscribe on identity change" shape
+`AuthService`'s old `grantedAdmin` listener used, just generalized to club
+instead of just to sign-in state. **The old per-club-scoped `grantedAdmin`
+listener logic that used to live in `AuthService` moved out to
+`ClubContextService` entirely** — `AuthService` now only exposes
+`currentUser`/`isAdmin`/`ready`, all **global**.
+
+**Auth model is now three tiers, two of them global and one per-club**: the
+real Firebase custom `admin` claim stays global and unchanged — a
+platform-operator tier spanning every club, deliberately not club-scoped
+(custom claims share one ~1000-byte token budget, which doesn't scale to a
+per-club claims list). `clubs/{clubId}/appAdmins/{uid}` is the per-club
+Firestore grant (was a single flat `appAdmins` collection before). `members/{uid}`
+stays global. See Authentication below for the full three-tier breakdown —
+its content is unchanged by this section except that "app-admin" now always
+means "app-admin **of a specific club**."
+
+**Routing is path-based: `/c/<clubSlug>/...`**, applied uniformly — including
+to the original club, whose URLs moved too rather than being frozen in place.
+`app.routes.ts`: bare `/login` and `/signup` stay unprefixed (a Firebase
+account is global); a new parent route `c/:clubSlug` (guarded by
+`clubContextGuard`, `core/club/club-context.guard.ts` — resolves the slug via
+`ClubContextService.setClub()`) nests `''` (home), `member` (`memberGuard`,
+unchanged), `admin` (`clubAdminGuard` — `core/club/club-admin.guard.ts`,
+replaces the deleted `auth.guard.ts`, checks `clubContext.isAppAdmin()`),
+`checkin`, and `preview`, with `admin/audit-log` still additionally guarded
+by `superAdminGuard` (unchanged, deliberately not club-aware — see
+Authentication). The bare root `''` redirects to
+`/c/${environment.defaultClubSlug}` (a new field on `environment.ts`/
+`environment.production.ts`, holding the migrated club's slug).
+
+**Backward compatibility for already-shared check-in/preview links**: bare
+`/checkin` and `/preview` (no `/c/` prefix) are kept as their own top-level
+routes, each guarded by `legacyClubRedirectGuard(segment)`
+(`core/club/legacy-club-redirect.guard.ts`), which redirects to
+`/c/<defaultClubSlug>/<segment>` while preserving query params — so an
+already-texted/QR-coded `/checkin?meeting=42` link keeps working.
+
+**`ClubLinkPipe`** (`core/club/club-link.pipe.ts`, `clubLink`, impure) is how
+internal `routerLink`s got club-prefixed without touching every consuming
+template individually — `'/foo' | clubLink` resolves to
+`/c/<currentClubSlug>/foo` (`/login`/`/signup` pass through unprefixed).
+Fixing it once in the shared `NavbarComponent` covers every page whose nav
+links come from that component's `links` input; a handful of pages with their
+own standalone `routerLink`s (`agenda-editor`, `home`, `admin-hub`,
+`admin-roles-hub`, `admin-agendas-hub`) apply the pipe directly.
+
+**Migration — `scripts/migrate-to-clubs.mjs`** (`npm run migrate:to-clubs` /
+`:prod`), modeled on `scripts/migrate-role-definitions.mjs`'s convention:
+`firebase-admin`, idempotent `.set()` upserts, **never deletes or mutates
+source collections**. Creates `clubs/{clubId}` + `clubSlugs/{slug}`
+atomically (skipped if the slug already resolves — safe to re-run), seeded
+with the literal branding values removed from `agenda-state.service.ts`, then
+copies every collection listed above into the new nested paths (`members` is
+deliberately excluded — it was never club-scoped). Writes are batched under
+Firestore's 500-writes-per-batch limit.
+
+**Firestore rules (`firestore.rules`)**: the new nested rules live under
+`match /clubs/{clubId} { ... }`, with an `isAppAdmin(cid)` helper
+(`isAdmin() || isGrantedAdmin(cid)`, where `isGrantedAdmin(cid)` checks
+`clubs/{cid}/appAdmins/{uid}`) parametrized by `clubId` everywhere the old
+flat rules used a bare `isAppAdmin()`. `clubs/{clubId}` itself and
+`clubSlugs/{slug}` are both public-read, no client write (script/Admin-SDK
+only) — public read is required because `/checkin` and `/preview` are
+anonymous and need to resolve a slug and render a club's branding before any
+auth state is known. **The old flat top-level rules are still in the file,
+deliberately left in place** (renamed `isGrantedAdminLegacy()`/
+`isAppAdminLegacy()` so they don't collide with the new club-scoped
+functions) — dead but harmless during the migration window, same convention
+as this repo's earlier `committeeRoleDefinitions` cleanup; removed only in a
+later, separate deploy once the club-scoped bundle has run in production for
+a while.
+
+**Emulator test convention**: every `*.emulator.spec.ts` file whose service
+became club-scoped now provides a small `fakeClubContextService(clubId)`
+alongside its existing `fakeAuthService`/`fakeAuth`, and any file with its
+own embedded `FIRESTORE_RULES` string (rather than a wildcard
+`allow read, write: if true`) had that string rewritten to nest under
+`match /clubs/{clubId} { ... }`, mirroring the real rules shape. **A real
+gotcha hit doing this**: several of these services now re-subscribe via a
+constructor `effect()` (see above) instead of a plain constructor-time
+`onSnapshot()` — `effect()` needs a live `DestroyRef` from its injector's
+ancestor chain, and Angular's `TestBed` destroys its environment injector
+after **every** test by default. A `parentInjector` captured once in
+`beforeAll()` (the old, pre-effect()-era pattern in several of these files)
+throws `NG0205: Injector has already been destroyed` from the second test
+onward once any service in that file uses a constructor `effect()`. The fix
+is the same in every affected file: fetch `parentInjector` fresh in
+`beforeEach()`, not once in `beforeAll()` — `checkin-state.service.emulator.spec.ts`
+already did this (for an unrelated reason, its own signed-in-member-seeding
+`effect()`); the fix generalized to every other emulator spec once their
+services grew a club-resolution `effect()` too.
+
+**Explicitly out of scope this pass** (see the approved plan for the full
+list): self-service "create a new club" UI, a club-switcher for a user
+belonging to multiple clubs, billing/subscriptions (`clubs/{clubId}.active`
+is a placeholder only), and making the hardcoded 7-role DOCX/committee
+footer structure (`docx.service.ts`'s `PRINTED_ROLE_IDS`,
+`default-agenda.ts`'s role-id vocabulary) configurable per club — only each
+club's actual role-holder *data* is isolated, not that fixed structure.
+
 ## Known gaps / next planned work
 
 1. ~~Stand up a real Firebase project~~ — **done**: `agenda-planner-101c4`,
@@ -1462,12 +1611,17 @@ debug from the rendered output alone.
    avoids service-account keys entirely is granting `appAdmins/{uid}` from
    `/admin/manage-admins` (live, no re-sign-in needed) — see "App-admin
    grants" under Authentication.
-2. Multi-tenant support — multiple clubs under one deployment (separate
-   rosters/roles/agendas) — plus admin-managed yearly subscriptions
-   (manually flagged for now, modeled to slot in real payments later
-   without a schema rewrite). Self-service member accounts already exist
-   (see Authentication above); this item is specifically about supporting
-   more than one club, and billing.
+2. ~~Multi-tenant support — multiple clubs under one deployment~~ —
+   **groundwork done**: data isolation (nested `clubs/{clubId}/...`
+   collections), club-scoped admin access, and path-based routing
+   (`/c/<clubSlug>/...`) all exist now — see "Multi-club groundwork" above
+   for the full design. **Still open**: a self-service "create a new club"
+   UI (provisioning is still script-only, `scripts/migrate-to-clubs.mjs`),
+   a club-switcher for someone belonging to multiple clubs, and
+   admin-managed yearly subscriptions (manually flagged for now, modeled to
+   slot in real payments later without a schema rewrite — `clubs/{clubId}.active`
+   is a placeholder field only). Self-service member accounts already exist
+   (see Authentication above) and stay global, independent of any club.
 3. Admin console for the check-in page: reset a role, cap speaker slots,
    lock the sheet once the meeting starts (role-locking now exists per-role
    via the editor's override toggle — see above — but there's no bulk

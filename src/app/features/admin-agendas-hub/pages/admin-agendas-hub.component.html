@@ -12,14 +12,14 @@
       <div class="fs-1 mb-2">&#128221;</div>
       <h2 class="fs-6 fw-bold">Create New Plan</h2>
       <p class="text-muted small mb-0">Build a new agenda or continue editing the current one</p>
-      <a routerLink="/admin" class="stretched-link" aria-label="Open Create New Plan"></a>
+      <a [routerLink]="'/admin' | clubLink" class="stretched-link" aria-label="Open Create New Plan"></a>
     </div>
 
     <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
       <div class="fs-1 mb-2">&#128203;</div>
       <h2 class="fs-6 fw-bold">Open Recent Plans</h2>
       <p class="text-muted small mb-0">Open, review, or delete a previously saved agenda</p>
-      <a routerLink="/admin/agendas" class="stretched-link" aria-label="Open Recent Plans"></a>
+      <a [routerLink]="'/admin/agendas' | clubLink" class="stretched-link" aria-label="Open Recent Plans"></a>
     </div>
 
   </div>

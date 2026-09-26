@@ -15,20 +15,20 @@
         <div class="fs-1 mb-2">&#128221;</div>
         <h2 class="fs-6 fw-bold">Agendas</h2>
         <p class="text-muted small mb-0">Build a new agenda or reopen a saved one</p>
-        <a routerLink="/admin/manage-agendas" class="stretched-link" aria-label="Open Agendas"></a>
+        <a [routerLink]="'/admin/manage-agendas' | clubLink" class="stretched-link" aria-label="Open Agendas"></a>
       </div>
       <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
         <div class="fs-1 mb-2">&#128736;</div>
         <h2 class="fs-6 fw-bold">Admin</h2>
         <p class="text-muted small mb-0">Manage roles, admins, and the audit log</p>
-        <a routerLink="/admin/hub" class="stretched-link" aria-label="Open Admin"></a>
+        <a [routerLink]="'/admin/hub' | clubLink" class="stretched-link" aria-label="Open Admin"></a>
       </div>
     } @else if (isSignedIn()) {
       <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
         <div class="fs-1 mb-2">&#128100;</div>
         <h2 class="fs-6 fw-bold">Member Profile</h2>
         <p class="text-muted small mb-0">View your profile and meeting history</p>
-        <a routerLink="/member" class="stretched-link" aria-label="Open Member Profile"></a>
+        <a [routerLink]="'/member' | clubLink" class="stretched-link" aria-label="Open Member Profile"></a>
       </div>
     } @else {
       <div class="card text-center p-4 shadow-sm position-relative" style="width:278px;height:177px;">
@@ -44,7 +44,7 @@
         <div class="fs-1 mb-2">&#128101;</div>
         <h2 class="fs-6 fw-bold">Meeting #{{ m.no }} Check-in{{ isSignedIn() ? '' : ' As Guest' }}</h2>
         <p class="text-muted small mb-0">{{ m.theme || 'Meeting ' + m.no }} — check in, claim a role, or sign up to speak</p>
-        <a routerLink="/checkin" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Open Meeting Check-in"></a>
+        <a [routerLink]="'/checkin' | clubLink" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Open Meeting Check-in"></a>
       </div>
     }
 

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { Injector } from '@angular/core';
+import { Injector, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
@@ -8,6 +8,9 @@ import type { Firestore } from 'firebase/firestore';
 import { AttendanceConfirmationService } from './attendance-confirmation.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
+
+const testClubId = 'test-club';
 
 /**
  * Admin-only "mark register"/confirm actions — run against the real
@@ -16,9 +19,9 @@ import { AuthService } from '../../../core/auth/auth.service';
  * mock. isAdmin() requires the `admin` custom claim, not just an
  * authenticated uid (see firestore.rules) — authenticatedContext()'s
  * second argument simulates that claim directly, same pattern as
- * role-definition.service.emulator.spec.ts. isAppAdmin() also recognizes a
- * Firestore-granted appAdmins/{uid} entry — full parity with isAdmin() for
- * this collection, per firestore.rules.
+ * role-definition.service.emulator.spec.ts. isAppAdmin(clubId) also
+ * recognizes a Firestore-granted clubs/{clubId}/appAdmins/{uid} entry —
+ * full parity with isAdmin() for this collection, per firestore.rules.
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
@@ -27,25 +30,27 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
-    function isGrantedAdmin() {
-      return request.auth != null &&
-        exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid));
-    }
-    function isAppAdmin() {
-      return isAdmin() || isGrantedAdmin();
-    }
-    match /appAdmins/{uid} {
-      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
-    }
-    match /memberHistory/{recordId} {
-      allow read: if request.auth != null && (isAppAdmin() || request.auth.uid == resource.data.uid);
-      allow write: if isAppAdmin();
-    }
-    match /auditLog/{entryId} {
-      allow read: if isAdmin();
-      allow create: if isAppAdmin();
-      allow update, delete: if false;
+    match /clubs/{clubId} {
+      function isGrantedAdmin(cid) {
+        return request.auth != null &&
+          exists(/databases/$(database)/documents/clubs/$(cid)/appAdmins/$(request.auth.uid));
+      }
+      function isAppAdmin(cid) {
+        return isAdmin() || isGrantedAdmin(cid);
+      }
+      match /appAdmins/{uid} {
+        allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+        allow write: if isAdmin();
+      }
+      match /memberHistory/{recordId} {
+        allow read: if request.auth != null && (isAppAdmin(clubId) || request.auth.uid == resource.data.uid);
+        allow write: if isAppAdmin(clubId);
+      }
+      match /auditLog/{entryId} {
+        allow read: if isAdmin();
+        allow create: if isAppAdmin(clubId);
+        allow update, delete: if false;
+      }
     }
   }
 }
@@ -55,6 +60,10 @@ const META = { date: '2026-01-01', theme: 'Test Meeting' };
 
 function fakeAuth(uid: string, email: string): AuthService {
   return { currentUser: () => ({ uid, email }) } as unknown as AuthService;
+}
+
+function fakeClubContextService(clubId: string | null = testClubId): ClubContextService {
+  return { currentClubId: signal<string | null>(clubId) } as unknown as ClubContextService;
 }
 
 describe('AttendanceConfirmationService (Firestore emulator)', () => {
@@ -91,6 +100,7 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
         AttendanceConfirmationService,
         { provide: FIRESTORE, useValue: firestore },
         { provide: AuthService, useValue: fakeAuth(authUid, authEmail) },
+        { provide: ClubContextService, useValue: fakeClubContextService() },
       ],
     });
     return child.get(AttendanceConfirmationService);
@@ -100,11 +110,11 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
     const service = createService(adminFirestore);
     await service.confirmAttendance('m1', 'member-1', META);
 
-    let snap = await getDoc(doc(adminFirestore, 'memberHistory', 'm1_member-1'));
+    let snap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'memberHistory', 'm1_member-1'));
     expect(snap.data()?.['attended']).toBe(true);
 
     await service.unconfirmAttendance('m1', 'member-1');
-    snap = await getDoc(doc(adminFirestore, 'memberHistory', 'm1_member-1'));
+    snap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'memberHistory', 'm1_member-1'));
     expect(snap.data()?.['attended']).toBe(false);
   });
 
@@ -114,12 +124,12 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
     await service.confirmRole('m1', 'member-1', 'toastmaster', META);
     await service.confirmRole('m1', 'member-1', 'grammarian', META);
 
-    let snap = await getDoc(doc(adminFirestore, 'memberHistory', 'm1_member-1'));
+    let snap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'memberHistory', 'm1_member-1'));
     expect(snap.data()?.['rolesConfirmed']).toEqual(expect.arrayContaining(['toastmaster', 'grammarian']));
     expect(snap.data()?.['attended']).toBe(true); // untouched by the role confirms
 
     await service.unconfirmRole('m1', 'member-1', 'toastmaster');
-    snap = await getDoc(doc(adminFirestore, 'memberHistory', 'm1_member-1'));
+    snap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'memberHistory', 'm1_member-1'));
     expect(snap.data()?.['rolesConfirmed']).toEqual(['grammarian']);
   });
 
@@ -127,10 +137,10 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
     const service = createService(adminFirestore);
     await service.confirmEvaluation('m1', 'evaluator-uid', 'speaker-1', META);
 
-    const evaluatorSnap = await getDoc(doc(adminFirestore, 'memberHistory', 'm1_evaluator-uid'));
+    const evaluatorSnap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'memberHistory', 'm1_evaluator-uid'));
     expect(evaluatorSnap.data()?.['evaluatedSpeakerId']).toBe('speaker-1');
 
-    const speakerSnap = await getDoc(doc(adminFirestore, 'memberHistory', 'm1_speaker-1'));
+    const speakerSnap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'memberHistory', 'm1_speaker-1'));
     expect(speakerSnap.exists()).toBe(false);
   });
 
@@ -153,20 +163,20 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
 
     const memberFirestore = testEnv.authenticatedContext('member-1').firestore() as unknown as Firestore;
     await expect(
-      setDoc(doc(memberFirestore, 'memberHistory', 'm1_member-1'), { meetingId: 'm1', uid: 'member-1', attended: true })
+      setDoc(doc(memberFirestore, 'clubs', testClubId, 'memberHistory', 'm1_member-1'), { meetingId: 'm1', uid: 'member-1', attended: true })
     ).rejects.toThrow();
 
     // the member CAN read their own record
-    const ownSnap = await getDoc(doc(memberFirestore, 'memberHistory', 'm1_member-1'));
+    const ownSnap = await getDoc(doc(memberFirestore, 'clubs', testClubId, 'memberHistory', 'm1_member-1'));
     expect(ownSnap.data()?.['attended']).toBe(true);
 
     // a different signed-in member cannot read someone else's record
     const strangerFirestore = testEnv.authenticatedContext('stranger-uid').firestore() as unknown as Firestore;
-    await expect(getDoc(doc(strangerFirestore, 'memberHistory', 'm1_member-1'))).rejects.toThrow();
+    await expect(getDoc(doc(strangerFirestore, 'clubs', testClubId, 'memberHistory', 'm1_member-1'))).rejects.toThrow();
   });
 
   it('allows writes from a Firestore-granted admin with no real claim — isAppAdmin() takes effect, not just isAdmin()', async () => {
-    await setDoc(doc(adminFirestore, 'appAdmins', 'granted-uid'), {
+    await setDoc(doc(adminFirestore, 'clubs', testClubId, 'appAdmins', 'granted-uid'), {
       uid: 'granted-uid',
       email: 'granted@example.com',
       displayName: 'Granted Admin',
@@ -178,7 +188,7 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
     const service = createService(grantedFirestore, 'granted-uid', 'granted@example.com');
 
     await service.confirmAttendance('m1', 'member-1', META);
-    const snap = await getDoc(doc(adminFirestore, 'memberHistory', 'm1_member-1'));
+    const snap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'memberHistory', 'm1_member-1'));
     expect(snap.data()?.['attended']).toBe(true);
   });
 
@@ -187,7 +197,7 @@ describe('AttendanceConfirmationService (Firestore emulator)', () => {
     await service.confirmAttendance('m1', 'member-1', META);
     await service.unconfirmAttendance('m1', 'member-1');
 
-    const snap = await getDocs(collection(adminFirestore, 'auditLog'));
+    const snap = await getDocs(collection(adminFirestore, 'clubs', testClubId, 'auditLog'));
     const entries = snap.docs.map((d) => d.data());
 
     expect(entries.some((e) => e['action'] === 'attendance.confirm' && e['summary'].includes('member-1'))).toBe(true);

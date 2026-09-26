@@ -6,6 +6,7 @@ import { AgendaStateService } from '../../agenda-editor/services/agenda-state.se
 import { AgendaImportExportService } from '../../agenda-editor/services/agenda-import-export.service';
 import { CheckinStateService } from '../../checkin/services/checkin-state.service';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
+import { ClubContextService } from '../../../core/club/club-context.service';
 import { APP_LOCALE } from '../../../core/utils/locale';
 
 @Component({
@@ -20,6 +21,7 @@ export class AdminAgendasComponent {
   readonly state = inject(AgendaStateService);
   private readonly importExport = inject(AgendaImportExportService);
   private readonly checkinState = inject(CheckinStateService);
+  private readonly clubContext = inject(ClubContextService);
   private readonly router = inject(Router);
 
   readonly entries = this.savedAgendas.entries;
@@ -31,12 +33,12 @@ export class AdminAgendasComponent {
     const snapshot = await this.savedAgendas.load(no);
     if (!snapshot) return;
     this.importExport.loadSnapshot(snapshot);
-    this.router.navigate(['/admin']);
+    this.router.navigate(['/c', this.clubContext.currentClubSlug(), 'admin']);
   }
 
   /** Preview this saved agenda regardless of publish state — see AgendaDraftPreviewComponent. */
   preview(no: string) {
-    this.router.navigate(['/admin/preview'], { queryParams: { meeting: no } });
+    this.router.navigate(['/c', this.clubContext.currentClubSlug(), 'admin', 'preview'], { queryParams: { meeting: no } });
   }
 
   /** Whether `no` is the currently published meeting — entries() is normally 0-1 elements now that publish() is exclusive. */
@@ -83,7 +85,7 @@ export class AdminAgendasComponent {
 
   createNew() {
     this.state.resetAll();
-    this.router.navigate(['/admin']);
+    this.router.navigate(['/c', this.clubContext.currentClubSlug(), 'admin']);
   }
 
   remove(no: string) {

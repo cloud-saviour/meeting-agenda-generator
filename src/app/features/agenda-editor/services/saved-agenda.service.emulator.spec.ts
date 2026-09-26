@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Injector, NgZone } from '@angular/core';
+import { Injector, NgZone, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
@@ -9,19 +9,26 @@ import { SavedAgendaService } from './saved-agenda.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AgendaSnapshot } from '../models/agenda.models';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
+
+const testClubId = 'test-club';
+
+function fakeClubContextService(clubId: string | null = testClubId): ClubContextService {
+  return { currentClubId: signal<string | null>(clubId) } as unknown as ClubContextService;
+}
 
 /**
  * SavedAgendaService is Firestore-backed — one document per meeting at
- * `savedAgendas/{meetingId}`. Migrated for cross-device convenience, not a
- * correctness bug (unlike CheckinStateService/PublishedAgendaService) — it's
- * a genuinely single-admin workload. Run via `npm run test:emulator` with
- * the emulator already running.
+ * `clubs/{clubId}/savedAgendas/{meetingId}`. Migrated for cross-device
+ * convenience, not a correctness bug (unlike CheckinStateService/
+ * PublishedAgendaService) — it's a genuinely single-admin workload. Run via
+ * `npm run test:emulator` with the emulator already running.
  *
  * isAdmin() requires the `admin` custom claim, not just an authenticated uid
  * (see firestore.rules) — authenticatedContext()'s second argument simulates
- * that claim directly, no Firestore fixture document needed. isAppAdmin()
- * also recognizes a Firestore-granted appAdmins/{uid} entry (see
- * AuthService/AppAdminService) — full parity with isAdmin() for this
+ * that claim directly, no Firestore fixture document needed. isAppAdmin(clubId)
+ * also recognizes a Firestore-granted clubs/{clubId}/appAdmins/{uid} entry
+ * (see AuthService/AppAdminService) — full parity with isAdmin() for this
  * collection, per firestore.rules.
  */
 const FIRESTORE_RULES = `
@@ -31,24 +38,26 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
-    function isGrantedAdmin() {
-      return request.auth != null &&
-        exists(/databases/$(database)/documents/appAdmins/$(request.auth.uid));
-    }
-    function isAppAdmin() {
-      return isAdmin() || isGrantedAdmin();
-    }
-    match /appAdmins/{uid} {
-      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
-    }
-    match /savedAgendas/{meetingId} {
-      allow read, write: if isAppAdmin();
-    }
-    match /auditLog/{entryId} {
-      allow read: if isAdmin();
-      allow create: if isAppAdmin();
-      allow update, delete: if false;
+    match /clubs/{clubId} {
+      function isGrantedAdmin(cid) {
+        return request.auth != null &&
+          exists(/databases/$(database)/documents/clubs/$(cid)/appAdmins/$(request.auth.uid));
+      }
+      function isAppAdmin(cid) {
+        return isAdmin() || isGrantedAdmin(cid);
+      }
+      match /appAdmins/{uid} {
+        allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+        allow write: if isAdmin();
+      }
+      match /savedAgendas/{meetingId} {
+        allow read, write: if isAppAdmin(clubId);
+      }
+      match /auditLog/{entryId} {
+        allow read: if isAdmin();
+        allow create: if isAppAdmin(clubId);
+        allow update, delete: if false;
+      }
     }
   }
 }
@@ -104,9 +113,6 @@ describe('SavedAgendaService (Firestore emulator)', () => {
       firestore: { host: '127.0.0.1', port: 8080, rules: FIRESTORE_RULES },
     });
     firestore = testEnv.authenticatedContext('test-admin-uid', { admin: true }).firestore() as unknown as Firestore;
-
-    TestBed.configureTestingModule({});
-    parentInjector = TestBed.inject(Injector);
   });
 
   afterAll(async () => {
@@ -115,6 +121,13 @@ describe('SavedAgendaService (Firestore emulator)', () => {
 
   beforeEach(async () => {
     await testEnv.clearFirestore();
+    // Fetched fresh per test, not once in beforeAll: TestBed destroys its
+    // environment injector after every test by default, and this service's
+    // constructor effect() (re-subscribing on clubContext.currentClubId()
+    // changes) needs a live DestroyRef from this injector's ancestor chain —
+    // a stale parentInjector throws NG0205 on the second test onward.
+    TestBed.configureTestingModule({});
+    parentInjector = TestBed.inject(Injector);
   });
 
   afterEach(() => {
@@ -129,6 +142,7 @@ describe('SavedAgendaService (Firestore emulator)', () => {
         SavedAgendaService,
         { provide: FIRESTORE, useValue: firestoreInstance },
         { provide: AuthService, useValue: fakeAuth(authUid, authEmail) },
+        { provide: ClubContextService, useValue: fakeClubContextService() },
         { provide: NgZone, useValue: TestBed.inject(NgZone) },
       ],
     });
@@ -226,7 +240,7 @@ describe('SavedAgendaService (Firestore emulator)', () => {
   });
 
   it('allows reads/writes from a Firestore-granted admin with no real claim — isAppAdmin() takes effect, not just isAdmin()', async () => {
-    await setDoc(doc(firestore, 'appAdmins', 'granted-uid'), {
+    await setDoc(doc(firestore, 'clubs', testClubId, 'appAdmins', 'granted-uid'), {
       uid: 'granted-uid',
       email: 'granted@example.com',
       displayName: 'Granted Admin',
@@ -247,7 +261,7 @@ describe('SavedAgendaService (Firestore emulator)', () => {
     await waitFor(() => service.entries().length === 1);
     await service.delete('160');
 
-    const snap = await getDocs(collection(firestore, 'auditLog'));
+    const snap = await getDocs(collection(firestore, 'clubs', testClubId, 'auditLog'));
     const entries = snap.docs.map((d) => d.data());
 
     expect(entries.length).toBe(2);

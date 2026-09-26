@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
-import { AuthService } from '../../../../core/auth/auth.service';
+import { ClubContextService } from '../../../../core/club/club-context.service';
 
 @Component({
   selector: 'app-evaluator-slots',
@@ -10,7 +10,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 })
 export class EvaluatorSlotsComponent {
   readonly state = inject(CheckinStateService);
-  readonly auth = inject(AuthService);
+  readonly club = inject(ClubContextService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   error: string | null = null;
   private readonly pendingEvaluationConfirm = new Set<string>();

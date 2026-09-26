@@ -6,10 +6,12 @@
 // script is never imported by, and must never be run as part of,
 // `npm run test:emulator`.
 //
-// Collections touched: savedAgendas, publishedAgendas, committeeRoster,
-// checkins (all admin-write-only except checkins, which is public), plus
-// Auth + members/{uid} for 3 non-admin member accounts, and memberHistory
-// records tying those members to the seeded meeting.
+// Collections touched: clubs/{clubId}/savedAgendas, publishedAgendas,
+// committeeRoster, checkins (all admin-write-only except checkins, which is
+// public), plus Auth + the GLOBAL members/{uid} for 3 non-admin member
+// accounts, and clubs/{clubId}/memberHistory records tying those members to
+// the seeded meeting. Resolves clubId from clubSlugs/{CLUB_SLUG}, which
+// scripts/migrate-to-clubs.mjs creates — run that FIRST on a fresh emulator.
 //
 // Soft dependency: assumes `npm run seed:roles` and `npm run seed:admin`
 // have already been run — the committee roster below references committee
@@ -38,6 +40,7 @@ import { getAuth } from 'firebase-admin/auth';
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 
+const CLUB_SLUG = 'kings-speakers-12'; // must match scripts/migrate-to-clubs.mjs
 const MEETING_ID = 'TEST-1';
 
 const MEMBERS = [
@@ -190,15 +193,16 @@ function buildMemberHistoryRecords(members) {
 }
 
 // ── Idempotency helpers ─────────────────────────────────────────────────
-async function seedNamedDoc(firestore, collectionName, docId, data) {
-  const ref = firestore.collection(collectionName).doc(docId);
+/** `collectionRef` is a full Firestore CollectionReference (club-scoped or, for `members`, the flat global one) — not a bare name, so every call site is explicit about which shape it's writing into. */
+async function seedNamedDoc(collectionRef, docId, data) {
+  const ref = collectionRef.doc(docId);
   const existing = await ref.get();
   if (existing.exists) {
-    console.log(`Skipping "${collectionName}/${docId}" — already exists.`);
+    console.log(`Skipping "${ref.path}" — already exists.`);
     return;
   }
   await ref.set(data);
-  console.log(`Seeded "${collectionName}/${docId}".`);
+  console.log(`Seeded "${ref.path}".`);
 }
 
 async function ensureAuthUser(auth, email, password, displayName) {
@@ -223,7 +227,8 @@ async function seedMembers(auth, firestore) {
   const members = [];
   for (const m of MEMBERS) {
     const uid = await ensureAuthUser(auth, m.email, m.password, m.displayName);
-    await seedNamedDoc(firestore, 'members', uid, {
+    // members/{uid} stays global/flat — one Firebase account, independent of any club.
+    await seedNamedDoc(firestore.collection('members'), uid, {
       uid,
       email: m.email,
       displayName: m.displayName,
@@ -249,34 +254,42 @@ async function main() {
   const firestore = getFirestore(app);
   const auth = getAuth(app);
 
+  const pointer = await firestore.collection('clubSlugs').doc(CLUB_SLUG).get();
+  if (!pointer.exists) {
+    console.error(`No club found for slug "${CLUB_SLUG}" — run "npm run migrate:to-clubs" first.`);
+    process.exit(1);
+  }
+  const clubId = pointer.data().clubId;
+  const club = firestore.collection('clubs').doc(clubId);
+
   const members = await seedMembers(auth, firestore); // members first — everything below references their uids
   const adminUid = await lookupAdminUid(auth);
 
-  await seedNamedDoc(firestore, 'committeeRoster', 'current', { members: COMMITTEE });
+  await seedNamedDoc(club.collection('committeeRoster'), 'current', { members: COMMITTEE });
 
   const agendaSnapshot = { ...MEETING, agItems: buildAgendaItems(COMMITTEE), spks: buildSpeakers(), cmt: COMMITTEE };
-  await seedNamedDoc(firestore, 'savedAgendas', MEETING_ID, { ...agendaSnapshot, updatedAt: new Date().toISOString() });
+  await seedNamedDoc(club.collection('savedAgendas'), MEETING_ID, { ...agendaSnapshot, updatedAt: new Date().toISOString() });
   // Bypasses PublishedAgendaService.publish()'s exclusive-publish batch (it
   // deletes every other published doc) since this is a raw Admin SDK write
   // — if another meeting is already published, both will show as published
   // afterward. Fine for QA data; use the app's own Publish button if you
   // need the single-published-meeting invariant preserved.
-  await seedNamedDoc(firestore, 'publishedAgendas', MEETING_ID, { ...agendaSnapshot, publishedAt: new Date().toISOString() });
+  await seedNamedDoc(club.collection('publishedAgendas'), MEETING_ID, { ...agendaSnapshot, publishedAt: new Date().toISOString() });
 
   const checkinSnapshot = buildCheckinSnapshot(members, adminUid);
-  await seedNamedDoc(firestore, 'checkins', MEETING_ID, checkinSnapshot);
+  await seedNamedDoc(club.collection('checkins'), MEETING_ID, checkinSnapshot);
 
   for (const record of buildMemberHistoryRecords(members)) {
-    await seedNamedDoc(firestore, 'memberHistory', `${MEETING_ID}_${record.uid}`, record);
+    await seedNamedDoc(club.collection('memberHistory'), `${MEETING_ID}_${record.uid}`, record);
   }
 
   console.log('\nDone. Demo meeting seeded:');
   console.log(`  Meeting: ${MEETING_ID} — "${MEETING.theme}"`);
   console.log(`  Members: ${MEMBERS.map((m) => `${m.email} / ${m.password}`).join(', ')}`);
-  console.log(`  Admin flow:  http://localhost:4300/admin/agendas  (open meeting ${MEETING_ID})`);
-  console.log(`  Check-in:    http://localhost:4300/checkin?meeting=${MEETING_ID}`);
-  console.log(`  Preview:     http://localhost:4300/preview?meeting=${MEETING_ID}`);
-  console.log(`  Member view: http://localhost:4300/member  (sign in as any member above)`);
+  console.log(`  Admin flow:  http://localhost:4300/c/${CLUB_SLUG}/admin/agendas  (open meeting ${MEETING_ID})`);
+  console.log(`  Check-in:    http://localhost:4300/c/${CLUB_SLUG}/checkin?meeting=${MEETING_ID}`);
+  console.log(`  Preview:     http://localhost:4300/c/${CLUB_SLUG}/preview?meeting=${MEETING_ID}`);
+  console.log(`  Member view: http://localhost:4300/c/${CLUB_SLUG}/member  (sign in as any member above)`);
 
   process.exit(0);
 }

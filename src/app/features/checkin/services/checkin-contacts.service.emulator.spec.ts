@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { Injector } from '@angular/core';
+import { Injector, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
@@ -7,12 +7,19 @@ import { doc, getDoc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { CheckinContactsService } from './checkin-contacts.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { ClubContextService } from '../../../core/club/club-context.service';
+
+const testClubId = 'test-club';
+
+function fakeClubContextService(clubId: string | null = testClubId) {
+  return { currentClubId: signal<string | null>(clubId) } as unknown as ClubContextService;
+}
 
 /**
- * `checkinContacts/{uid}` holds real emails behind check-in identities —
- * write is open (same accepted risk as `checkins/**` itself: anonymous,
- * self-reported, no verification), but read is admin-only, since this is
- * the one place raw PII lives (see firestore.rules).
+ * `clubs/{clubId}/checkinContacts/{uid}` holds real emails behind check-in
+ * identities — write is open (same accepted risk as `checkins/**` itself:
+ * anonymous, self-reported, no verification), but read is admin-only, since
+ * this is the one place raw PII lives (see firestore.rules).
  */
 const FIRESTORE_RULES = `
 rules_version = '2';
@@ -21,9 +28,11 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
-    match /checkinContacts/{uid} {
-      allow read: if isAdmin();
-      allow write: if true;
+    match /clubs/{clubId} {
+      match /checkinContacts/{uid} {
+        allow read: if isAdmin();
+        allow write: if true;
+      }
     }
   }
 }
@@ -57,7 +66,11 @@ describe('CheckinContactsService (Firestore emulator)', () => {
   function createService(firestore: Firestore): CheckinContactsService {
     const child = Injector.create({
       parent: parentInjector,
-      providers: [CheckinContactsService, { provide: FIRESTORE, useValue: firestore }],
+      providers: [
+        CheckinContactsService,
+        { provide: FIRESTORE, useValue: firestore },
+        { provide: ClubContextService, useValue: fakeClubContextService() },
+      ],
     });
     return child.get(CheckinContactsService);
   }
@@ -66,7 +79,7 @@ describe('CheckinContactsService (Firestore emulator)', () => {
     const service = createService(unauthFirestore);
     await service.upsert('uid-1', 'Alice', 'alice@example.com');
 
-    const snap = await getDoc(doc(adminFirestore, 'checkinContacts', 'uid-1'));
+    const snap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'checkinContacts', 'uid-1'));
     expect(snap.data()).toMatchObject({ uid: 'uid-1', name: 'Alice', email: 'alice@example.com' });
   });
 
@@ -75,7 +88,7 @@ describe('CheckinContactsService (Firestore emulator)', () => {
     await service.upsert('uid-1', 'Alice', 'alice@example.com');
     await service.upsert('uid-1', 'Alice A.', 'alice@example.com');
 
-    const snap = await getDoc(doc(adminFirestore, 'checkinContacts', 'uid-1'));
+    const snap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'checkinContacts', 'uid-1'));
     expect(snap.data()?.['name']).toBe('Alice A.');
   });
 
@@ -83,14 +96,27 @@ describe('CheckinContactsService (Firestore emulator)', () => {
     const admin = createService(adminFirestore);
     await admin.upsert('uid-1', 'Alice', 'alice@example.com');
 
-    await expect(getDoc(doc(unauthFirestore, 'checkinContacts', 'uid-1'))).rejects.toThrow();
+    await expect(getDoc(doc(unauthFirestore, 'clubs', testClubId, 'checkinContacts', 'uid-1'))).rejects.toThrow();
   });
 
   it('allows an admin to read a contact', async () => {
     const admin = createService(adminFirestore);
     await admin.upsert('uid-1', 'Alice', 'alice@example.com');
 
-    const snap = await getDoc(doc(adminFirestore, 'checkinContacts', 'uid-1'));
+    const snap = await getDoc(doc(adminFirestore, 'clubs', testClubId, 'checkinContacts', 'uid-1'));
     expect(snap.data()?.['email']).toBe('alice@example.com');
+  });
+
+  it('upsert() no-ops when no club is resolved', async () => {
+    const child = Injector.create({
+      parent: parentInjector,
+      providers: [
+        CheckinContactsService,
+        { provide: FIRESTORE, useValue: unauthFirestore },
+        { provide: ClubContextService, useValue: fakeClubContextService(null) },
+      ],
+    });
+    const service = child.get(CheckinContactsService);
+    await expect(service.upsert('uid-1', 'Alice', 'alice@example.com')).resolves.toBeUndefined();
   });
 });

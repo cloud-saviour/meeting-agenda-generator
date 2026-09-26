@@ -1,9 +1,15 @@
 import { Component, Input, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
+import { ClubLinkPipe } from '../../core/club/club-link.pipe';
 
 export interface NavLink {
   label: string;
+  /** Club-relative, e.g. '/admin/hub' or '/' — ClubLinkPipe (applied once,
+   *  here, in this component's own template) prefixes it with the CURRENT
+   *  club's /c/<slug> segment, so every page building this array keeps
+   *  passing the same plain paths as before multi-club routing; only
+   *  '/login' and '/signup' pass through unprefixed (see ClubLinkPipe). */
   path: string;
   queryParams?: Record<string, string>;
 }
@@ -11,7 +17,7 @@ export interface NavLink {
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, ClubLinkPipe],
   templateUrl: './navbar.component.html',
 })
 export class NavbarComponent {

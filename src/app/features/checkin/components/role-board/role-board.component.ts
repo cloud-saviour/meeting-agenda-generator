@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
 import { RoleDefinitionService } from '../../../../core/services/role-definition.service';
-import { AuthService } from '../../../../core/auth/auth.service';
+import { ClubContextService } from '../../../../core/club/club-context.service';
 
 @Component({
   selector: 'app-role-board',
@@ -12,7 +12,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 export class RoleBoardComponent {
   readonly state = inject(CheckinStateService);
   readonly roleDefs = inject(RoleDefinitionService);
-  readonly auth = inject(AuthService);
+  readonly club = inject(ClubContextService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
   readonly activeRoles = this.roleDefs.activeMeetingRoles;
 

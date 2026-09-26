@@ -1,10 +1,12 @@
-import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { collection, doc, getDocFromServer, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 import { AgendaSnapshot } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
+const CLUBS_COLLECTION = 'clubs';
 const COLLECTION = 'publishedAgendas';
 
 export interface PublishedAgendaEntry {
@@ -22,17 +24,20 @@ interface PublishedAgendaDoc extends AgendaSnapshot {
  * Publishes a read-only snapshot of the agenda per meeting number, so
  * non-admin members (via the check-in page's "Preview Agenda" link) can see
  * it without touching the live in-memory editing session. Firestore-backed —
- * one document per meeting at `publishedAgendas/{meetingId}` — because unlike
- * SavedAgendaService (a single-admin, one-browser workload), this service's
- * entire purpose is being read on a *different device* than the one that
- * published it, which localStorage can never do.
+ * one document per meeting at `clubs/{clubId}/publishedAgendas/{meetingId}` —
+ * because unlike SavedAgendaService (a single-admin, one-browser workload),
+ * this service's entire purpose is being read on a *different device* than
+ * the one that published it, which localStorage can never do.
  *
- * **At most one document exists in this collection at a time** — `publish()`
- * is exclusive: it reads the whole collection, deletes every other document,
- * and sets the new one, all inside a single `writeBatch()` (this codebase's
- * first use of `writeBatch()`), so publishing meeting B always un-publishes
- * whatever meeting A was previously published, atomically — there's never a
- * window where zero or two meetings are simultaneously published.
+ * **At most one document exists in this collection (per club) at a time** —
+ * `publish()` is exclusive: it reads the whole collection, deletes every
+ * other document, and sets the new one, all inside a single `writeBatch()`
+ * (this codebase's first use of `writeBatch()`), so publishing meeting B
+ * always un-publishes whatever meeting A was previously published within
+ * the SAME club, atomically — there's never a window where zero or two
+ * meetings are simultaneously published for one club. A different club's
+ * own published meeting is entirely unaffected either way — separate
+ * subcollection.
  *
  * No separate index collection is needed the way the old localStorage
  * version needed a hand-rolled one — `entries()`/`nearestEntry()` are
@@ -40,18 +45,23 @@ interface PublishedAgendaDoc extends AgendaSnapshot {
  * Firestore's version of "enumerate the keys" for free (in practice they now
  * only ever see 0 or 1 entries, but their code is unchanged — it already
  * degrades to that correctly).
+ *
+ * Multi-club: the index `onSnapshot()` below re-subscribes via `effect()`
+ * whenever `clubContext.currentClubId()` changes — see RoleDefinitionService
+ * for the same pattern and why.
  */
 @Injectable({ providedIn: 'root' })
 export class PublishedAgendaService implements OnDestroy {
   private readonly firestore = inject(FIRESTORE);
   private readonly auth = inject(AuthService);
+  private readonly clubContext = inject(ClubContextService);
   private readonly zone = inject(NgZone);
 
   private readonly snapshot = signal<AgendaSnapshot | null>(null);
   private readonly allEntries = signal<PublishedAgendaEntry[]>([]);
   private currentMeetingId: string | null = null;
   private unsubscribeMeeting: (() => void) | undefined;
-  private readonly unsubscribeIndex: () => void;
+  private unsubscribeIndex: (() => void) | undefined;
 
   readonly current = computed(() => this.snapshot());
 
@@ -75,26 +85,44 @@ export class PublishedAgendaService implements OnDestroy {
   });
 
   constructor() {
-    // Always-on, from construction — same pattern as RoleDefinitionService —
-    // since there's no "which meeting" context for Home's nearestEntry lookup.
-    this.unsubscribeIndex = onSnapshot(
-      collection(this.firestore, COLLECTION),
-      (snap) =>
-        this.zone.run(() => {
-          this.allEntries.set(
-            snap.docs.map((d) => {
-              const data = d.data() as PublishedAgendaDoc;
-              return { no: d.id, date: data.date, theme: data.theme, publishedAt: data.publishedAt };
-            })
-          );
-        }),
-      (err) => this.zone.run(() => console.error('publishedAgendas index listener failed', err))
-    );
+    effect(() => {
+      const clubId = this.clubContext.currentClubId();
+      this.unsubscribeIndex?.();
+      this.unsubscribeIndex = undefined;
+      this.allEntries.set([]);
+      if (!clubId) return;
+
+      this.unsubscribeIndex = onSnapshot(
+        collection(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION),
+        (snap) =>
+          this.zone.run(() => {
+            this.allEntries.set(
+              snap.docs.map((d) => {
+                const data = d.data() as PublishedAgendaDoc;
+                return { no: d.id, date: data.date, theme: data.theme, publishedAt: data.publishedAt };
+              })
+            );
+          }),
+        (err) => this.zone.run(() => console.error('publishedAgendas index listener failed', err))
+      );
+    });
   }
 
   ngOnDestroy(): void {
-    this.unsubscribeIndex();
+    this.unsubscribeIndex?.();
     this.unsubscribeMeeting?.();
+  }
+
+  private collectionRef() {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('PublishedAgendaService called with no club resolved');
+    return collection(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION);
+  }
+
+  private docRef(meetingId: string) {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('PublishedAgendaService called with no club resolved');
+    return doc(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION, meetingId);
   }
 
   /**
@@ -109,20 +137,21 @@ export class PublishedAgendaService implements OnDestroy {
    */
   publish(meetingId: string, data: AgendaSnapshot): Promise<void> {
     const payload: PublishedAgendaDoc = { ...data, publishedAt: new Date().toISOString() };
-    const coll = collection(this.firestore, COLLECTION);
+    const coll = this.collectionRef();
     return getDocs(coll)
       .then((snap) => {
         const batch = writeBatch(this.firestore);
         for (const d of snap.docs) {
           if (d.id !== meetingId) batch.delete(d.ref);
         }
-        batch.set(doc(this.firestore, COLLECTION, meetingId), payload);
+        batch.set(this.docRef(meetingId), payload);
         appendAuditEntry(
           this.firestore,
           batch,
           'agenda.publish',
           `Published agenda #${meetingId} (${data.theme || 'untitled'})`,
-          this.auth.currentUser()
+          this.auth.currentUser(),
+          this.clubContext.currentClubId() ?? undefined
         );
         return batch.commit();
       })
@@ -144,7 +173,7 @@ export class PublishedAgendaService implements OnDestroy {
   unpublish(meetingId: string): Promise<void> {
     const entry = this.allEntries().find((e) => e.no === meetingId);
     const batch = writeBatch(this.firestore);
-    batch.delete(doc(this.firestore, COLLECTION, meetingId));
+    batch.delete(this.docRef(meetingId));
     // Only log when it was genuinely published — a no-op unpublish (already
     // gone) isn't a meaningful admin action worth recording.
     if (entry) {
@@ -153,7 +182,8 @@ export class PublishedAgendaService implements OnDestroy {
         batch,
         'agenda.unpublish',
         `Unpublished agenda #${meetingId}${entry.theme ? ` (${entry.theme})` : ''}`,
-        this.auth.currentUser()
+        this.auth.currentUser(),
+        this.clubContext.currentClubId() ?? undefined
       );
     }
     return batch.commit().catch((err) => console.error('unpublish failed', err));
@@ -173,7 +203,7 @@ export class PublishedAgendaService implements OnDestroy {
    */
   async refetch(meetingId: string): Promise<void> {
     try {
-      const snap = await getDocFromServer(doc(this.firestore, COLLECTION, meetingId));
+      const snap = await getDocFromServer(this.docRef(meetingId));
       this.snapshot.set(snap.exists() ? (snap.data() as AgendaSnapshot) : null);
     } catch (err) {
       console.error('publishedAgendas refetch failed', err);
@@ -191,7 +221,7 @@ export class PublishedAgendaService implements OnDestroy {
     this.unsubscribeMeeting?.();
     this.currentMeetingId = meetingId;
 
-    const ref = doc(this.firestore, COLLECTION, meetingId);
+    const ref = this.docRef(meetingId);
     this.unsubscribeMeeting = onSnapshot(
       ref,
       (snap) =>

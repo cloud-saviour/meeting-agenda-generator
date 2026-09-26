@@ -1,10 +1,12 @@
-import { Injectable, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Injectable, NgZone, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { collection, doc, getDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { AgendaSnapshot } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ClubContextService } from '../../../core/club/club-context.service';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
 
+const CLUBS_COLLECTION = 'clubs';
 const COLLECTION = 'savedAgendas';
 
 export interface SavedAgendaEntry {
@@ -20,21 +22,26 @@ interface SavedAgendaDoc extends AgendaSnapshot {
 
 /**
  * The admin's library of saved agendas — one document per meeting number at
- * `savedAgendas/{meetingId}`, holding the full `AgendaSnapshot` plus
- * `updatedAt`. Single-admin, one-browser-at-a-time workload (unlike
+ * `clubs/{clubId}/savedAgendas/{meetingId}`, holding the full `AgendaSnapshot`
+ * plus `updatedAt`. Single-admin, one-browser-at-a-time workload (unlike
  * PublishedAgendaService or CheckinStateService) — migrated anyway for
  * cross-device convenience, not to fix a correctness bug. No separate index
  * collection needed — `entries()` is derived from a live `onSnapshot()` on
  * the whole collection, same as PublishedAgendaService/RoleDefinitionService.
+ *
+ * Multi-club: the index `onSnapshot()` below re-subscribes via `effect()`
+ * whenever `clubContext.currentClubId()` changes — see RoleDefinitionService
+ * for the same pattern and why.
  */
 @Injectable({ providedIn: 'root' })
 export class SavedAgendaService implements OnDestroy {
   private readonly firestore = inject(FIRESTORE);
   private readonly auth = inject(AuthService);
+  private readonly clubContext = inject(ClubContextService);
   private readonly zone = inject(NgZone);
 
   private readonly allEntries = signal<SavedAgendaEntry[]>([]);
-  private readonly unsubscribe: () => void;
+  private unsubscribe: (() => void) | undefined;
 
   /** Saved agendas, most recently edited first. */
   readonly entries = computed(() =>
@@ -42,23 +49,37 @@ export class SavedAgendaService implements OnDestroy {
   );
 
   constructor() {
-    this.unsubscribe = onSnapshot(
-      collection(this.firestore, COLLECTION),
-      (snap) =>
-        this.zone.run(() => {
-          this.allEntries.set(
-            snap.docs.map((d) => {
-              const data = d.data() as SavedAgendaDoc;
-              return { no: d.id, date: data.date, theme: data.theme, updatedAt: data.updatedAt };
-            })
-          );
-        }),
-      (err) => this.zone.run(() => console.error('savedAgendas index listener failed', err))
-    );
+    effect(() => {
+      const clubId = this.clubContext.currentClubId();
+      this.unsubscribe?.();
+      this.unsubscribe = undefined;
+      this.allEntries.set([]);
+      if (!clubId) return;
+
+      this.unsubscribe = onSnapshot(
+        collection(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION),
+        (snap) =>
+          this.zone.run(() => {
+            this.allEntries.set(
+              snap.docs.map((d) => {
+                const data = d.data() as SavedAgendaDoc;
+                return { no: d.id, date: data.date, theme: data.theme, updatedAt: data.updatedAt };
+              })
+            );
+          }),
+        (err) => this.zone.run(() => console.error('savedAgendas index listener failed', err))
+      );
+    });
   }
 
   ngOnDestroy(): void {
-    this.unsubscribe();
+    this.unsubscribe?.();
+  }
+
+  private docRef(no: string) {
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) throw new Error('SavedAgendaService called with no club resolved');
+    return doc(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION, no);
   }
 
   /**
@@ -75,13 +96,14 @@ export class SavedAgendaService implements OnDestroy {
     if (!snapshot.no) return Promise.resolve();
     const payload: SavedAgendaDoc = { ...snapshot, updatedAt: new Date().toISOString() };
     const batch = writeBatch(this.firestore);
-    batch.set(doc(this.firestore, COLLECTION, snapshot.no), payload);
+    batch.set(this.docRef(snapshot.no), payload);
     appendAuditEntry(
       this.firestore,
       batch,
       'agenda.save',
       `Saved agenda #${snapshot.no}${snapshot.theme ? ` (${snapshot.theme})` : ''}`,
-      this.auth.currentUser()
+      this.auth.currentUser(),
+      this.clubContext.currentClubId() ?? undefined
     );
     return batch.commit().catch((err) => {
       console.error('savedAgendas save failed', err);
@@ -92,7 +114,7 @@ export class SavedAgendaService implements OnDestroy {
   /** One-time read, not a live subscription — opening a draft hydrates the editor once, it doesn't stay watching Firestore afterward. */
   async load(no: string): Promise<AgendaSnapshot | null> {
     try {
-      const snap = await getDoc(doc(this.firestore, COLLECTION, no));
+      const snap = await getDoc(this.docRef(no));
       return snap.exists() ? (snap.data() as AgendaSnapshot) : null;
     } catch (err) {
       console.error('savedAgendas load failed', err);
@@ -103,13 +125,14 @@ export class SavedAgendaService implements OnDestroy {
   delete(no: string): Promise<void> {
     const theme = this.allEntries().find((e) => e.no === no)?.theme;
     const batch = writeBatch(this.firestore);
-    batch.delete(doc(this.firestore, COLLECTION, no));
+    batch.delete(this.docRef(no));
     appendAuditEntry(
       this.firestore,
       batch,
       'agenda.delete',
       `Deleted saved agenda #${no}${theme ? ` (${theme})` : ''}`,
-      this.auth.currentUser()
+      this.auth.currentUser(),
+      this.clubContext.currentClubId() ?? undefined
     );
     return batch.commit().catch((err) => console.error('savedAgendas delete failed', err));
   }

@@ -2,7 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { MemberHistoryEntry, MemberHistoryRecord } from '../models/member.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
+import { ClubContextService } from '../../../core/club/club-context.service';
 
+const CLUBS_COLLECTION = 'clubs';
 const COLLECTION = 'memberHistory';
 
 /**
@@ -20,9 +22,18 @@ const COLLECTION = 'memberHistory';
 @Injectable({ providedIn: 'root' })
 export class MemberHistoryService {
   private readonly firestore = inject(FIRESTORE);
+  private readonly clubContext = inject(ClubContextService);
 
+  /**
+   * Loads this member's confirmed history for the CURRENT club only — a
+   * member visiting a second club's /member dashboard (once that's
+   * possible — see CLAUDE.md's multi-club groundwork known gap) would see
+   * that club's own confirmed history, not a merged cross-club view.
+   */
   async loadHistory(uid: string): Promise<MemberHistoryEntry[]> {
-    const snap = await getDocs(query(collection(this.firestore, COLLECTION), where('uid', '==', uid)));
+    const clubId = this.clubContext.currentClubId();
+    if (!clubId) return [];
+    const snap = await getDocs(query(collection(this.firestore, CLUBS_COLLECTION, clubId, COLLECTION), where('uid', '==', uid)));
 
     return snap.docs
       .map((d) => d.data() as MemberHistoryRecord)
