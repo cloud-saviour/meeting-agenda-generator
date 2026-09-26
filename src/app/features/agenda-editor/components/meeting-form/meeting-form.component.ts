@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ClubLinkPipe } from '../../../../core/club/club-link.pipe';
 import { AgendaStateService } from '../../services/agenda-state.service';
+import { addApology, parseApologies, removeApology } from '../../utils/apologies';
 
 @Component({
   selector: 'app-meeting-form',
@@ -18,6 +19,21 @@ export class MeetingFormComponent {
   dateError: string | null = null;
 
   get m() { return this.state.meeting(); }
+
+  /** Name being typed into the Apologies box, before "Add". */
+  newApology = '';
+
+  /** The stored comma-separated `apologies` text as a list (also picks up names the check-in sync adds). */
+  get apologyNames(): string[] { return parseApologies(this.m.apologies); }
+
+  addApology() {
+    this.state.updateMeeting({ apologies: addApology(this.m.apologies, this.newApology) });
+    this.newApology = '';
+  }
+
+  removeApology(index: number) {
+    this.state.updateMeeting({ apologies: removeApology(this.m.apologies, index) });
+  }
 
   update(field: string, value: string) {
     this.state.updateMeeting({ [field]: value } as any);
