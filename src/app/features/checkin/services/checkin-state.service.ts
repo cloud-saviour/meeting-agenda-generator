@@ -8,6 +8,7 @@ import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
 import { AuditAction } from '../../../core/audit/audit-log.models';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
+import { MEETINGS_COLLECTION, MeetingDoc } from '../../../core/models/meeting-doc.models';
 
 const CHECKINS_COLLECTION = 'checkins';
 
@@ -70,8 +71,23 @@ export class CheckinStateService implements OnDestroy {
   private readonly snapshot = signal<CheckinSnapshot>(this.emptySnapshotPlaceholder());
   private currentMeetingId: string | null = null;
   private unsubscribeSnapshot: (() => void) | undefined;
+  private unsubscribeMeetingDoc: (() => void) | undefined;
+  private readonly meetingDoc = signal<MeetingDoc | null>(null);
 
-  readonly meeting = computed(() => this.snapshot().meeting);
+  /**
+   * Header fields come from the shared `meetings/{id}` doc — the one stored
+   * copy the agenda editor also writes (see meeting-doc.models.ts). Until
+   * that doc exists for a meeting (nobody has saved/published it since it
+   * shipped), falls back to the legacy copy still stored inside
+   * `checkins/{id}.meeting`, so a not-yet-backfilled meeting keeps its
+   * header instead of going blank. `id` and `maxSpeakers` are check-in's
+   * own and always come from the checkin doc.
+   */
+  readonly meeting = computed<CheckinMeeting>(() => {
+    const own = this.snapshot().meeting;
+    const shared = this.meetingDoc();
+    return shared ? { ...own, ...shared } : own;
+  });
   readonly attendees = computed(() => this.snapshot().attendees);
   readonly roles = computed(() => this.snapshot().roles);
   readonly speakers = computed(() => this.snapshot().speakers);
@@ -120,6 +136,7 @@ export class CheckinStateService implements OnDestroy {
 
   ngOnDestroy(): void {
     this.unsubscribeSnapshot?.();
+    this.unsubscribeMeetingDoc?.();
   }
 
   /**
@@ -132,7 +149,16 @@ export class CheckinStateService implements OnDestroy {
   loadMeeting(meetingId: string): void {
     if (meetingId === this.currentMeetingId) return;
     this.unsubscribeSnapshot?.();
+    this.unsubscribeMeetingDoc?.();
     this.currentMeetingId = meetingId;
+    // Cleared on switch so the previous meeting's header never shows under the new id.
+    this.meetingDoc.set(null);
+
+    this.unsubscribeMeetingDoc = onSnapshot(
+      doc(this.firestore, MEETINGS_COLLECTION, meetingId),
+      (snap) => this.zone.run(() => this.meetingDoc.set(snap.exists() ? (snap.data() as MeetingDoc) : null)),
+      (err) => this.zone.run(() => console.error('meetings doc listener failed', err))
+    );
 
     const ref = doc(this.firestore, CHECKINS_COLLECTION, meetingId);
     this.unsubscribeSnapshot = onSnapshot(
@@ -547,13 +573,6 @@ export class CheckinStateService implements OnDestroy {
   }
 
   // ── Meeting config (admin) ──────────────────────────────────────────────
-  updateMeeting(patch: Partial<CheckinMeeting>): Promise<void> {
-    return this.mutate((s) => {
-      const next = { ...s, meeting: { ...s.meeting, ...patch } };
-      return { next, result: undefined };
-    }).then(() => undefined);
-  }
-
   resetAll(): Promise<void> {
     if (!this.currentMeetingId) return Promise.resolve();
     const ref = doc(this.firestore, CHECKINS_COLLECTION, this.currentMeetingId);
