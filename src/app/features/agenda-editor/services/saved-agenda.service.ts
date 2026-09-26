@@ -4,6 +4,7 @@ import { AgendaSnapshot } from '../models/agenda.models';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
 import { AuthService } from '../../../core/auth/auth.service';
 import { appendAuditEntry } from '../../../core/audit/audit-log.util';
+import { MEETINGS_COLLECTION, meetingDocFromSnapshot } from '../../../core/models/meeting-doc.models';
 
 const COLLECTION = 'savedAgendas';
 
@@ -76,6 +77,7 @@ export class SavedAgendaService implements OnDestroy {
     const payload: SavedAgendaDoc = { ...snapshot, updatedAt: new Date().toISOString() };
     const batch = writeBatch(this.firestore);
     batch.set(doc(this.firestore, COLLECTION, snapshot.no), payload);
+    batch.set(doc(this.firestore, MEETINGS_COLLECTION, snapshot.no), meetingDocFromSnapshot(snapshot));
     appendAuditEntry(
       this.firestore,
       batch,

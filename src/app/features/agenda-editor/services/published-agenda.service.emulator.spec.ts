@@ -3,7 +3,7 @@ import { Injector, NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { PublishedAgendaService } from './published-agenda.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
@@ -43,6 +43,10 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /publishedAgendas/{meetingId} {
+      allow read: if true;
+      allow write: if isAppAdmin();
+    }
+    match /meetings/{meetingId} {
       allow read: if true;
       allow write: if isAppAdmin();
     }
@@ -338,5 +342,32 @@ describe('PublishedAgendaService (Firestore emulator)', () => {
 
     const snap = await getDocs(collection(firestore, 'auditLog'));
     expect(snap.docs.length).toBe(0);
+  });
+
+  it('publish() writes the shared meetings/{no} header doc in the same batch', async () => {
+    const service = createService();
+    await service.publish('160', makeSnapshot({ no: '160', theme: 'Resilience', st: '19:00' }));
+
+    const data = (await getDoc(doc(firestore, 'meetings', '160'))).data();
+    expect(data).toMatchObject({ theme: 'Resilience', start: '19:00', date: '2026-08-29' });
+  });
+
+  it('publishing a different meeting un-publishes the old one but leaves its meetings header doc alone', async () => {
+    const service = createService();
+    await service.publish('160', makeSnapshot({ no: '160', theme: 'Old' }));
+    await service.publish('161', makeSnapshot({ no: '161', theme: 'New' }));
+
+    expect((await getDoc(doc(firestore, 'publishedAgendas', '160'))).exists()).toBe(false);
+    expect((await getDoc(doc(firestore, 'meetings', '160'))).data()?.['theme']).toBe('Old');
+    expect((await getDoc(doc(firestore, 'meetings', '161'))).data()?.['theme']).toBe('New');
+  });
+
+  it('meetings/{no} is publicly readable but not writable — /checkin is anonymous', async () => {
+    const service = createService();
+    await service.publish('160', makeSnapshot({ no: '160', theme: 'Resilience' }));
+
+    const anon = testEnv.unauthenticatedContext().firestore() as unknown as Firestore;
+    expect((await getDoc(doc(anon, 'meetings', '160'))).data()?.['theme']).toBe('Resilience');
+    await expect(setDoc(doc(anon, 'meetings', '160'), { theme: 'Hacked' })).rejects.toThrow();
   });
 });

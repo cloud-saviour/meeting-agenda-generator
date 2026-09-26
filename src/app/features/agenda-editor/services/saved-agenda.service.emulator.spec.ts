@@ -3,7 +3,7 @@ import { Injector, NgZone } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { SavedAgendaService } from './saved-agenda.service';
 import { FIRESTORE } from '../../../core/firebase/firestore.provider';
@@ -44,6 +44,10 @@ service cloud.firestore {
     }
     match /savedAgendas/{meetingId} {
       allow read, write: if isAppAdmin();
+    }
+    match /meetings/{meetingId} {
+      allow read: if true;
+      allow write: if isAppAdmin();
     }
     match /auditLog/{entryId} {
       allow read: if isAdmin();
@@ -253,5 +257,41 @@ describe('SavedAgendaService (Firestore emulator)', () => {
     expect(entries.length).toBe(2);
     expect(entries.some((e) => e['action'] === 'agenda.save' && e['summary'].includes('#160'))).toBe(true);
     expect(entries.some((e) => e['action'] === 'agenda.delete' && e['summary'].includes('#160'))).toBe(true);
+  });
+
+  it('save() writes the shared meetings/{no} header doc in the same batch — st becomes start', async () => {
+    const service = createService();
+    await service.save(makeSnapshot({ no: '160', theme: 'Resilience', st: '19:00' }));
+
+    const snap = await getDoc(doc(firestore, 'meetings', '160'));
+    expect(snap.data()).toEqual({
+      date: '2026-08-29',
+      theme: 'Resilience',
+      word: 'perseverance',
+      start: '19:00',
+      club: "King's Speakers Club #12",
+      sub: 'Agora Speakers',
+      addr: '123 Main Street',
+    });
+  });
+
+  it('saving again overwrites the meetings doc with the new header values', async () => {
+    const service = createService();
+    await service.save(makeSnapshot({ no: '160', theme: 'First' }));
+    await service.save(makeSnapshot({ no: '160', theme: 'Second', word: 'grit' }));
+
+    const data = (await getDoc(doc(firestore, 'meetings', '160'))).data();
+    expect(data?.['theme']).toBe('Second');
+    expect(data?.['word']).toBe('grit');
+  });
+
+  it('a signed-in non-admin cannot save, and the rejected batch leaves no meetings doc behind (atomic)', async () => {
+    const nonAdminFirestore = testEnv.authenticatedContext('random-signed-up-uid').firestore() as unknown as Firestore;
+    const service = createService(nonAdminFirestore, 'random-signed-up-uid', 'random@example.com');
+
+    await expect(service.save(makeSnapshot({ no: '160' }))).rejects.toThrow();
+
+    expect((await getDoc(doc(firestore, 'meetings', '160'))).exists()).toBe(false);
+    expect((await getDoc(doc(firestore, 'savedAgendas', '160'))).exists()).toBe(false);
   });
 });

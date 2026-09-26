@@ -107,6 +107,18 @@ service cloud.firestore {
       allow write: if isAppAdmin();
     }
 
+    // The one stored copy of each meeting's header fields (date/theme/word/
+    // start/club/sub/addr), shared by the agenda editor and the check-in
+    // page. Public read — /checkin is anonymous and already shows all of
+    // this — but only ever written by an app-admin, inside the same batch as
+    // savedAgendas/publishedAgendas (see MeetingDoc in
+    // core/models/meeting-doc.models.ts). Must be deployed BEFORE the bundle
+    // that writes it: a missing rule would fail those whole batches.
+    match /meetings/{meetingId} {
+      allow read: if true;
+      allow write: if isAppAdmin();
+    }
+
     // Admin's private drafts — nobody else ever reads or writes these.
     match /savedAgendas/{meetingId} {
       allow read, write: if isAppAdmin();
