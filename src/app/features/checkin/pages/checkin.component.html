@@ -75,6 +75,11 @@
           <b>Step 1:</b> type your name and tap "I'm attending". After that you can take a role, sign up to speak, or evaluate a speech below.
         </div>
       }
+      @if (isGuest) {
+        <app-confirm-button label="Not you? Check in as someone else" buttonClass="btn btn-link ps-0 mt-2"
+          question="This clears the name and email on this device — the next person will need to enter their own. Carry on?"
+          yesLabel="Yes, clear it" (confirmed)="switchIdentity()"></app-confirm-button>
+      }
     </div>
 
     <app-attendance-list></app-attendance-list>
