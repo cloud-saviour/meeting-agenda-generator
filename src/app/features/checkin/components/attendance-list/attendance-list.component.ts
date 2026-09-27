@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CheckinStateService } from '../../services/checkin-state.service';
 import { AttendanceConfirmationService } from '../../services/attendance-confirmation.service';
+import { CheckinContactsService } from '../../services/checkin-contacts.service';
 import { ClubContextService } from '../../../../core/club/club-context.service';
 
 @Component({
@@ -14,6 +15,7 @@ export class AttendanceListComponent {
   readonly state = inject(CheckinStateService);
   readonly club = inject(ClubContextService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
+  private readonly contacts = inject(CheckinContactsService);
 
   confirmError: string | null = null;
   private readonly pendingConfirm = new Set<string>();
@@ -25,6 +27,11 @@ export class AttendanceListComponent {
 
   get attendees() {
     return this.state.attendees();
+  }
+
+  /** The attendee's email, admins only — CheckinContactsService.byUid() is empty for anyone else. */
+  emailOf(uid: string): string | null {
+    return this.contacts.byUid().get(uid)?.email || null;
   }
 
   isConfirmed(uid: string): boolean {
