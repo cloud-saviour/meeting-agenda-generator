@@ -7,7 +7,7 @@
     { "id": "ahCounter", "label": "Filler Word Counter", "order": 4, "active": true },
     { "id": "evaluationChairman", "label": "Evaluation Chairman", "order": 5, "active": true },
     { "id": "impromptuMaster", "label": "Impromptu Master", "order": 6, "active": true },
-    { "id": "evaluator", "label": "Evaluator", "order": 7, "active": true }
+    { "id": "evaluator", "label": "Evaluator", "order": 7, "active": false }
   ],
   "committee": [
     { "id": "president", "label": "President", "order": 0, "active": true },
