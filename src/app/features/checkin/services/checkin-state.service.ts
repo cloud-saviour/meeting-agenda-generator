@@ -203,19 +203,50 @@ export class CheckinStateService implements OnDestroy {
     const normalized = normalizeEmail(email);
     if (!EMAIL_PATTERN.test(normalized)) return false;
     const uid = await sha256Hex(normalized);
+    // Only reset currentName when this is genuinely a NEW identity (a
+    // different uid than whoever this tab was already representing) — a
+    // second call with the SAME email (e.g. the effect re-running) must not
+    // wipe out a name the person has since typed on this same visit.
+    //
+    // This guards a real gap on a shared device (a phone/tablet passed
+    // between members at a meeting): before this check, a name typed by a
+    // PREVIOUS guest stayed in `currentName` forever — identifyAsGuest()
+    // only ever SET currentName when it found an existing attendee record
+    // for the new uid, never CLEARED it otherwise. A brand-new guest typing
+    // their own email would silently inherit the previous guest's name (or,
+    // if that guest had gone on to claim a role/speech/evaluation, the new
+    // guest would appear to hold that claim too, having typed nothing at
+    // all) — see CLAUDE.md and switchGuestIdentity() below, the other half
+    // of this fix.
+    const isNewIdentity = uid !== this.emailIdentity();
     this.emailIdentity.set(uid);
     this.guestEmail.set(normalized);
-    // Restores a returning guest's name from their existing attendee record
-    // (same email -> same uid, deterministically) so re-entering the same
-    // email doesn't force them to retype it — see this method's own doc
-    // comment: "immediately sees their prior claims/attendance... with no
-    // separate resubmission of the name/check-in form required." Without
-    // this, currentName stayed whatever it was before (usually blank),
-    // since syncIdentity() only reacts to a signed-in Firebase uid changing,
-    // never to an anonymous guest's derived uid.
-    const existing = this.attendees().find((a) => a.uid === uid);
-    if (existing) this.currentName.set(existing.name);
+    if (isNewIdentity) {
+      // Restores a returning guest's name from their existing attendee
+      // record (same email -> same uid, deterministically) so re-entering
+      // the same email doesn't force them to retype it. Otherwise starts
+      // genuinely blank, per the gap explained above.
+      const existing = this.attendees().find((a) => a.uid === uid);
+      this.currentName.set(existing?.name ?? '');
+    }
     return true;
+  }
+
+  /**
+   * Ends this tab's guest identity — see identifyAsGuest()'s comment on the
+   * shared-device gap this closes. Lets `CheckinComponent`'s email gate show
+   * again so the NEXT person on this device identifies themselves properly,
+   * instead of inheriting whatever the previous guest had typed or claimed.
+   * A no-op for a signed-in account: AuthService.signOut() is the real
+   * "not you" there, and this must never be able to sign someone out.
+   * Writes nothing to Firestore — the previous guest's own attendee/role/
+   * speech records are untouched, exactly as if they had put the device down.
+   */
+  switchGuestIdentity(): void {
+    if (this.auth.currentUser()) return;
+    this.emailIdentity.set(null);
+    this.guestEmail.set(null);
+    this.currentName.set('');
   }
 
   /**

@@ -181,4 +181,25 @@ export class CheckinComponent {
     await this.state.uncheckIn();
     this.checkInNotice = 'You are marked as not attending, and your roles and speech were given up.';
   }
+
+  /** Whether the "Not you?" link is shown at all — never for a signed-in account. */
+  get isGuest(): boolean {
+    return !this.auth.currentUser();
+  }
+
+  /**
+   * Ends this device's guest identity and re-shows the email gate, so a
+   * shared phone/tablet handed to a different person at the meeting can't
+   * keep acting as whoever used it before — see
+   * CheckinStateService.switchGuestIdentity()'s doc comment for the gap
+   * this closes. Resets this page's own local fields too (name/email boxes,
+   * any notice), since those aren't state's to clear.
+   */
+  switchIdentity() {
+    this.state.switchGuestIdentity();
+    this.nameInput = '';
+    this.guestEmailInput = '';
+    this.checkInError = null;
+    this.checkInNotice = null;
+  }
 }

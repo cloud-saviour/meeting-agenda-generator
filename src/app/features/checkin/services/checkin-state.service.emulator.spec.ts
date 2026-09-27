@@ -207,6 +207,55 @@ describe('CheckinStateService (Firestore emulator)', () => {
     expect(service.currentName()).toBe('');
   });
 
+  it('a shared device: identifying as a NEW guest does not inherit the previous guest’s typed name', async () => {
+    const service = createService();
+    service.loadMeeting('m1c4');
+
+    await service.identifyAsGuest('first-guest@example.com');
+    await service.checkIn('First Guest'); // types their name, but never leaves the device
+    expect(service.currentName()).toBe('First Guest');
+
+    // A second person picks up the SAME device/tab and types their OWN email —
+    // before the fix, currentName stayed "First Guest".
+    await service.identifyAsGuest('second-guest@example.com');
+    expect(service.currentName()).toBe('');
+    expect(service.isCheckedIn()).toBe(false); // this uid was never checked in
+  });
+
+  it('re-identifying with the SAME email mid-session does not wipe a name already checked in on this visit', async () => {
+    const service = createService();
+    service.loadMeeting('m1c5');
+
+    await service.identifyAsGuest('same@example.com');
+    await service.checkIn('Already Checked In');
+    await service.identifyAsGuest('same@example.com'); // e.g. a re-render calling identifyAsGuest again
+    expect(service.currentName()).toBe('Already Checked In');
+  });
+
+  it('switchGuestIdentity() ends the guest session so the device can be re-identified from scratch', async () => {
+    const service = createService();
+    service.loadMeeting('m1c6');
+
+    await service.identifyAsGuest('leaving-guest@example.com');
+    await service.checkIn('Leaving Guest');
+    expect(service.isGuestIdentified()).toBe(true);
+
+    service.switchGuestIdentity();
+    expect(service.isGuestIdentified()).toBe(false);
+    expect(service.currentName()).toBe('');
+    expect(service.isCheckedIn()).toBe(false);
+  });
+
+  it('switchGuestIdentity() is a no-op for a signed-in account', async () => {
+    const service = createService({ uid: 'member-uid', displayName: 'Member', email: 'member@example.com' });
+    service.loadMeeting('m1c7');
+    expect(service.isGuestIdentified()).toBe(true);
+
+    service.switchGuestIdentity();
+    expect(service.isGuestIdentified()).toBe(true);
+    expect(service.currentUid).toBe('member-uid');
+  });
+
   it('uncheckIn() removes the attendee, releases their role claim and evaluator slot, cancels their own speaker signup, and records them in apologies', async () => {
     const svcA = createService();
     const svcB = createService();
