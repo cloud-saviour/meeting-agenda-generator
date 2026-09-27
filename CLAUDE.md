@@ -70,16 +70,20 @@ src/app/
     utils/      locale.ts (APP_LOCALE)
 
   layout/
-    navbar/     NavbarComponent — shared nav bar used by agenda-editor,
-                checkin, admin-roles, and every admin hub page (title/links/
-                action-buttons via @Input + <ng-content>); injects
-                AuthService directly (not via @Input) to conditionally show
-                a Sign Out button whenever currentUser() is set — this means
-                it can render on /checkin or /preview too, for an admin who
-                happens to have those open while signed in. Deliberately
-                gated on currentUser(), not isAdmin() — Sign Out should still
-                appear for a signed-in-but-non-admin account, since they need
-                a way out too. Home has no navbar.
+    navbar/     NavbarComponent — the ONE top bar, same on every page. Pages
+                pass only `title` (plus `fixed`/`printHidden`) and project
+                action buttons via `<ng-content>` (the Agenda Editor's Save/
+                Export/DOCX). The MENU is not passed in: `nav-menu.ts`'s
+                `buildMenu()` builds it from who is looking and where they are
+                (Home, Check in, Agenda, My Account, Agendas, Admin, Clubs,
+                Sign in/out), in a fixed order, omitting links that do not
+                apply rather than swapping them; `activeKey()` highlights the
+                current section. On a phone it collapses into a "Menu" button.
+                Add a new page to a section by extending `activeKey()`, not by
+                giving the page its own links. Injects AuthService,
+                ClubContextService and PublishedAgendaService itself. Sign out
+                shows whenever currentUser() is set (gated on currentUser(),
+                not isAdmin()).
 
                 **`[fixed]="true"` uses `position: sticky` (Bootstrap's
                 `.sticky-top`), not `position: fixed`.** It used to be

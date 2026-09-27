@@ -5,7 +5,7 @@ import { ClubContextService } from './club-context.service';
  * Prefixes an internal path with the CURRENT club's `/c/<slug>` segment —
  * `'/admin/hub' | clubLink` → `/c/kings-speakers-12/admin/hub`. Used
  * everywhere a template builds a `routerLink` (directly, or via a
- * NavbarComponent `NavLink[]` array — see navbar.component.html, the one
+ * NavbarComponent (its menu is built in nav-menu.ts) — the one
  * place that applies this to every page's `links` input at once) instead
  * of hand-threading `ClubContextService.currentClubSlug()` through every
  * component that needs an internal link.

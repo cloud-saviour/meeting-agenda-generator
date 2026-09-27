@@ -1,8 +1,4 @@
-<app-navbar title="Agenda Preview (Draft)" [fixed]="true"
-  [links]="[
-    { label: '📋 My Agendas', path: '/admin/agendas' },
-    { label: '🏠 Home', path: '/' }
-  ]">
+<app-navbar title="Agenda Preview (Draft)" [fixed]="true">
   <button class="btn btn-outline-light btn-sm" [disabled]="loading" (click)="refresh()">
     {{ loading ? 'Refreshing…' : '🔄 Refresh' }}
   </button>

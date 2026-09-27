@@ -1,5 +1,5 @@
 import { Component, OnDestroy, computed, effect, inject, untracked } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { AgendaStateService } from '../services/agenda-state.service';
 import { AgendaImportExportService } from '../services/agenda-import-export.service';
 import { PublishedAgendaService } from '../services/published-agenda.service';
@@ -11,17 +11,14 @@ import { MeetingFormComponent } from '../components/meeting-form/meeting-form.co
 import { AgendaItemsComponent } from '../components/agenda-items/agenda-items.component';
 import { SpeakersFormComponent } from '../components/speakers-form/speakers-form.component';
 import { AgendaPreviewComponent } from '../components/agenda-preview/agenda-preview.component';
-import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
-import { ClubLinkPipe } from '../../../core/club/club-link.pipe';
+import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 import { ClubContextService } from '../../../core/club/club-context.service';
 
 @Component({
   selector: 'app-agenda-editor',
   standalone: true,
   imports: [
-    RouterLink,
     NavbarComponent,
-    ClubLinkPipe,
     MeetingFormComponent,
     AgendaItemsComponent,
     SpeakersFormComponent,
@@ -189,20 +186,6 @@ export class AgendaEditorComponent implements OnDestroy {
   /** True once this open meeting is the currently-published one — drives the passive "● Live" badge that replaced the old Publish button. */
   get isLivePublished(): boolean {
     return this.publishedAgenda.entries().some((e) => e.no === this.state.meeting().no);
-  }
-
-  /**
-   * "Meeting Check-in" only appears once this meeting is actually live
-   * (published) — before that, there's nothing for a member to check into
-   * yet, so pointing anyone at /checkin from here would be premature.
-   */
-  get navLinks(): NavLink[] {
-    const links: NavLink[] = [];
-    if (this.isLivePublished) {
-      links.push({ label: '👥 Meeting Check-in', path: '/checkin', queryParams: { meeting: this.state.meeting().no } });
-    }
-    links.push({ label: '🏠 Home', path: '/' });
-    return links;
   }
 
   toggleMobilePreview() {

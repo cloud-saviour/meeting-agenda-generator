@@ -9,13 +9,23 @@
       {{ u.displayName || u.email }}
     </span>
   }
-  <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
+  <div class="ms-auto d-flex flex-wrap align-items-center gap-2" [class.w-100]="menuOpen()">
+    <button type="button" class="btn btn-outline-light d-md-none" [attr.aria-expanded]="menuOpen()" aria-controls="app-menu"
+      (click)="toggleMenu()">{{ menuOpen() ? '✕ Close menu' : '☰ Menu' }}</button>
+
+    <div id="app-menu" class="nav-menu flex-wrap align-items-center gap-2 d-md-flex"
+      [class.d-none]="!menuOpen()" [class.d-flex]="menuOpen()" [class.w-100]="menuOpen()" [class.flex-column]="menuOpen()"
+      [class.align-items-stretch]="menuOpen()">
+      @for (item of menu(); track item.key) {
+        <a class="btn btn-outline-light nav-link-item" [class.active]="active() === item.key"
+          [attr.aria-current]="active() === item.key ? 'page' : null"
+          [routerLink]="item.path" [queryParams]="item.queryParams">{{ item.label }}</a>
+      }
+      @if (currentUser()) {
+        <button type="button" class="btn btn-outline-light" (click)="signOut()">🚪 Sign out</button>
+      }
+    </div>
+
     <ng-content></ng-content>
-    @for (link of links; track link.path) {
-      <a class="btn btn-outline-light btn-sm" [routerLink]="link.path | clubLink" [queryParams]="link.queryParams">{{ link.label }}</a>
-    }
-    @if (currentUser()) {
-      <button class="btn btn-outline-light btn-sm" (click)="signOut()">🚪 Sign out</button>
-    }
   </div>
 </nav>

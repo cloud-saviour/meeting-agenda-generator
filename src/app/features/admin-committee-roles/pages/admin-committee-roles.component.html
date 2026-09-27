@@ -1,9 +1,4 @@
-<app-navbar title="Manage Committee Roles" [fixed]="true"
-  [links]="[
-    { label: '📋 My Agendas', path: '/admin/agendas' },
-    { label: '⚙ Manage Roles', path: '/admin/manage-roles' },
-    { label: '🏠 Home', path: '/' }
-  ]">
+<app-navbar title="Manage Committee Roles" [fixed]="true">
 </app-navbar>
 <input type="file" id="committee-import-file" accept=".json" class="d-none" (change)="onImportJSON($event)">
 
