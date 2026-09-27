@@ -66,6 +66,9 @@ export class NavbarComponent {
     });
   });
 
+  /** The club the page is in, shown next to the signed-in name. Empty on platform/login pages, which are outside any club. */
+  readonly clubName = computed(() => (areaFromUrl(this.url()).area === 'club' ? this.clubContext.currentClub()?.name ?? '' : ''));
+
   readonly active = computed(() => activeKey(this.url()));
 
   toggleMenu() {
