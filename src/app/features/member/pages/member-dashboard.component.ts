@@ -5,7 +5,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { MemberProfileService } from '../services/member-profile.service';
 import { MemberHistoryService } from '../services/member-history.service';
 import { MemberHistoryEntry, MemberProfile } from '../models/member.models';
-import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
+import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 import { PublishedAgendaService } from '../../agenda-editor/services/published-agenda.service';
 import { MembershipService, MyClub } from '../../membership/services/membership.service';
 import { RoleDefinitionService } from '../../../core/services/role-definition.service';
@@ -28,27 +28,6 @@ export class MemberDashboardComponent {
   private readonly membership = inject(MembershipService);
 
   readonly myClubs = signal<MyClub[]>([]);
-
-  /**
-   * Both "Preview Agenda" and "Meeting Check-in" only appear when a meeting is
-   * currently published — same visitor-facing gating as Home's tile, since a
-   * member with nothing published has nowhere to go for either. Preview must
-   * carry the meeting number for the same reason check-in does: a bare
-   * /preview resolves the missing `?meeting=` to the id 'default' and shows
-   * the not-published fallback even when a meeting really is published.
-   */
-  get navLinks(): NavLink[] {
-    const links: NavLink[] = [];
-    const meeting = this.publishedAgenda.nearestEntry();
-    if (meeting) {
-      links.push(
-        { label: '👁 Preview Agenda', path: '/preview', queryParams: { meeting: meeting.no } },
-        { label: '✅ Meeting Check-in', path: '/checkin', queryParams: { meeting: meeting.no } }
-      );
-    }
-    links.push({ label: '🏠 Home', path: '/' });
-    return links;
-  }
 
   readonly profile = signal<MemberProfile | null>(null);
   readonly profileLoaded = signal(false);

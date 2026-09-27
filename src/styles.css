@@ -164,3 +164,6 @@ body { font-family: Arial, sans-serif; background: #e8eaed; font-size: 1rem; lin
     max-width: none !important;
   }
 }
+
+/* Top-bar menu: the current section is filled so "where am I" is always visible. */
+.nav-link-item.active { background: #fff; color: var(--dark); border-color: #fff; font-weight: 700; }

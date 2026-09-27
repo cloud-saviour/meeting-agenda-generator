@@ -10,7 +10,7 @@ import { RoleBoardComponent } from '../components/role-board/role-board.componen
 import { SpeakerSignupComponent } from '../components/speaker-signup/speaker-signup.component';
 import { EvaluatorSlotsComponent } from '../components/evaluator-slots/evaluator-slots.component';
 import { APP_LOCALE } from '../../../core/utils/locale';
-import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
+import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ClubContextService } from '../../../core/club/club-context.service';
 
@@ -143,13 +143,6 @@ export class CheckinComponent {
     } finally {
       this.guestIdentifying = false;
     }
-  }
-
-  get navLinks(): NavLink[] {
-    return [
-      { label: '👁 Preview Agenda', path: '/preview', queryParams: { meeting: this.meetingId } },
-      { label: '🏠 Home', path: '/' },
-    ];
   }
 
   get dateStr(): string {

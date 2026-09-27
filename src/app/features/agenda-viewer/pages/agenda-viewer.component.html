@@ -1,8 +1,4 @@
-<app-navbar title="Agenda Preview" [fixed]="true"
-  [links]="[
-    { label: '👥 Check in', path: '/checkin', queryParams: { meeting: meetingId } },
-    { label: '🏠 Home', path: '/' }
-  ]">
+<app-navbar title="Agenda Preview" [fixed]="true">
   <button class="btn btn-outline-light" [disabled]="refreshing" (click)="refresh()">
     {{ refreshing ? 'Refreshing…' : refreshError ? 'Could not refresh — tap to try again' : refreshed ? 'Up to date' : 'Refresh the agenda' }}
   </button>

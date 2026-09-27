@@ -1,59 +1,79 @@
-import { Component, Input, inject } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Component, Input, computed, inject, signal } from '@angular/core';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { filter } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
-import { ClubLinkPipe } from '../../core/club/club-link.pipe';
+import { ClubContextService } from '../../core/club/club-context.service';
+import { PublishedAgendaService } from '../../features/agenda-editor/services/published-agenda.service';
+import { NavArea, activeKey, areaFromUrl, buildMenu, meetingFromUrl } from './nav-menu';
 
-export interface NavLink {
-  label: string;
-  /** Club-relative, e.g. '/admin/hub' or '/' — ClubLinkPipe (applied once,
-   *  here, in this component's own template) prefixes it with the CURRENT
-   *  club's /c/<slug> segment, so every page building this array keeps
-   *  passing the same plain paths as before multi-club routing; only
-   *  '/login' and '/signup' pass through unprefixed (see ClubLinkPipe). */
-  path: string;
-  queryParams?: Record<string, string>;
-}
-
+/**
+ * The app's single top bar. The links are NOT supplied by pages: the menu is
+ * built here from who is looking and where they are (see nav-menu.ts), so it
+ * is the same on every page and only the page's title and the projected action
+ * buttons (`<ng-content>`, e.g. the Agenda Editor's Save/Export) differ.
+ */
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [RouterLink, ClubLinkPipe],
+  imports: [RouterLink],
   templateUrl: './navbar.component.html',
 })
 export class NavbarComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly clubContext = inject(ClubContextService);
+  private readonly published = inject(PublishedAgendaService);
 
   @Input() title = '';
   /**
-   * Rendered as-is, no filtering — NavbarComponent doesn't know which
-   * links are admin-only. Each page is responsible for only including
-   * admin routes (/admin, /admin/manage-roles, etc.) when AuthService.isAdmin()
-   * is true; a page reachable by non-admins must build this array
-   * conditionally rather than pass a static literal. See checkin.component.ts
-   * and login.component.ts's navLinks getters for the pattern.
-   */
-  @Input() links: NavLink[] = [];
-  /**
-   * checkin/admin-roles/etc. use `position:sticky` (Bootstrap's `.sticky-top`)
-   * so the nav stays pinned to the top of the viewport; agenda-editor's flex
-   * shell doesn't need this, since its own `vh-100`/`flex-shrink-0` layout
-   * already keeps the nav in place. Deliberately `sticky`, not `fixed`: a
-   * fixed nav is removed from document flow entirely, which is why this
-   * used to require every consuming page to hardcode a matching
-   * `margin-top`/`padding-top` guessing the nav's rendered height — that
-   * guess broke the moment the nav wrapped to more than one row (e.g. an
-   * admin's extra nav links on a narrow phone screen), silently hiding
-   * whatever content sat right below it. `sticky` keeps the nav in normal
-   * document flow — it still reserves its own real height, so content
-   * after it is pushed down by whatever that height actually is, with no
-   * hardcoded offset needed anywhere. See CLAUDE.md.
+   * Uses `position:sticky` (Bootstrap's `.sticky-top`) so the nav stays pinned
+   * to the top. Deliberately `sticky`, not `fixed`: a fixed nav is removed from
+   * document flow, which used to force every page to hardcode a top offset that
+   * broke as soon as the nav wrapped. `sticky` keeps its real height in flow.
    */
   @Input() fixed = false;
   /** agenda-editor only, for its existing d-print-none behavior. */
   @Input() printHidden = false;
 
   readonly currentUser = this.auth.currentUser;
+  /** Phone only: whether the collapsed menu is open. */
+  readonly menuOpen = signal(false);
+
+  private readonly url = signal(this.router.url);
+
+  constructor() {
+    this.router.events
+      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+      .subscribe((e) => {
+        this.url.set(e.urlAfterRedirects);
+        this.menuOpen.set(false);
+      });
+  }
+
+  readonly menu = computed(() => {
+    const url = this.url();
+    const { area, clubSlug } = areaFromUrl(url);
+    const path = url.split(/[?#]/)[0];
+    return buildMenu({
+      area: area as NavArea,
+      clubSlug,
+      signedIn: this.auth.currentUser() !== null,
+      isClubAdmin: this.clubContext.isAppAdmin(),
+      isPlatformAdmin: this.auth.isAdmin(),
+      // The meeting this page is about, else the nearest published one.
+      meetingNo: meetingFromUrl(url) ?? this.published.nearestEntry()?.no ?? null,
+      authPage: path === '/login' ? 'login' : path === '/signup' ? 'signup' : undefined,
+    });
+  });
+
+  /** The club the page is in, shown next to the signed-in name. Empty on platform/login pages, which are outside any club. */
+  readonly clubName = computed(() => (areaFromUrl(this.url()).area === 'club' ? this.clubContext.currentClub()?.name ?? '' : ''));
+
+  readonly active = computed(() => activeKey(this.url()));
+
+  toggleMenu() {
+    this.menuOpen.update((open) => !open);
+  }
 
   signOut() {
     this.auth.signOut().then(() => this.router.navigateByUrl('/'));

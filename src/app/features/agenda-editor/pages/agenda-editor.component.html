@@ -1,7 +1,7 @@
 <div class="d-flex flex-column vh-100 app-shell">
 
   <!-- APP BAR -->
-  <app-navbar title="Agora Agenda Planner" [printHidden]="true" [links]="navLinks">
+  <app-navbar title="Agora Agenda Planner" [printHidden]="true">
     @if (isLivePublished) {
       <span class="badge bg-success-subtle text-success-emphasis align-self-center"
         title="This meeting is currently published — edits here reach /preview and check-in live, no publish step needed">
@@ -17,14 +17,12 @@
     <button class="btn btn-outline-light btn-sm" (click)="newAgenda()" title="Start a new agenda — you'll be asked to confirm if the current one has unsaved changes">
       🆕 New Agenda
     </button>
-    <a class="btn btn-outline-light btn-sm" [routerLink]="'/admin/agendas' | clubLink">📋 My Agendas</a>
     <button class="btn btn-outline-light btn-sm" (click)="saveJSON()">&#128190; Export JSON</button>
     <button class="btn btn-outline-light btn-sm" (click)="loadJSON()">&#128193; Import JSON</button>
     <button class="btn btn-word btn-sm" [disabled]="docxBusy" (click)="generateDocx()">
       {{ docxBusy ? 'Building…' : '⬇ DOCX' }}
     </button>
     <button class="btn btn-danger btn-sm" (click)="printAgenda()">&#128438; Print / PDF</button>
-    <a class="btn btn-outline-light btn-sm" [routerLink]="'/admin/manage-roles' | clubLink">⚙ Manage Roles</a>
     @if (isLivePublished) {
       <button class="btn btn-outline-light btn-sm" (click)="copyCheckinLink()">
         {{ linkCopied ? '✓ Copied!' : '🔗 Share Check-in Link' }}

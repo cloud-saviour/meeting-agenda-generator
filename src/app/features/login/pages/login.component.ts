@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
-import { NavbarComponent, NavLink } from '../../../layout/navbar/navbar.component';
+import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 
 const RESET_SENT_MESSAGE = 'If an account exists for that email, a password reset link has been sent.';
 
@@ -42,27 +42,6 @@ export class LoginComponent {
       this.email = email;
       this.prefilledFromCheckin = true;
     }
-  }
-
-  /**
-   * Admin-only nav links (Agenda Editor, Manage Roles) only appear for actual
-   * admins — /login is reachable by anyone, including an already-signed-in
-   * non-admin member.
-   *
-   * No "Preview Agenda" link here: this page has no meeting context, so it
-   * could only link to a bare /preview, which resolves the missing
-   * `?meeting=` to the id 'default' and lands on the not-published fallback
-   * even when a meeting really is published. Same reason it's gone from
-   * /signup; /checkin and /member link to /preview with a real meeting number
-   * instead.
-   */
-  get navLinks(): NavLink[] {
-    const links: NavLink[] = [];
-    if (this.auth.isAdmin()) {
-      links.push({ label: '📝 Agenda Editor', path: '/admin' }, { label: '⚙ Manage Roles', path: '/admin/manage-roles' });
-    }
-    links.push({ label: '🏠 Home', path: '/' });
-    return links;
   }
 
   async submit() {
