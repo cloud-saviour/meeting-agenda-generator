@@ -89,4 +89,22 @@
 
   </div>
 
+  @if (announcements().length > 0) {
+    <div class="card p-4 shadow-sm mt-4" style="max-width:640px; width:100%;">
+      <h2 class="fs-5 fw-bold mb-3">Club news</h2>
+      <div class="list-group list-group-flush">
+        @for (a of announcements().slice(0, 5); track a.id) {
+          <div class="list-group-item">
+            <div class="fw-semibold">{{ a.subject }}</div>
+            <div style="white-space:pre-wrap;">{{ a.body }}</div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <div class="mt-4" style="max-width:640px; width:100%;">
+    <app-subscribe-form></app-subscribe-form>
+  </div>
+
 </div>

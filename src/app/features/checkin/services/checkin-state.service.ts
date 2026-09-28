@@ -65,6 +65,14 @@ export class CheckinStateService implements OnDestroy {
    * than every caller needing to separately check auth state too.
    */
   readonly isGuestIdentified = computed(() => !!this.auth.currentUser() || this.emailIdentity() !== null);
+  /**
+   * The email behind whoever is currently checking in — the signed-in
+   * account's real email, or (once identified) the guest's typed email.
+   * Null before either happens. Lets a caller (e.g. the newsletter
+   * subscribe/unsubscribe toggle on the check-in page) reuse an identity
+   * this page already has, instead of asking for the email a second time.
+   */
+  readonly currentEmail = computed(() => this.auth.currentUser()?.email ?? this.guestEmail());
   readonly currentName = signal<string>('');
   /** `undefined` (distinct from the real "signed out" value `null`) so the very first
    *  identity-change effect run below always seeds/clears, even on a cold, signed-out load. */
@@ -363,6 +371,45 @@ export class CheckinStateService implements OnDestroy {
       return { next, result: undefined };
     }).then(() => undefined);
   }
+
+  /**
+   * The explicit "I can't come — send apologies" action, for someone who
+   * knows up front they won't make it and never intends to check in at
+   * all — distinct from `uncheckIn()`, which withdraws someone who WAS
+   * already an attendee (and so has a role/speech/evaluation to release).
+   * Never creates an attendee record and never touches roles/speakers,
+   * since nothing was ever claimed to release. Idempotent — calling it
+   * again for the same uid doesn't duplicate the entry, matching
+   * `uncheckIn()`'s own apologies handling. Seeds `currentName` the same
+   * way `checkIn()` does, so if they change their mind and tap "I'm
+   * attending" afterwards, their name is already filled in — and
+   * `checkIn()` already retracts a prior apology for the same uid, so
+   * switching from "sent apologies" to "attending" just works.
+   *
+   * Returns false for a blank name, matching `checkIn()`'s own contract.
+   */
+  async sendApologies(name: string): Promise<boolean> {
+    const trimmed = name.trim();
+    if (!trimmed) return false;
+    this.currentName.set(trimmed);
+
+    const uid = this.currentUid;
+    await this.mutate((s) => {
+      if (s.apologies.some((a) => a.uid === uid)) return { next: s, result: undefined }; // idempotent
+      const next: CheckinSnapshot = {
+        ...s,
+        apologies: [
+          ...s.apologies,
+          { uid, name: trimmed, joinedAt: new Date().toLocaleTimeString(APP_LOCALE, { hour: '2-digit', minute: '2-digit' }) },
+        ],
+      };
+      return { next, result: undefined };
+    });
+    return true;
+  }
+
+  /** True once the current viewer has sent apologies for this meeting without ever checking in — drives the check-in page's post-apology state. */
+  readonly hasSentApologies = computed(() => this.apologies().some((a) => a.uid === this.currentUid));
 
   /**
    * Taking part in the meeting — claiming a role, signing up to speak,

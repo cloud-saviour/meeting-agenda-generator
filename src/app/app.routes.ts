@@ -120,6 +120,10 @@ export const routes: Routes = [
             loadComponent: () => import('./features/admin-members/pages/admin-members.component').then((m) => m.AdminMembersComponent),
           },
           {
+            path: 'announcements',
+            loadComponent: () => import('./features/admin-announcements/pages/admin-announcements.component').then((m) => m.AdminAnnouncementsComponent),
+          },
+          {
             path: 'audit-log',
             canActivate: [superAdminGuard],
             loadComponent: () => import('./features/admin-audit-log/pages/audit-log.component').then((m) => m.AuditLogComponent),

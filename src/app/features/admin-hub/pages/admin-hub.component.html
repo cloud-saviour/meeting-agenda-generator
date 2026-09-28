@@ -37,6 +37,13 @@
       <a [routerLink]="'/admin/members' | clubLink" class="stretched-link" aria-label="Open Members"></a>
     </div>
 
+    <div class="card tile text-center p-4 shadow-sm position-relative">
+      <div class="fs-1 mb-2">&#128231;</div>
+      <h2 class="fs-6 fw-bold">Announcements</h2>
+      <p class="text-muted small mb-0">Post club news and see who is subscribed</p>
+      <a [routerLink]="'/admin/announcements' | clubLink" class="stretched-link" aria-label="Open Announcements"></a>
+    </div>
+
     @if (isAdmin()) {
       <div class="card tile text-center p-4 shadow-sm position-relative">
         <div class="fs-1 mb-2">&#128270;</div>

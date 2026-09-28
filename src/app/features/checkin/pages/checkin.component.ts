@@ -1,5 +1,5 @@
 import { ConfirmButtonComponent } from '../../../layout/confirm-button/confirm-button.component';
-import { Component, effect, inject } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CheckinStateService } from '../services/checkin-state.service';
@@ -13,6 +13,7 @@ import { APP_LOCALE } from '../../../core/utils/locale';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ClubContextService } from '../../../core/club/club-context.service';
+import { SubscriptionService } from '../../club-subscription/services/subscription.service';
 
 @Component({
   selector: 'app-checkin',
@@ -35,6 +36,7 @@ export class CheckinComponent {
   private readonly auth = inject(AuthService);
   private readonly clubContext = inject(ClubContextService);
   private readonly attendanceConfirmation = inject(AttendanceConfirmationService);
+  private readonly subscription = inject(SubscriptionService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   nameInput = '';
@@ -44,6 +46,28 @@ export class CheckinComponent {
   guestEmailInput = '';
   guestEmailError: string | null = null;
   guestIdentifying = false;
+
+  /**
+   * TEMPORARY: the newsletter subscribe/unsubscribe nav toggle is restricted
+   * to platform admins (the real, global `admin` claim — not just a club
+   * admin) while the feature is still being tested, so ordinary members and
+   * guests never see it. Remove this gate (and the `isPlatformAdmin()` check
+   * in the template/effect below) once the feature is confirmed working.
+   */
+  readonly isPlatformAdmin = this.auth.isAdmin;
+
+  /**
+   * Newsletter subscribe/unsubscribe toggle, reusing whoever's email
+   * check-in already has (the signed-in account's, or the guest's once
+   * identified) — never a separate email box. `null` means "don't know
+   * yet" (nobody identified yet, or the one-time isSubscribed() lookup for
+   * the resolved email hasn't returned) — the toggle stays hidden rather
+   * than guessing, since showing "Subscribe" and then having it turn out
+   * they already are would look broken.
+   */
+  readonly subscribed = signal<boolean | null>(null);
+  readonly subscriptionBusy = signal(false);
+  private lastCheckedEmail: string | null = null;
 
   constructor() {
     // `||`, not `??` — an empty-but-present `?meeting=` (e.g. a nav link built
@@ -83,6 +107,43 @@ export class CheckinComponent {
         this.attendanceConfirmation.loadForMeeting(this.meetingId);
       }
     });
+
+    // Looks up subscription status once an email is known (signed-in
+    // immediately, or a guest once they identify) — re-checks if the email
+    // itself changes (switching identity on a shared device, see
+    // switchIdentity()), but never re-fires for the SAME email, since
+    // subscribe()/unsubscribe() already update `subscribed` locally.
+    // TEMPORARY: also gated on isPlatformAdmin() — see that field's own
+    // comment — so a non-admin never even triggers the isSubscribed() read
+    // while the feature is still being tested.
+    effect(() => {
+      const email = this.state.currentEmail();
+      if (!email || !this.isPlatformAdmin() || email === this.lastCheckedEmail) return;
+      this.lastCheckedEmail = email;
+      this.subscribed.set(null);
+      this.subscription
+        .isSubscribed(email)
+        .then((yes) => this.subscribed.set(yes))
+        .catch((err) => {
+          console.error('isSubscribed failed', err);
+          this.subscribed.set(null);
+        });
+    });
+  }
+
+  async toggleSubscription(): Promise<void> {
+    const email = this.state.currentEmail();
+    if (!email || this.subscriptionBusy()) return;
+    this.subscriptionBusy.set(true);
+    try {
+      const wasSubscribed = this.subscribed();
+      const ok = wasSubscribed ? await this.subscription.unsubscribe(email) : await this.subscription.subscribe(email);
+      if (ok) this.subscribed.set(!wasSubscribed);
+    } catch (err) {
+      console.error('toggleSubscription failed', err);
+    } finally {
+      this.subscriptionBusy.set(false);
+    }
   }
 
   /**
@@ -176,6 +237,28 @@ export class CheckinComponent {
     this.checkInNotice = 'You are checked in. You can now take a role or sign up to speak below.';
   }
 
+  /**
+   * Step-1 "I can't come — send apologies", for someone who knows up front
+   * they won't attend and never intends to check in — distinct from
+   * `uncheckIn()`, which withdraws someone already attending. No confirm
+   * step needed here (unlike "I can't come after all"): nothing has been
+   * claimed yet, so there's nothing to warn about losing.
+   */
+  async sendApologies() {
+    this.checkInError = null;
+    this.checkInNotice = null;
+    if (!this.nameInput.trim()) {
+      this.checkInError = 'Enter your name.';
+      return;
+    }
+    const success = await this.state.sendApologies(this.nameInput);
+    if (!success) {
+      this.checkInError = 'Something went wrong — try again.';
+      return;
+    }
+    this.checkInNotice = "Thanks for letting us know — you're marked as not attending.";
+  }
+
   async uncheckIn() {
     // The "are you sure?" step is the inline ConfirmButtonComponent in the template.
     await this.state.uncheckIn();
@@ -201,5 +284,7 @@ export class CheckinComponent {
     this.guestEmailInput = '';
     this.checkInError = null;
     this.checkInNotice = null;
+    this.subscribed.set(null);
+    this.lastCheckedEmail = null;
   }
 }

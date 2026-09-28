@@ -8,8 +8,14 @@
 
 # Node
 /node_modules
+functions/node_modules
 npm-debug.log
 yarn-error.log
+
+# Cloud Functions secrets — never commit an actual key (see functions/README.md)
+functions/.secret.local
+functions/.env
+functions/.env.*
 
 # IDEs and editors
 .idea/
