@@ -1,0 +1,36 @@
+<div class="card p-4 shadow-sm">
+  <h2 class="fs-5 fw-bold mb-1">📧 Club email updates</h2>
+
+  @if (mode === 'subscribe') {
+    <p class="text-muted">No account needed. Get news from this club by email.</p>
+    <label class="form-label fw-semibold" for="subscribe-email">Your email address</label>
+    <input id="subscribe-email" class="form-control form-control-lg mb-3" type="email"
+      [(ngModel)]="email" name="subscribeEmail" placeholder="you@example.com"
+      (keydown.enter)="subscribe()" autocomplete="email">
+    <div class="d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-danger btn-lg" [disabled]="busy()" (click)="subscribe()">
+        {{ busy() ? 'Subscribing…' : 'Subscribe' }}
+      </button>
+      <button type="button" class="btn btn-link" (click)="showUnsubscribe()">Already subscribed? Unsubscribe</button>
+    </div>
+  } @else {
+    <p class="text-muted">Enter the email address you subscribed with.</p>
+    <label class="form-label fw-semibold" for="unsubscribe-email">Your email address</label>
+    <input id="unsubscribe-email" class="form-control form-control-lg mb-3" type="email"
+      [(ngModel)]="email" name="unsubscribeEmail" placeholder="you@example.com"
+      (keydown.enter)="unsubscribe()" autocomplete="email">
+    <div class="d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-outline-secondary btn-lg" [disabled]="busy()" (click)="unsubscribe()">
+        {{ busy() ? 'Unsubscribing…' : 'Unsubscribe' }}
+      </button>
+      <button type="button" class="btn btn-link" (click)="showSubscribe()">Back to subscribe</button>
+    </div>
+  }
+
+  @if (notice()) {
+    <div class="alert alert-success mt-3 mb-0" role="status">{{ notice() }}</div>
+  }
+  @if (error()) {
+    <div class="alert alert-danger mt-3 mb-0" role="alert">{{ error() }}</div>
+  }
+</div>

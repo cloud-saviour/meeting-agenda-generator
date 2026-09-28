@@ -65,6 +65,14 @@ export class CheckinStateService implements OnDestroy {
    * than every caller needing to separately check auth state too.
    */
   readonly isGuestIdentified = computed(() => !!this.auth.currentUser() || this.emailIdentity() !== null);
+  /**
+   * The email behind whoever is currently checking in — the signed-in
+   * account's real email, or (once identified) the guest's typed email.
+   * Null before either happens. Lets a caller (e.g. the newsletter
+   * subscribe/unsubscribe toggle on the check-in page) reuse an identity
+   * this page already has, instead of asking for the email a second time.
+   */
+  readonly currentEmail = computed(() => this.auth.currentUser()?.email ?? this.guestEmail());
   readonly currentName = signal<string>('');
   /** `undefined` (distinct from the real "signed out" value `null`) so the very first
    *  identity-change effect run below always seeds/clears, even on a cold, signed-out load. */

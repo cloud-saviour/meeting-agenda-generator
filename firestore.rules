@@ -222,6 +222,45 @@ service cloud.firestore {
         allow read: if isAppAdmin(clubId);
         allow write: if true;
       }
+
+      // Anyone — no sign-in, no membership — can subscribe to THIS club's
+      // emails. Same accepted-risk shape as checkinContacts/checkins: the
+      // doc id is sha256(normalized email) (SubscriptionService.subscribe()),
+      // so re-subscribing is a no-op and a self-service unsubscribe needs
+      // only the email, never a login. Write (including delete, for
+      // unsubscribe) is open for the same reason checkinContacts' write is —
+      // self-reported, unverified, no barrier.
+      //
+      // `get` (a single doc by an id the caller already knows) is public —
+      // SubscriptionService.isSubscribed(email) computes the SAME hash from
+      // the SAME email before reading, so this only ever tells someone their
+      // own status; the hash is not invertible, so it exposes nothing about
+      // any OTHER subscriber. `list` (reading the whole collection, e.g. the
+      // admin screen's live subscriber count) stays admin-only — this is
+      // where every raw email actually lives, so enumerating them is the
+      // part that must stay protected, not a targeted self-lookup.
+      match /subscribers/{subscriberId} {
+        allow get: if true;
+        allow list: if isAppAdmin(clubId);
+        allow write: if true;
+      }
+
+      // Admin-composed club news — see SubscriptionService. Public READ (it
+      // is the visible news feed on the club's own page, shown to guests and
+      // subscribers alike — subscribing is "email me about these," which is
+      // a later phase; the post is visible either way). Admin-only write,
+      // audited. No update/delete client path in this pass, same as auditLog.
+      match /announcements/{id} {
+        allow read: if true;
+        allow create: if isAppAdmin(clubId)
+          && request.resource.data.subject is string
+          && request.resource.data.subject.size() > 0
+          && request.resource.data.subject.size() <= 200
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 5000;
+        allow update, delete: if false;
+      }
     }
 
     // Lets a signed-in person list THEIR OWN memberships across every club (a

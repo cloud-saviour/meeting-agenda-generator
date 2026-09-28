@@ -1,0 +1,22 @@
+{
+  "name": "functions",
+  "description": "Cloud Functions for the Agora Agenda Generator — currently just the announcement-email sender. See ../CLAUDE.md's Known Gaps and this folder's README.md before deploying.",
+  "type": "module",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.mjs",
+  "scripts": {
+    "lint": "true",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions --project production",
+    "logs": "firebase functions:log --project production"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.5.0",
+    "firebase-functions": "^6.4.0",
+    "resend": "^6.1.2"
+  },
+  "private": true
+}

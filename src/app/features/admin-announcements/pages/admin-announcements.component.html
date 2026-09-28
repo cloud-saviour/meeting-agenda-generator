@@ -1,0 +1,55 @@
+<app-navbar title="Announcements" [fixed]="true">
+</app-navbar>
+
+<div class="container py-4" style="max-width:760px;">
+
+  <div class="card p-3 mb-3">
+    <h3 class="section-title">Subscribers</h3>
+    <p class="mb-0">
+      <span class="fw-bold">{{ subscriberCount() }}</span>
+      {{ subscriberCount() === 1 ? 'person is' : 'people are' }} subscribed to this club's emails.
+    </p>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h3 class="section-title">Post an announcement</h3>
+    <p class="text-muted small">
+      This is not emailed yet — sending isn't set up in this app. Posting saves it as a public
+      news item on this club's home page, ready for the moment email sending is added.
+    </p>
+
+    <label class="form-label fw-semibold" for="announce-subject">Subject</label>
+    <input id="announce-subject" class="form-control mb-3" type="text" [(ngModel)]="subject" name="subject">
+
+    <label class="form-label fw-semibold" for="announce-body">Message</label>
+    <textarea id="announce-body" class="form-control mb-3" rows="5" [(ngModel)]="body" name="body"></textarea>
+
+    @if (error()) {
+      <div class="alert alert-danger" role="alert">{{ error() }}</div>
+    }
+    @if (posted()) {
+      <div class="alert alert-success" role="status">Posted. It now shows on this club's home page.</div>
+    }
+
+    <button type="button" class="btn btn-danger" [disabled]="posting()" (click)="post()">
+      {{ posting() ? 'Posting…' : 'Post announcement' }}
+    </button>
+  </div>
+
+  <div class="card p-3">
+    <h3 class="section-title">Past announcements ({{ announcements().length }})</h3>
+    @if (announcements().length === 0) {
+      <p class="text-muted small mb-0">Nothing posted yet.</p>
+    } @else {
+      <div class="list-group list-group-flush">
+        @for (a of announcements(); track a.id) {
+          <div class="list-group-item">
+            <div class="fw-semibold">{{ a.subject }}</div>
+            <div class="text-muted small mb-1">{{ dateStr(a.createdAt) }}</div>
+            <div style="white-space:pre-wrap;">{{ a.body }}</div>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

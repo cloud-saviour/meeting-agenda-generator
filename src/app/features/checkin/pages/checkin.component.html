@@ -1,4 +1,9 @@
 <app-navbar title="Meeting Check-in" [fixed]="true">
+  @if (isPlatformAdmin() && subscribed() !== null) {
+    <button type="button" class="btn btn-outline-light" [disabled]="subscriptionBusy()" (click)="toggleSubscription()">
+      {{ subscriptionBusy() ? 'Please wait…' : subscribed() ? '📧 Unsubscribe from club emails' : '📧 Subscribe to club emails' }}
+    </button>
+  }
 </app-navbar>
 
 <div class="container py-4" style="max-width:760px;">

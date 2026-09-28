@@ -38,7 +38,8 @@ export type AuditAction =
   | 'membership.remove'
   | 'membership.assign'
   | 'checkin.adminEdit'
-  | 'checkin.adminRemove';
+  | 'checkin.adminRemove'
+  | 'announcement.create';
 
 /**
  * One immutable entry in the append-only `auditLog` collection — see

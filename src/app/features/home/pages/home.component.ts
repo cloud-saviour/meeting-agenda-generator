@@ -6,11 +6,13 @@ import { ClubContextService } from '../../../core/club/club-context.service';
 import { ClubLinkPipe } from '../../../core/club/club-link.pipe';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 import { MembershipService } from '../../membership/services/membership.service';
+import { SubscribeFormComponent } from '../../club-subscription/components/subscribe-form/subscribe-form.component';
+import { SubscriptionService } from '../../club-subscription/services/subscription.service';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [RouterLink, ClubLinkPipe, NavbarComponent],
+  imports: [RouterLink, ClubLinkPipe, NavbarComponent, SubscribeFormComponent],
   templateUrl: './home.component.html',
 })
 export class HomeComponent {
@@ -18,6 +20,10 @@ export class HomeComponent {
   private readonly auth = inject(AuthService);
   private readonly clubContext = inject(ClubContextService);
   readonly membership = inject(MembershipService);
+  private readonly subscription = inject(SubscriptionService);
+
+  /** Most recent club announcements, newest first — see SubscriptionService. Public, so this shows for a signed-out guest too. */
+  readonly announcements = this.subscription.announcements;
 
   readonly clubName = computed(() => this.clubContext.currentClub()?.name ?? '');
   readonly membershipBusy = signal(false);

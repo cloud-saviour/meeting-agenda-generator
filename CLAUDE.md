@@ -1712,6 +1712,64 @@ services grew a club-resolution `effect()` too.
 
 **Explicitly out of scope this pass**: deleting a club, logo upload, a club-switcher for a user belonging to multiple clubs, club creation by non-platform admins, billing/subscriptions (`clubs/{clubId}.active` is a placeholder only), and making the hardcoded 7-role DOCX/committee footer structure (`docx.service.ts`'s `PRINTED_ROLE_IDS`, `default-agenda.ts`'s role-id vocabulary) configurable per club - only each club's actual role-holder *data* is isolated, not that fixed structure.
 
+## Club email subscription and announcements
+
+`features/club-subscription/` (`SubscriptionService`) is the one place in the
+app anyone — no sign-in, no membership — can give a club their email, and
+the one place a club posts news for guests to read without any account. Two
+new club-scoped collections, alongside `checkinContacts`/`appAdmins`:
+
+- `clubs/{clubId}/subscribers/{sha256(email)}` — `{ email, subscribedAt }`.
+  Doc id is `sha256Hex(normalizedEmail)` (`core/utils/hash.ts`, the same
+  function `CheckinStateService.identifyAsGuest()` uses), so the same email
+  always resolves to the same doc: subscribing twice is a harmless overwrite,
+  and a self-service unsubscribe (`SubscriptionService.unsubscribe()`, also
+  the "Already subscribed? Unsubscribe" toggle on `SubscribeFormComponent`)
+  needs only the email typed back in, never a token or a login. Same
+  accepted-risk model as `checkins/**`/`checkinContacts` — self-reported,
+  unverified, no barrier (a deliberate choice, see the "no verification"
+  decision below). `firestore.rules`: write (including delete) is open;
+  read is `isAppAdmin(clubId)`-only, since this is raw PII, same reasoning
+  as `checkinContacts`. `SubscriptionService.subscribers()` is therefore
+  gated the same way `CheckinContactsService.byUid()` already is — a
+  constructor `effect()` that subscribes ONLY when `isAppAdmin()` is true
+  for the current club, never unconditionally.
+- `clubs/{clubId}/announcements/{id}` — `{ subject, body, createdAt,
+  createdByEmail, emailedAt?, emailRecipientCount? }`, an admin-composed
+  post. **Public read** — this is real, visible-today value, not a
+  placeholder: an announcement is a club-news item on the club's own home
+  page from the moment it's posted, whether or not email-sending is
+  configured. Admin-only create (audited as `announcement.create` via
+  `appendAuditEntry()`, same batch); no update/delete client path in this
+  pass. `AdminAnnouncementsComponent` (`/c/<slug>/admin/announcements`,
+  linked from the Admin hub) says plainly that sending isn't configured yet
+  ("This is not emailed yet...") so no admin mistakes posting for sending.
+  `emailedAt`/`emailRecipientCount` are written by `functions/index.mjs`
+  (below) once it actually sends — not read by the UI yet.
+
+`subscribers/{sha256(email)}` also supports a **public, single-doc `get`**
+(not `list`, which stays admin-only) so a person can check their OWN
+subscription status without being an admin — `SubscriptionService.isSubscribed(email)`
+computes the same hash before reading, so this can only ever answer "is
+THIS email (which the caller already knows) subscribed," never enumerate
+anyone else's. Used by the check-in page's nav "📧 Subscribe/Unsubscribe"
+toggle (`CheckinComponent`), which reuses whichever email check-in already
+has — the signed-in account's, or a guest's once they've identified at the
+check-in gate — instead of asking a second time.
+
+**A Cloud Function now exists to actually send the email — `functions/`,
+`sendAnnouncementEmail`** (fires on every new `announcements` doc, emails
+that club's subscribers via Resend). **The code is complete and ready to
+deploy, but is not configured**: `functions/README.md` has the exact setup
+(upgrade the project to Blaze, a verified Resend sending domain, three
+`firebase functions:secrets:set` calls, then `npm run deploy:functions` —
+deliberately NOT part of `deploy:all`, so existing deploys keep working
+with zero Functions setup). Until those secrets are set, the function
+deploys and runs safely as a no-op (logs a warning, sends nothing) rather
+than erroring — this is the app's first Cloud Function, so `firebase.json`
+now has a `functions` entry pointing at that folder as its own codebase,
+with its own `package.json`/`node_modules`, separate from the root app.
+
 ## Accessibility baseline (members are often 60+)
 
 Root text is 18px (`html { font-size: 112.5% }` in `src/styles.css`); nothing visible
@@ -1776,6 +1834,13 @@ Sign out). `clubLink` leaves `/platform/...` paths unprefixed.
    in `checkins` (check-in's own config, read inside its transactions);
    moving it is a separate decision, tied to the admin check-in console in
    item 3.
+5. **Sending a subscriber email is coded but not configured** — see "Club
+   email subscription and announcements" above and `functions/README.md`.
+   The Cloud Function (`functions/index.mjs`, `sendAnnouncementEmail`) is
+   complete and deploys safely as a no-op; turning it on needs the Blaze
+   plan, a verified Resend sending domain, and three secrets set — no code
+   change. Until then, an announcement is still a public news item on the
+   club's home page, just not emailed.
 
 ## Local dev
 
