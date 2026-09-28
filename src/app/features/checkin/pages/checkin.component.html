@@ -52,15 +52,20 @@
     </div>
   } @else {
     <div class="card p-3 mb-3" [class]="state.isCheckedIn() ? 'border-start border-success border-4' : ''">
-      <div class="d-flex flex-row align-items-end gap-2 flex-wrap">
-        <div class="flex-grow-1" style="min-width:180px;">
-          <label class="form-label fw-semibold" for="checkin-name">Your name</label>
-          <input id="checkin-name" class="form-control form-control-lg" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Your full name" (keyup.enter)="checkIn()" [disabled]="isNameLocked">
+      <label class="form-label fw-semibold" for="checkin-name">Your name</label>
+      <input id="checkin-name" class="form-control form-control-lg mb-3" type="text" [(ngModel)]="nameInput" name="nameInput" placeholder="Your full name" (keyup.enter)="checkIn()" [disabled]="isNameLocked">
+
+      @if (state.isCheckedIn()) {
+        <button class="btn btn-danger btn-lg" (click)="checkIn()">Save my name</button>
+      } @else if (!state.hasSentApologies()) {
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-danger btn-lg flex-fill" (click)="checkIn()">✓ I'm attending</button>
+          <button class="btn btn-outline-danger btn-lg flex-fill" (click)="sendApologies()">✕ I can't come — send apologies</button>
         </div>
-        <button class="btn btn-danger btn-lg" (click)="checkIn()">
-          {{ state.isCheckedIn() ? 'Save my name' : "I'm attending" }}
-        </button>
-      </div>
+      } @else {
+        <button class="btn btn-danger btn-lg" (click)="checkIn()">✓ I'm attending after all</button>
+      }
+
       @if (state.isCheckedIn()) {
         <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
           <span class="text-success fw-bold fs-5">&#10003; You are checked in</span>
@@ -75,9 +80,14 @@
       @if (checkInNotice) {
         <div class="alert alert-success mt-3 mb-0" role="status">{{ checkInNotice }}</div>
       }
-      @if (!state.isCheckedIn()) {
+      @if (!state.isCheckedIn() && !state.hasSentApologies()) {
         <div class="alert alert-warning fs-5 mt-3 mb-0">
-          <b>Step 1:</b> type your name and tap "I'm attending". After that you can take a role, sign up to speak, or evaluate a speech below.
+          <b>Step 1:</b> type your name, then tap "I'm attending" — or, if you already know you can't come, tap "I can't come — send apologies" instead.
+        </div>
+      }
+      @if (state.hasSentApologies() && !state.isCheckedIn()) {
+        <div class="alert alert-secondary fs-5 mt-3 mb-0">
+          You're marked as not attending for this meeting. Changed your mind? Tap "I'm attending after all" above.
         </div>
       }
       @if (isGuest) {

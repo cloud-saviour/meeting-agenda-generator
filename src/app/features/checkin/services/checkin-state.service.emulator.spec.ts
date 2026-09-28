@@ -337,6 +337,68 @@ describe('CheckinStateService (Firestore emulator)', () => {
     expect(service.apologies()).toEqual([]);
   });
 
+  describe('sendApologies() — the explicit "I can\'t come" action, for someone who never checks in at all', () => {
+    it('records them in apologies without ever creating an attendee record', async () => {
+      const service = createService();
+      service.loadMeeting('m1j');
+      await service.identifyAsGuest('alice@example.com');
+
+      const ok = await service.sendApologies('Alice');
+
+      expect(ok).toBe(true);
+      await waitFor(() => service.apologies().length === 1);
+      expect(service.apologies()[0]).toMatchObject({ uid: service.currentUid, name: 'Alice' });
+      expect(service.attendees()).toEqual([]);
+      expect(service.hasSentApologies()).toBe(true);
+    });
+
+    it('returns false for a blank name and writes nothing', async () => {
+      const service = createService();
+      service.loadMeeting('m1k');
+      await service.identifyAsGuest('alice@example.com');
+
+      expect(await service.sendApologies('   ')).toBe(false);
+      expect(service.apologies()).toEqual([]);
+    });
+
+    it('is idempotent — calling it twice does not duplicate the entry', async () => {
+      const service = createService();
+      service.loadMeeting('m1l');
+      await service.identifyAsGuest('alice@example.com');
+
+      await service.sendApologies('Alice');
+      await waitFor(() => service.apologies().length === 1);
+      await service.sendApologies('Alice');
+
+      expect(service.apologies().length).toBe(1);
+    });
+
+    it('checkIn() afterwards retracts the apology and checks them in normally, seeded with the same name', async () => {
+      const service = createService();
+      service.loadMeeting('m1m');
+      await service.identifyAsGuest('alice@example.com');
+      await service.sendApologies('Alice');
+      await waitFor(() => service.apologies().length === 1);
+
+      await service.checkIn('Alice');
+
+      await waitFor(() => service.attendees().length === 1);
+      expect(service.apologies()).toEqual([]);
+      expect(service.hasSentApologies()).toBe(false);
+      expect(service.attendees()[0]).toMatchObject({ name: 'Alice' });
+    });
+
+    it('works for a signed-in member too, without a role/speech to release', async () => {
+      const service = createService({ uid: 'member-uid', displayName: 'Member', email: 'member@example.com' });
+      service.loadMeeting('m1n');
+
+      await service.sendApologies('Member');
+
+      await waitFor(() => service.apologies().length === 1);
+      expect(service.apologies()[0]).toMatchObject({ uid: 'member-uid', name: 'Member' });
+    });
+  });
+
   it('claimRole() succeeds when unclaimed and blocks a different uid from claiming it', async () => {
     const svcA = createService();
     const svcB = createService();

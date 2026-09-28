@@ -237,6 +237,28 @@ export class CheckinComponent {
     this.checkInNotice = 'You are checked in. You can now take a role or sign up to speak below.';
   }
 
+  /**
+   * Step-1 "I can't come — send apologies", for someone who knows up front
+   * they won't attend and never intends to check in — distinct from
+   * `uncheckIn()`, which withdraws someone already attending. No confirm
+   * step needed here (unlike "I can't come after all"): nothing has been
+   * claimed yet, so there's nothing to warn about losing.
+   */
+  async sendApologies() {
+    this.checkInError = null;
+    this.checkInNotice = null;
+    if (!this.nameInput.trim()) {
+      this.checkInError = 'Enter your name.';
+      return;
+    }
+    const success = await this.state.sendApologies(this.nameInput);
+    if (!success) {
+      this.checkInError = 'Something went wrong — try again.';
+      return;
+    }
+    this.checkInNotice = "Thanks for letting us know — you're marked as not attending.";
+  }
+
   async uncheckIn() {
     // The "are you sure?" step is the inline ConfirmButtonComponent in the template.
     await this.state.uncheckIn();
