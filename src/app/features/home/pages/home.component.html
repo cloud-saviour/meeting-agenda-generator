@@ -33,7 +33,7 @@
     @if (nextMeeting(); as m) {
       <div class="card tile text-center p-4 shadow-sm position-relative">
         <div class="fs-1 mb-2">&#9989;</div>
-        <h2 class="fs-5 fw-bold">Check in to Meeting #{{ m.no }}{{ isSignedIn() ? '' : ' (as a guest)' }}</h2>
+        <h2 class="fs-5 fw-bold">Check in to Meeting #{{ m.no }}{{ isSignedIn() || !guestCheckinAllowed ? '' : ' (as a guest)' }}</h2>
         <p class="text-muted mb-0">{{ m.theme || 'Meeting ' + m.no }} — say you are coming, take a role, or sign up to speak</p>
         <a [routerLink]="'/checkin' | clubLink" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Check in to the meeting"></a>
       </div>
@@ -89,7 +89,7 @@
 
   </div>
 
-  @if (announcements().length > 0) {
+  @if (isPlatformAdmin() && announcements().length > 0) {
     <div class="card p-4 shadow-sm mt-4" style="max-width:640px; width:100%;">
       <h2 class="fs-5 fw-bold mb-3">Club news</h2>
       <div class="list-group list-group-flush">
@@ -103,8 +103,10 @@
     </div>
   }
 
-  <div class="mt-4" style="max-width:640px; width:100%;">
-    <app-subscribe-form></app-subscribe-form>
-  </div>
+  @if (isPlatformAdmin()) {
+    <div class="mt-4" style="max-width:640px; width:100%;">
+      <app-subscribe-form></app-subscribe-form>
+    </div>
+  }
 
 </div>

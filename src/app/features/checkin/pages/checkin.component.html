@@ -31,7 +31,16 @@
     }
   </div>
 
-  @if (needsGuestIdentification) {
+  @if (needsGuestIdentification && !guestCheckinAllowed) {
+    <div class="card p-4 shadow-sm mx-auto" style="max-width:480px;">
+      <div class="text-center mb-3">
+        <h2 class="fs-4 fw-bold">Sign in to check in</h2>
+        <p class="text-muted mb-0">You need an account to check in, take a role or send apologies.</p>
+      </div>
+      <a class="btn btn-danger btn-lg w-100 mb-2" routerLink="/login" [queryParams]="{ returnUrl: returnUrl }">Sign in</a>
+      <a class="btn btn-outline-danger btn-lg w-100" routerLink="/signup" [queryParams]="{ returnUrl: returnUrl }">Create an account</a>
+    </div>
+  } @else if (needsGuestIdentification) {
     <div class="card p-4 shadow-sm mx-auto" style="max-width:480px;">
       <div class="text-center mb-3">
         <h2 class="fs-4 fw-bold">Check in as a guest</h2>

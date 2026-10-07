@@ -13,6 +13,7 @@ import { APP_LOCALE } from '../../../core/utils/locale';
 import { NavbarComponent } from '../../../layout/navbar/navbar.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ClubContextService } from '../../../core/club/club-context.service';
+import { environment } from '../../../../environments/environment';
 import { SubscriptionService } from '../../club-subscription/services/subscription.service';
 
 @Component({
@@ -55,6 +56,9 @@ export class CheckinComponent {
    * in the template/effect below) once the feature is confirmed working.
    */
   readonly isPlatformAdmin = this.auth.isAdmin;
+
+  /** False in production: a signed-out visitor is asked to sign in instead of checking in as a guest. */
+  readonly guestCheckinAllowed = environment.allowGuestCheckin;
 
   /**
    * Newsletter subscribe/unsubscribe toggle, reusing whoever's email
@@ -204,6 +208,11 @@ export class CheckinComponent {
     } finally {
       this.guestIdentifying = false;
     }
+  }
+
+  /** Where login/signup send the person back to after they finish. */
+  get returnUrl(): string {
+    return this.router.url;
   }
 
   get dateStr(): string {
