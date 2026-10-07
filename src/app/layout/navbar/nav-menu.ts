@@ -62,10 +62,11 @@ export function buildMenu(ctx: NavContext): NavItem[] {
   const base = `/c/${ctx.clubSlug}`;
   const items: NavItem[] = [{ key: 'home', label: '🏠 Home', path: base }];
   if (ctx.meetingNo) {
-    items.push(
-      { key: 'checkin', label: '👥 Check in', path: `${base}/checkin`, queryParams: { meeting: ctx.meetingNo } },
-      { key: 'agenda', label: '📋 Preview Recent Plan', path: `${base}/preview`, queryParams: { meeting: ctx.meetingNo } },
-    );
+    items.push({ key: 'checkin', label: '👥 Check in', path: `${base}/checkin`, queryParams: { meeting: ctx.meetingNo } });
+    // The agenda preview is for signed-in accounts only (see the preview route's memberGuard).
+    if (ctx.signedIn) {
+      items.push({ key: 'agenda', label: '📋 Preview Recent Plan', path: `${base}/preview`, queryParams: { meeting: ctx.meetingNo } });
+    }
   }
   if (ctx.signedIn) items.push({ key: 'account', label: '👤 My Account', path: `${base}/member` });
   if (ctx.isClubAdmin) {

@@ -11,9 +11,9 @@ describe('buildMenu', () => {
     expect(keys({})).toEqual(['home', 'signin']);
   });
 
-  it('adds Check in and Agenda (with the meeting) when a meeting is published', () => {
+  it('adds Check in (with the meeting) for a guest, but not the Agenda preview', () => {
     const items = buildMenu({ ...base, meetingNo: '43' });
-    expect(items.map((i) => i.key)).toEqual(['home', 'checkin', 'agenda', 'signin']);
+    expect(items.map((i) => i.key)).toEqual(['home', 'checkin', 'signin']);
     expect(items[1]).toMatchObject({ path: '/c/k12/checkin', queryParams: { meeting: '43' } });
   });
 
