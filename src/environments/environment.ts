@@ -41,4 +41,7 @@ export const environment = {
   // CLAUDE.md's multi-club groundwork known gap) — this is just where a
   // visitor with no more specific destination ends up.
   defaultClubSlug: 'kings-speakers-12',
+  // Kept on locally so the guest flow stays testable; production turns it off
+  // (see environment.production.ts).
+  allowGuestCheckin: true,
 };

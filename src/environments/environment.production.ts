@@ -21,4 +21,8 @@ export const environment = {
   authEmulatorHost: '',
   authEmulatorPort: 9099,
   defaultClubSlug: 'kings-speakers-12',
+  // Anonymous "Check in as a guest" is switched off: /checkin asks visitors to
+  // sign in or create an account instead. UI-level only — firestore.rules
+  // still accept anonymous check-in writes from direct API calls.
+  allowGuestCheckin: false,
 };
