@@ -121,6 +121,7 @@ export const routes: Routes = [
           },
           {
             path: 'announcements',
+            canActivate: [superAdminGuard],
             loadComponent: () => import('./features/admin-announcements/pages/admin-announcements.component').then((m) => m.AdminAnnouncementsComponent),
           },
           {

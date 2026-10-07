@@ -26,6 +26,9 @@ export class HomeComponent {
   /** Most recent club announcements, newest first — see SubscriptionService. Public, so this shows for a signed-out guest too. */
   readonly announcements = this.subscription.announcements;
 
+  /** TEMPORARY, same gate as the check-in page's subscribe toggle: club news and email subscription are platform-admin-only while the feature is tested. */
+  readonly isPlatformAdmin = this.auth.isAdmin;
+
   readonly guestCheckinAllowed = environment.allowGuestCheckin;
 
   readonly clubName = computed(() => this.clubContext.currentClub()?.name ?? '');
