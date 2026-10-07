@@ -137,6 +137,8 @@ export const routes: Routes = [
       },
       {
         path: 'preview',
+        // Signed-in accounts only; a signed-out visitor is sent to /login and back.
+        canActivate: [memberGuard],
         loadComponent: () => import('./features/agenda-viewer/pages/agenda-viewer.component').then((m) => m.AgendaViewerComponent),
       },
     ],
