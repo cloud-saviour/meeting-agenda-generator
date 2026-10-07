@@ -37,13 +37,6 @@
         <p class="text-muted mb-0">{{ m.theme || 'Meeting ' + m.no }} — say you are coming, take a role, or sign up to speak</p>
         <a [routerLink]="'/checkin' | clubLink" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="Check in to the meeting"></a>
       </div>
-
-      <div class="card tile text-center p-4 shadow-sm position-relative">
-        <div class="fs-1 mb-2">&#128203;</div>
-        <h2 class="fs-5 fw-bold">See the Agenda for Meeting #{{ m.no }}</h2>
-        <p class="text-muted mb-0">{{ m.theme || 'Meeting ' + m.no }} — read the programme for this meeting</p>
-        <a [routerLink]="'/preview' | clubLink" [queryParams]="{ meeting: m.no }" class="stretched-link" aria-label="See the agenda"></a>
-      </div>
     }
 
     @if (isSignedIn()) {
